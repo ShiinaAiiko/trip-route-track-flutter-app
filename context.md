@@ -11,11 +11,18 @@ You are only allowed to modify files within the current directory. Never touch o
 2. **GeckoView 版本要求**：必须 ≥ 130，当前使用 **143.0.20250929153833**
 3. **Java 版本**：升级到 **Java 17**
 4、加载动画的逻辑：当启动app后，立即显示加载动画，背景色根据系统颜色自动设置。此时后台的webview内核立即加载。但是必须隐藏。直到网页加载成功后，再隐藏加载动画，并显示webview
+5、以静态形式加载网站：网站是由next开发的，静态目录的形式加载，提升加载速度
 
 ## 已完成的修改
 
 ### 1. pubspec.yaml
 - 移除 `flutter_inappwebview` 依赖
+- 添加静态资源配置（assets/out/ 目录）
+
+### 2. 静态目录加载
+- 将 Next.js 项目构建为静态文件（`npm run build`）
+- 静态文件存放在 `assets/out/` 目录
+- 使用 `file:///android_asset/assets/out/zh-CN/index.html` 加载本地静态页面
 
 ### 2. Android 配置
 - `android/app/build.gradle`：

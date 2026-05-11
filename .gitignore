@@ -45,3 +45,4 @@ app.*.map.json
 /android/flutter_app_android.iml
 /out
 /flutter_log.txt
+/assets/out

@@ -118,8 +118,8 @@ class GeckoViewPlatform(
         geckoSession.open(getRuntime(context))
         geckoView.setSession(geckoSession)
 
-        // 加载初始 URL
-        val initialUrl = creationParams?.get("initialUrl") as? String ?: "https://trip.aiiko.club/zh-CN"
+        // 加载初始 URL - 使用本地静态文件
+        val initialUrl = creationParams?.get("initialUrl") as? String ?: "file:///android_asset/assets/out/zh-CN/index.html"
         geckoSession.loadUri(initialUrl)
     }
 
