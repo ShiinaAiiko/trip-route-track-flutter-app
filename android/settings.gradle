@@ -18,14 +18,22 @@ pluginManagement {
 
 plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    id "com.android.application" version "7.3.0" apply false
-    id "org.jetbrains.kotlin.android" version "1.7.10" apply false
+    id "com.android.application" version "8.6.0" apply false
+    id "org.jetbrains.kotlin.android" version "2.2.10" apply false
 }
 
 dependencyResolutionManagement {
+    repositoriesMode = RepositoriesMode.PREFER_SETTINGS
     repositories {
         google()
         mavenCentral()
+        maven { url "https://maven.mozilla.org/maven2/" }
+        maven {
+            url "https://storage.flutter-io.cn/download.flutter.io"
+            content {
+                includeGroup "io.flutter"
+            }
+        }
     }
 }
 

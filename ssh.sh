@@ -13,11 +13,11 @@ run() {
 	echo "-> 正在传输 APK 文件至服务器"
 
 	# 先在服务器上创建目录
-	sshpass -p $password ssh "$user@$host" "mkdir -p $projectPath/nyanya-trip-route-track/flutter_app/out/packages"
+	sshpass -p $password ssh "$user@$host" "mkdir -p $projectPath/nyanya-trip-route-track/trip-route-track-flutter-app/out/packages"
 
 	# 同步文件
 	sshpass -p $password \
-		rsync -avz --delete "$DIR/out/packages/" "$user@$host:$projectPath/nyanya-trip-route-track/flutter_app/out/packages/"
+		rsync -avz --delete "$DIR/out/packages/" "$user@$host:$projectPath/nyanya-trip-route-track/trip-route-track-flutter-app/out/packages/"
 	echo "-> 传输完毕"
 	
 }

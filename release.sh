@@ -7,27 +7,22 @@ version="v1.0.0"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
-allowMethods=("adb dev run stop protos start build setVersion")
+allowMethods=("adb dev run stop protos start build buildDev setVersion")
 
 dev() {
 	AUTO_DEVICE=$(flutter devices | grep "mobile" | awk -F '•' '{print $2}' | tr -d ' ')
 
 	if [ -z "$AUTO_DEVICE" ]; then
 		echo "警告：没发现安卓手机，将尝试默认模式..."
-		# flutter run "$@"
+		flutter run --flavor dev "$@"
 	else
 		echo "发现真机：$AUTO_DEVICE，启动中..."
-		flutter run -d "$AUTO_DEVICE" "$@" --no-dds
+		flutter run -d "$AUTO_DEVICE" --flavor dev "$@" --no-dds
 	fi
-
-	# # export FLUTTER_TEST_VM_SERVICE_HOST=0.0.0.0
-	# # flutter run -d linux --verbose
-	# flutter run -d android
-	# # adb devices
 }
 
 adb() {
-	# powershell运行
+	# powershell 运行
 	# E:\Apps\platform-tools\adb.exe kill-server
 	# E:\Apps\platform-tools\adb.exe -a nodaemon server start
 
@@ -47,7 +42,7 @@ start() {
 }
 
 protos() {
-	echo "-> 准备编译Protobuf"
+	echo "-> 准备编译 Protobuf"
 
 	cd $DIR/web
 	./release.sh protos
@@ -75,7 +70,17 @@ setVersion() {
 }
 
 build() {
-	echo "-> 开始打包 Android APK"
+	echo "-> 开始打包生产环境 Android APK"
+	_build "prod"
+}
+
+buildDev() {
+	echo "-> 开始打包开发环境 Android APK"
+	_build "dev"
+}
+
+_build() {
+	flavor="$1"
 	cd $DIR
 	
 	# 创建 out 和 packages 文件夹
@@ -87,12 +92,12 @@ build() {
 	rm -f "$OUT_DIR"/*.apk
 	
 	setVersion
-	flutter build apk --release --split-per-abi
+	flutter build apk --release --flavor "$flavor" --split-per-abi --no-shrink
 	
 	# 复制并重命名新 APK 到 out 和 packages
 	echo "-> 整理新 APK 文件..."
 	APK_DIR="$DIR/build/app/outputs/flutter-apk"
-	for apk in "$APK_DIR"/*-release.apk; do
+	for apk in "$APK_DIR"/app-"$flavor"-*-release.apk; do
 		if [ -f "$apk" ]; then
 			# 提取架构信息
 			if [[ "$apk" == *-armeabi-v7a-* ]]; then
@@ -106,7 +111,11 @@ build() {
 			fi
 			
 			# 重命名并复制
-			new_name="$name-$version-$arch.apk"
+			if [ "$flavor" == "dev" ]; then
+				new_name="$name-$version-dev-$arch.apk"
+			else
+				new_name="$name-$version-$arch.apk"
+			fi
 			cp "$apk" "$OUT_DIR/$new_name"
 			cp "$apk" "$PACKAGES_DIR/$new_name"
 			echo "   $new_name"
@@ -116,9 +125,12 @@ build() {
 	echo "-> 打包完成！新 APK 文件已整理至：$OUT_DIR"
 	ls -la "$OUT_DIR"
 	
-	# 上传到服务器
-	echo "-> 开始上传到服务器..."
-	"$DIR/ssh.sh" run
+	# 只有生产包才上传到服务器
+	if [ "$flavor" == "prod" ]; then
+		# 上传到服务器
+		echo "-> 开始上传到服务器..."
+		"$DIR/ssh.sh" run
+	fi
 }
 
 main() {

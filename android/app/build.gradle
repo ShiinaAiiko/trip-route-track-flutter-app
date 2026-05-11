@@ -25,16 +25,16 @@ if (flutterVersionName == null) {
 
 android {
     namespace = "club.aiiko.trip"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 35
+    ndkVersion = "26.1.10909125"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
 
     defaultConfig {
@@ -45,16 +45,42 @@ android {
         versionName = flutterVersionName
     }
 
+    flavorDimensions "environment"
+    productFlavors {
+        dev {
+            dimension "environment"
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+        }
+        prod {
+            dimension "environment"
+        }
+    }
+
     buildTypes {
+        debug {
+            minifyEnabled false
+            shrinkResources false
+        }
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }
 
+repositories {
+    google()
+    mavenCentral()
+    maven { url "https://maven.mozilla.org/maven2/" }
+}
+
 dependencies {
+    // GeckoView 143.0 (最新稳定版，支持多架构)
+    implementation "org.mozilla.geckoview:geckoview:143.0.20250929153833"
 }
 
 flutter {

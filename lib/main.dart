@@ -1,18 +1,22 @@
-
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  final brightness =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
   SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
     statusBarColor: brightness == Brightness.dark ? Colors.black : Colors.white,
-    statusBarIconBrightness: brightness == Brightness.dark ? Brightness.light : Brightness.dark,
-    systemNavigationBarColor: brightness == Brightness.dark ? Colors.black : Colors.white,
-    systemNavigationBarIconBrightness: brightness == Brightness.dark ? Brightness.light : Brightness.dark,
+    statusBarIconBrightness:
+        brightness == Brightness.dark ? Brightness.light : Brightness.dark,
+    systemNavigationBarColor:
+        brightness == Brightness.dark ? Colors.black : Colors.white,
+    systemNavigationBarIconBrightness:
+        brightness == Brightness.dark ? Brightness.light : Brightness.dark,
   ));
   runApp(const MyApp());
 }
@@ -40,15 +44,19 @@ class WebViewContainer extends StatefulWidget {
   State<WebViewContainer> createState() => _WebViewContainerState();
 }
 
-class _WebViewContainerState extends State<WebViewContainer> with WidgetsBindingObserver {
-  InAppWebViewController? _webController;
+class _WebViewContainerState extends State<WebViewContainer>
+    with WidgetsBindingObserver {
+  MethodChannel? _channel;
   StreamSubscription<GyroscopeEvent>? _gyroSubscription;
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
+  StreamSubscription<Position>? _positionSubscription;
 
   double _pitch = 0.0;
   double _roll = 0.0;
   bool _isLoading = true;
   Brightness _brightness = Brightness.dark;
+  Position? _currentPosition;
+  bool _isLocationUpdating = false;
 
   Timer? _sensorTimer;
 
@@ -58,17 +66,109 @@ class _WebViewContainerState extends State<WebViewContainer> with WidgetsBinding
     WidgetsBinding.instance.addObserver(this);
     _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     _initSensorStreams();
+    // 延迟500ms后再申请权限，确保加载动画已完全显示
+    Future.delayed(const Duration(milliseconds: 500), () {
+      _requestLocationPermission();
+    });
+  }
+
+  void _startLocationUpdates() {
+    if (_isLocationUpdating) {
+      return; // 已经在更新位置，不需要重复启动
+    }
+    
+    _isLocationUpdating = true;
+    _positionSubscription?.cancel();
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 0,
+        forceLocationManager: true,
+        intervalDuration: Duration(seconds: 1), // Android特有：1秒更新一次
+      ),
+    ).listen((Position position) {
+      setState(() {
+        _currentPosition = position;
+      });
+      _channel?.invokeMethod('setGeolocation', {
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'accuracy': position.accuracy,
+        'altitude': position.altitude,
+        'heading': position.heading,
+        'speed': position.speed,
+        'timestamp': position.timestamp.millisecondsSinceEpoch.toDouble(),
+      });
+    }, onError: (error) {
+      _isLocationUpdating = false;
+      _channel?.invokeMethod('setGeolocationError', {
+        'code': 'POSITION_UNAVAILABLE',
+        'message': error.toString(),
+      });
+    }, onDone: () {
+      _isLocationUpdating = false;
+    });
   }
 
   @override
   void didChangePlatformBrightness() {
     _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-      statusBarColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
-      statusBarIconBrightness: _brightness == Brightness.dark ? Brightness.light : Brightness.dark,
-      systemNavigationBarColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
-      systemNavigationBarIconBrightness: _brightness == Brightness.dark ? Brightness.light : Brightness.dark,
+      statusBarColor:
+          _brightness == Brightness.dark ? Colors.black : Colors.white,
+      statusBarIconBrightness:
+          _brightness == Brightness.dark ? Brightness.light : Brightness.dark,
+      systemNavigationBarColor:
+          _brightness == Brightness.dark ? Colors.black : Colors.white,
+      systemNavigationBarIconBrightness:
+          _brightness == Brightness.dark ? Brightness.light : Brightness.dark,
     ));
+  }
+
+  void _requestLocationPermission() async {
+    try {
+      final status = await Permission.locationWhenInUse.status;
+      if (status.isDenied) {
+        final result = await Permission.locationWhenInUse.request();
+        if (result.isGranted) {
+          await _checkAndStartLocation();
+        }
+      } else if (status.isGranted) {
+        await _checkAndStartLocation();
+      }
+    } catch (e) {
+      // 静默处理异常，不影响加载流程
+    }
+  }
+
+  Future<void> _checkAndStartLocation() async {
+    try {
+      // 检查位置服务是否启用
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        // 位置服务未启用，尝试打开设置
+        await Geolocator.openLocationSettings();
+        setState(() {
+          _currentPosition = null;
+        });
+        return;
+      }
+
+      // 先尝试立即获取一次位置
+      final currentPosition = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      
+      setState(() {
+        _currentPosition = currentPosition;
+      });
+
+      // 然后启动持续位置更新
+      _startLocationUpdates();
+    } catch (e) {
+      // 打印错误日志
+      print('GPS Error: $e');
+    }
   }
 
   void _initSensorStreams() {
@@ -87,18 +187,18 @@ class _WebViewContainerState extends State<WebViewContainer> with WidgetsBinding
 
   void _startSensorBridge() {
     _sensorTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
-      if (_webController != null) {
-        final jsonData = '''
-          window.postMessage({
-            type: 'SENSOR_DATA',
-            data: {
-              pitch: ${_pitch.toStringAsFixed(2)},
-              roll: ${_roll.toStringAsFixed(2)},
-              timestamp: ${DateTime.now().millisecondsSinceEpoch}
+      if (_channel != null) {
+        final message = '''
+          {
+            "type": "SENSOR_DATA",
+            "data": {
+              "pitch": ${_pitch.toStringAsFixed(2)},
+              "roll": ${_roll.toStringAsFixed(2)},
+              "timestamp": ${DateTime.now().millisecondsSinceEpoch}
             }
-          }, '*')
+          }
         ''';
-        _webController?.evaluateJavascript(source: jsonData);
+        _channel?.invokeMethod('postMessage', {'message': message});
       }
     });
   }
@@ -109,6 +209,7 @@ class _WebViewContainerState extends State<WebViewContainer> with WidgetsBinding
     _gyroSubscription?.cancel();
     _accelSubscription?.cancel();
     _sensorTimer?.cancel();
+    _positionSubscription?.cancel();
     super.dispose();
   }
 
@@ -118,23 +219,82 @@ class _WebViewContainerState extends State<WebViewContainer> with WidgetsBinding
       body: SafeArea(
         bottom: false,
         child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            InAppWebView(
-              initialUrlRequest: URLRequest(url: WebUri('https://trip.aiiko.club/zh-CN')),
-              onWebViewCreated: (controller) {
-                _webController = controller;
-              },
-              onLoadStop: (controller, url) {
-                setState(() {
-                  _isLoading = false;
-                });
-                _startSensorBridge();
-              },
+            Container(color: _brightness == Brightness.dark ? Colors.black : Colors.white),
+            _buildGeckoView(),
+            if (_isLoading) _buildLoadingPlaceholder(),
+            _buildDebugOverlay(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGeckoView() {
+    const viewType = 'geckoView';
+    const creationParams = <String, dynamic>{
+      'initialUrl': 'https://trip.aiiko.club/zh-CN',
+    };
+
+    if (Theme.of(context).platform == TargetPlatform.android) {
+      return AndroidView(
+        viewType: viewType,
+        creationParams: creationParams,
+        creationParamsCodec: const StandardMessageCodec(),
+        onPlatformViewCreated: (id) {
+          _channel = MethodChannel('gecko_view_$id');
+          _channel?.setMethodCallHandler(_handleMethodCall);
+        },
+      );
+    } else {
+      return const Center(
+        child: Text('This platform is not supported'),
+      );
+    }
+  }
+
+  Future<dynamic> _handleMethodCall(MethodCall call) async {
+    switch (call.method) {
+      case 'onPageStart':
+        setState(() {
+          _isLoading = true;
+        });
+        break;
+      case 'onPageStop':
+        setState(() {
+          _isLoading = false;
+        });
+        _startSensorBridge();
+        _startLocationUpdates();
+        break;
+    }
+  }
+
+  Widget _buildLoadingPlaceholder() {
+    return Positioned.fill(
+      child: Container(
+        color: _brightness == Brightness.dark ? Colors.black : Colors.white,
+        child: Stack(
+          children: [
+            const Center(
+              child: _LoadingDots(),
             ),
-            AnimatedOpacity(
-              opacity: _isLoading ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 200),
-              child: _buildLoadingPlaceholder(),
+            Positioned(
+              bottom: 60,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  '行程路线轨迹 App 由 AI 构建',
+                  style: TextStyle(
+                    color: _brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
             ),
           ],
         ),
@@ -142,31 +302,50 @@ class _WebViewContainerState extends State<WebViewContainer> with WidgetsBinding
     );
   }
 
-  Widget _buildLoadingPlaceholder() {
-    return Container(
-      color: _brightness == Brightness.dark ? Colors.black : Colors.white,
-      width: double.infinity,
-      height: double.infinity,
-      child: Stack(
-        children: [
-          const Center(
-            child: _LoadingDots(),
-          ),
-          Positioned(
-            bottom: 60,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Text(
-                '行程路线轨迹 App 由 AI 构建',
-                style: TextStyle(
-                  color: _brightness == Brightness.dark ? Colors.white : Colors.black,
-                  fontSize: 14,
-                ),
+  Widget _buildDebugOverlay() {
+    return Positioned(
+      top: 20,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        color: Colors.black.withOpacity(0.7),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'GPS 数据 (App层)',
+              style: TextStyle(
+                color: Colors.green,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
               ),
             ),
-          ),
-        ],
+            if (_currentPosition != null) ...[
+              Text(
+                '纬度: ${_currentPosition!.latitude.toStringAsFixed(6)}',
+                style: const TextStyle(color: Colors.white, fontSize: 11),
+              ),
+              Text(
+                '经度: ${_currentPosition!.longitude.toStringAsFixed(6)}',
+                style: const TextStyle(color: Colors.white, fontSize: 11),
+              ),
+              Text(
+                '精度: ${_currentPosition!.accuracy.toStringAsFixed(1)}m',
+                style: const TextStyle(color: Colors.white, fontSize: 11),
+              ),
+              Text(
+                '速度: ${_currentPosition!.speed?.toStringAsFixed(1) ?? 'N/A'} m/s',
+                style: const TextStyle(color: Colors.white, fontSize: 11),
+              ),
+            ] else ...[
+              const Text(
+                '等待GPS数据...',
+                style: TextStyle(color: Colors.yellow, fontSize: 11),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -212,7 +391,8 @@ class _BounceDot extends StatefulWidget {
   State<_BounceDot> createState() => _BounceDotState();
 }
 
-class _BounceDotState extends State<_BounceDot> with SingleTickerProviderStateMixin {
+class _BounceDotState extends State<_BounceDot>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
   bool _isAnimating = false;
