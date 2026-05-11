@@ -1,3 +1,5 @@
+You are only allowed to modify files within the current directory. Never touch or mention any parent or sibling directories. 你只允许修改当前目录下的文件。切勿触及或提及任何父级或同级目录。
+
 ---
 
 ## 项目背景
