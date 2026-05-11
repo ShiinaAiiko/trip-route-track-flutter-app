@@ -47,8 +47,15 @@ class GeckoViewPlatform(
         methodChannel = MethodChannel(messenger, "gecko_view_$id")
         methodChannel.setMethodCallHandler(this)
 
+        val isDarkMode = creationParams?.get("isDarkMode") as? Boolean ?: true
+        val bgColor = if (isDarkMode) {
+            android.graphics.Color.BLACK
+        } else {
+            android.graphics.Color.WHITE
+        }
+
         geckoView = GeckoView(context).apply {
-            setBackgroundColor(android.graphics.Color.BLACK)
+            setBackgroundColor(bgColor)
         }
         geckoSession = GeckoSession()
 

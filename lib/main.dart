@@ -21,16 +21,43 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  Brightness _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    setState(() {
+      _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.black,
+        brightness: _brightness,
+        scaffoldBackgroundColor:
+            _brightness == Brightness.dark ? Colors.black : Colors.white,
       ),
       home: const WebViewContainer(),
     );
@@ -54,7 +81,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   double _pitch = 0.0;
   double _roll = 0.0;
   bool _isLoading = true;
-  Brightness _brightness = Brightness.dark;
+  Brightness _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
   Position? _currentPosition;
   bool _isLocationUpdating = false;
 
@@ -222,7 +249,10 @@ class _WebViewContainerState extends State<WebViewContainer>
           clipBehavior: Clip.none,
           children: [
             Container(color: _brightness == Brightness.dark ? Colors.black : Colors.white),
-            _buildGeckoView(),
+            Offstage(
+              offstage: _isLoading,
+              child: _buildGeckoView(),
+            ),
             if (_isLoading) _buildLoadingPlaceholder(),
           ],
         ),
@@ -232,8 +262,9 @@ class _WebViewContainerState extends State<WebViewContainer>
 
   Widget _buildGeckoView() {
     const viewType = 'geckoView';
-    const creationParams = <String, dynamic>{
+    final creationParams = <String, dynamic>{
       'initialUrl': 'https://trip.aiiko.club/zh-CN',
+      'isDarkMode': _brightness == Brightness.dark,
     };
 
     if (Theme.of(context).platform == TargetPlatform.android) {

@@ -38,22 +38,27 @@ You are only allowed to modify files within the current directory. Never touch o
   - 位置服务检查和自动开启
   - 1秒间隔持续位置更新
   - 通过 `MethodChannel` 将 GPS 数据传递给 WebView
-  - 添加调试图层显示 App 层获取的 GPS 坐标
 
 ### 6. 加载动画优化
 - 移除权限申请文案，加载动画页面只显示三个点动画和底部文字
 - 延迟500ms后再申请权限，避免启动时页面闪烁
-- 使用简单条件渲染替代 AnimatedOpacity，消除闪烁现象
+- 使用 `Offstage` 组件实现 GeckoView 后台加载但不显示，等加载完成后再显示
 
-### 7. 修复的问题
+### 7. 闪屏问题修复
+- 将 Android 启动背景改为透明（`@android:color/transparent`）
+- GeckoView 背景色根据系统亮度动态设置（通过 `isDarkMode` 参数传递）
+- 使用 `Offstage` 组件在加载完成前隐藏 GeckoView，避免初始化时的白色闪烁
+
+### 8. 修复的问题
 - 修复 GPS 位置更新被重复启动的问题（添加 `_isLocationUpdating` 标志位）
 - 修复 WebView 触摸事件被拦截的问题（使用 `Visibility` 组件）
 - 修复 GeckoView 权限委托配置，允许网页获取位置信息
+- 修复启动闪屏问题（Android 背景透明、GeckoView 背景适配、Offstage 延迟显示）
 
 ## 当前状态
 应用功能正常：
-- 启动时显示加载动画（三个点+底部文字），后台静默申请 GPS 权限
-- GPS 数据每秒更新一次，可在左上角调试图层查看
+- 启动时显示加载动画（三个点+底部文字），后台静默申请 GPS 权限，无闪屏
+- GPS 数据每秒更新一次
 - 网页可通过 `navigator.geolocation` 获取位置数据
 - 传感器数据（陀螺仪、加速度计）正常传递给网页
 
