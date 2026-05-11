@@ -98,7 +98,19 @@ class GeckoViewPlatform(
             }
         }
 
-        // 设置进度监听
+        // 打开 session
+        geckoSession.open(getRuntime(context))
+        geckoView.setSession(geckoSession)
+
+        // 加载初始 URL - 使用本地静态文件
+        val initialUrl = creationParams?.get("initialUrl") as? String ?: "file:///android_asset/assets/out/index.html"
+        
+        // 先加载一个空白页面，然后注入 HTML 内容
+        geckoSession.loadUri("about:blank")
+        
+        var isFirstPage = true
+        
+        // 设置页面加载完成后的回调
         geckoSession.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 isLoading = true
@@ -108,19 +120,25 @@ class GeckoViewPlatform(
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 isLoading = false
                 methodChannel.invokeMethod("onPageStop", mapOf("success" to success))
-                if (success) {
+                if (success && isFirstPage) {
+                    isFirstPage = false
+                    loadLocalHtml()
+                } else if (success) {
                     injectGeolocationMock()
                 }
             }
         }
-
-        // 打开 session
-        geckoSession.open(getRuntime(context))
-        geckoView.setSession(geckoSession)
-
-        // 加载初始 URL - 使用本地静态文件
-        val initialUrl = creationParams?.get("initialUrl") as? String ?: "file:///android_asset/assets/out/zh-CN/index.html"
-        geckoSession.loadUri(initialUrl)
+    }
+    
+    private fun loadLocalHtml() {
+        try {
+            val assetManager = context.assets
+            val htmlContent = assetManager.open("out/index.html").bufferedReader().use { it.readText() }
+            val base64Content = android.util.Base64.encodeToString(htmlContent.toByteArray(), android.util.Base64.DEFAULT)
+            geckoSession.loadUri("data:text/html;base64,$base64Content")
+        } catch (e: Exception) {
+            geckoSession.loadUri("file:///android_asset/out/index.html")
+        }
     }
 
     private fun hasLocationPermission(): Boolean {

@@ -303,7 +303,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   Widget _buildGeckoView() {
     const viewType = 'geckoView';
     final creationParams = <String, dynamic>{
-      'initialUrl': 'file:///android_asset/assets/out/zh-CN/index.html',
+      'initialUrl': 'file:///android_asset/assets/out/index.html',
       'isDarkMode': _brightness == Brightness.dark,
     };
 

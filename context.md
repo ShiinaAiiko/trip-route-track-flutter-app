@@ -22,7 +22,8 @@ You are only allowed to modify files within the current directory. Never touch o
 ### 2. 静态目录加载
 - 将 Next.js 项目构建为静态文件（`npm run build`）
 - 静态文件存放在 `assets/out/` 目录
-- 使用 `file:///android_asset/assets/out/zh-CN/index.html` 加载本地静态页面
+- 通过 Base64 编码的 data URL 加载本地静态页面（避免 GeckoView 直接访问 assets 路径的问题）
+- Flutter assets 配置：`assets/out/` 及其子目录
 
 ### 2. Android 配置
 - `android/app/build.gradle`：
