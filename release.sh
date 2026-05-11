@@ -3,13 +3,17 @@ name="trip-route-track"
 runName="$name-flutter-app"
 port=23204
 branch="main"
-version="v1.0.0"
+version="v1.0.1"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
 allowMethods=("adb dev run stop protos start build buildDev setVersion")
 
 dev() {
+	# 更新 assets 目录配置
+	echo "-> 更新 pubspec.yaml 的 assets 配置..."
+	"$DIR/update_flutter_assets.sh"
+
 	AUTO_DEVICE=$(flutter devices | grep "mobile" | awk -F '•' '{print $2}' | tr -d ' ')
 
 	if [ -z "$AUTO_DEVICE" ]; then
@@ -93,6 +97,10 @@ buildDev() {
 _build() {
 	flavor="$1"
 	cd $DIR
+
+	# 更新 assets 目录配置
+	echo "-> 更新 pubspec.yaml 的 assets 配置..."
+	"$DIR/update_flutter_assets.sh"
 
 	# 创建 out 和 packages 文件夹
 	OUT_DIR="$DIR/out"

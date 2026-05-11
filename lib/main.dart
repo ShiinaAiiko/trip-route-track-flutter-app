@@ -4,9 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
+import 'local_server.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // 启动本地HTTP服务器
+  await LocalServer.instance.start();
+  
   final brightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
   SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
@@ -254,23 +259,24 @@ class _WebViewContainerState extends State<WebViewContainer>
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Scaffold(
-          backgroundColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
-          body: SafeArea(
-            bottom: false,
-            child: _buildGeckoView(),
-          ),
+    return Scaffold(
+      backgroundColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
+      body: SafeArea(
+        top: true,
+        bottom: false,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildGeckoView(),
+            // 加载完成前显示覆盖层，遮挡 GeckoView 的闪烁
+            if (_isLoading)
+              Container(
+                color: _brightness == Brightness.dark ? Colors.black : Colors.white,
+                child: _buildLoadingContent(),
+              ),
+          ],
         ),
-        // 加载完成前显示覆盖层，遮挡 GeckoView 的闪烁
-          if (_isLoading)
-            Container(
-              color: _brightness == Brightness.dark ? Colors.black : Colors.white,
-              child: _buildLoadingContent(),
-            ),
-      ],
+      ),
     );
   }
 
@@ -303,7 +309,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   Widget _buildGeckoView() {
     const viewType = 'geckoView';
     final creationParams = <String, dynamic>{
-      'initialUrl': 'file:///android_asset/assets/out/index.html',
+      'initialUrl': 'http://localhost:8080/',
       'isDarkMode': _brightness == Brightness.dark,
     };
 

@@ -4,7 +4,10 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import androidx.core.app.ActivityCompat
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
@@ -27,6 +30,7 @@ class GeckoViewPlatform(
     private val geckoSession: GeckoSession
     private val methodChannel: MethodChannel
     private var isLoading = true
+    private val handler = Handler(Looper.getMainLooper())
 
     companion object {
         private var geckoRuntime: GeckoRuntime? = null
@@ -57,6 +61,28 @@ class GeckoViewPlatform(
         geckoSession = GeckoSession()
         geckoView = GeckoView(context).apply {
             setBackgroundColor(bgColor)
+            
+            // 确保可以获取焦点
+            isFocusable = true
+            isFocusableInTouchMode = true
+            isClickable = true
+            
+            // 设置焦点变化监听
+            setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus) {
+                    // 获取焦点时确保显示输入法
+                    showInputMethod()
+                }
+            }
+            
+            // 设置触摸事件监听
+            setOnTouchListener { _, _ ->
+                // 触摸时请求焦点
+                if (!hasFocus()) {
+                    requestFocus()
+                }
+                false
+            }
         }
 
         // 设置权限委托，处理网页的位置权限请求
@@ -102,13 +128,8 @@ class GeckoViewPlatform(
         geckoSession.open(getRuntime(context))
         geckoView.setSession(geckoSession)
 
-        // 加载初始 URL - 使用本地静态文件
-        val initialUrl = creationParams?.get("initialUrl") as? String ?: "file:///android_asset/assets/out/index.html"
-        
-        // 先加载一个空白页面，然后注入 HTML 内容
-        geckoSession.loadUri("about:blank")
-        
-        var isFirstPage = true
+        // 加载初始 URL - 使用本地服务器
+        val initialUrl = creationParams?.get("initialUrl") as? String ?: "http://localhost:8080/"
         
         // 设置页面加载完成后的回调
         geckoSession.progressDelegate = object : GeckoSession.ProgressDelegate {
@@ -120,25 +141,25 @@ class GeckoViewPlatform(
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 isLoading = false
                 methodChannel.invokeMethod("onPageStop", mapOf("success" to success))
-                if (success && isFirstPage) {
-                    isFirstPage = false
-                    loadLocalHtml()
-                } else if (success) {
+                if (success) {
                     injectGeolocationMock()
+                    // 页面加载完成后请求焦点
+                    handler.postDelayed({
+                        geckoView.requestFocus()
+                    }, 200)
                 }
             }
         }
+        
+        // 加载本地服务器
+        geckoSession.loadUri(initialUrl)
     }
-    
-    private fun loadLocalHtml() {
-        try {
-            val assetManager = context.assets
-            val htmlContent = assetManager.open("out/index.html").bufferedReader().use { it.readText() }
-            val base64Content = android.util.Base64.encodeToString(htmlContent.toByteArray(), android.util.Base64.DEFAULT)
-            geckoSession.loadUri("data:text/html;base64,$base64Content")
-        } catch (e: Exception) {
-            geckoSession.loadUri("file:///android_asset/out/index.html")
-        }
+
+    private fun showInputMethod() {
+        handler.postDelayed({
+            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.showSoftInput(geckoView, InputMethodManager.SHOW_IMPLICIT)
+        }, 100)
     }
 
     private fun hasLocationPermission(): Boolean {
