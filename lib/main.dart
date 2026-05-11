@@ -224,7 +224,6 @@ class _WebViewContainerState extends State<WebViewContainer>
             Container(color: _brightness == Brightness.dark ? Colors.black : Colors.white),
             _buildGeckoView(),
             if (_isLoading) _buildLoadingPlaceholder(),
-            _buildDebugOverlay(),
           ],
         ),
       ),
@@ -296,54 +295,6 @@ class _WebViewContainerState extends State<WebViewContainer>
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDebugOverlay() {
-    return Positioned(
-      top: 20,
-      left: 0,
-      right: 0,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        color: Colors.black.withOpacity(0.7),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'GPS 数据 (App层)',
-              style: TextStyle(
-                color: Colors.green,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            if (_currentPosition != null) ...[
-              Text(
-                '纬度: ${_currentPosition!.latitude.toStringAsFixed(6)}',
-                style: const TextStyle(color: Colors.white, fontSize: 11),
-              ),
-              Text(
-                '经度: ${_currentPosition!.longitude.toStringAsFixed(6)}',
-                style: const TextStyle(color: Colors.white, fontSize: 11),
-              ),
-              Text(
-                '精度: ${_currentPosition!.accuracy.toStringAsFixed(1)}m',
-                style: const TextStyle(color: Colors.white, fontSize: 11),
-              ),
-              Text(
-                '速度: ${_currentPosition!.speed?.toStringAsFixed(1) ?? 'N/A'} m/s',
-                style: const TextStyle(color: Colors.white, fontSize: 11),
-              ),
-            ] else ...[
-              const Text(
-                '等待GPS数据...',
-                style: TextStyle(color: Colors.yellow, fontSize: 11),
-              ),
-            ],
           ],
         ),
       ),
