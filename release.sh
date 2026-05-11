@@ -96,8 +96,9 @@ _build() {
 	
 	# 复制并重命名新 APK 到 out 和 packages
 	echo "-> 整理新 APK 文件..."
+# /build/app/outputs/flutter-apk/app-arm64-v8a-dev-release.apk
 	APK_DIR="$DIR/build/app/outputs/flutter-apk"
-	for apk in "$APK_DIR"/app-"$flavor"-*-release.apk; do
+	for apk in "$APK_DIR"/app-*-"$flavor"-release.apk; do
 		if [ -f "$apk" ]; then
 			# 提取架构信息
 			if [[ "$apk" == *-armeabi-v7a-* ]]; then
@@ -109,7 +110,7 @@ _build() {
 			else
 				arch="universal"
 			fi
-			
+
 			# 重命名并复制
 			if [ "$flavor" == "dev" ]; then
 				new_name="$name-$version-dev-$arch.apk"
