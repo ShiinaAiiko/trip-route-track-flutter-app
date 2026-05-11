@@ -54,10 +54,10 @@ class GeckoViewPlatform(
             android.graphics.Color.WHITE
         }
 
+        geckoSession = GeckoSession()
         geckoView = GeckoView(context).apply {
             setBackgroundColor(bgColor)
         }
-        geckoSession = GeckoSession()
 
         // 设置权限委托，处理网页的位置权限请求
         geckoSession.permissionDelegate = object : GeckoSession.PermissionDelegate {

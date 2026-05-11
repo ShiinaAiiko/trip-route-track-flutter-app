@@ -1,4 +1,5 @@
 You are only allowed to modify files within the current directory. Never touch or mention any parent or sibling directories.
+你只允许修改当前目录下的文件。切勿触及或提及任何父级或同级目录。
 
 ---
 
@@ -9,6 +10,7 @@ You are only allowed to modify files within the current directory. Never touch o
 1. **浏览器引擎选择**：使用 **GeckoView 替代系统 WebView**，解决老版本 Android 手机 WebView 版本过旧的问题
 2. **GeckoView 版本要求**：必须 ≥ 130，当前使用 **143.0.20250929153833**
 3. **Java 版本**：升级到 **Java 17**
+4、加载动画的逻辑：当启动app后，立即显示加载动画，背景色根据系统颜色自动设置。此时后台的webview内核立即加载。但是必须隐藏。直到网页加载成功后，再隐藏加载动画，并显示webview
 
 ## 已完成的修改
 
@@ -53,7 +55,9 @@ You are only allowed to modify files within the current directory. Never touch o
 - 修复 GPS 位置更新被重复启动的问题（添加 `_isLocationUpdating` 标志位）
 - 修复 WebView 触摸事件被拦截的问题（使用 `Visibility` 组件）
 - 修复 GeckoView 权限委托配置，允许网页获取位置信息
-- 修复启动闪屏问题（Android 背景透明、GeckoView 背景适配、Offstage 延迟显示）
+- 修复启动闪屏问题（Android 背景透明、GeckoView 背景适配、Stack 覆盖层遮挡）
+- 修复加载动画底部文字下划线问题（添加 `TextDecoration.none`）
+- 修复覆盖层导致网页变黑问题（使用条件渲染 `if (_isLoading)`）
 
 ## 当前状态
 应用功能正常：

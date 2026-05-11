@@ -86,6 +86,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   bool _isLocationUpdating = false;
 
   Timer? _sensorTimer;
+  Timer? _loadTimeoutTimer;
 
   @override
   void initState() {
@@ -96,6 +97,16 @@ class _WebViewContainerState extends State<WebViewContainer>
     // 延迟500ms后再申请权限，确保加载动画已完全显示
     Future.delayed(const Duration(milliseconds: 500), () {
       _requestLocationPermission();
+    });
+    // 添加超时机制，确保网页能正常显示
+    _loadTimeoutTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted && _isLoading) {
+        setState(() {
+          _isLoading = false;
+        });
+        _startSensorBridge();
+        _startLocationUpdates();
+      }
     });
   }
 
@@ -236,27 +247,56 @@ class _WebViewContainerState extends State<WebViewContainer>
     _gyroSubscription?.cancel();
     _accelSubscription?.cancel();
     _sensorTimer?.cancel();
+    _loadTimeoutTimer?.cancel();
     _positionSubscription?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(color: _brightness == Brightness.dark ? Colors.black : Colors.white),
-            Offstage(
-              offstage: _isLoading,
-              child: _buildGeckoView(),
-            ),
-            if (_isLoading) _buildLoadingPlaceholder(),
-          ],
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Scaffold(
+          backgroundColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
+          body: SafeArea(
+            bottom: false,
+            child: _buildGeckoView(),
+          ),
         ),
-      ),
+        // 加载完成前显示覆盖层，遮挡 GeckoView 的闪烁
+          if (_isLoading)
+            Container(
+              color: _brightness == Brightness.dark ? Colors.black : Colors.white,
+              child: _buildLoadingContent(),
+            ),
+      ],
+    );
+  }
+
+  Widget _buildLoadingContent() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const Center(
+          child: _LoadingDots(),
+        ),
+        Positioned(
+          bottom: 60,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Text(
+              '行程路线轨迹 App 由 AI 构建',
+              style: TextStyle(
+                color: _brightness == Brightness.dark ? Colors.white : Colors.black,
+                fontSize: 14,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -292,6 +332,7 @@ class _WebViewContainerState extends State<WebViewContainer>
         });
         break;
       case 'onPageStop':
+        _loadTimeoutTimer?.cancel();
         setState(() {
           _isLoading = false;
         });
@@ -301,36 +342,6 @@ class _WebViewContainerState extends State<WebViewContainer>
     }
   }
 
-  Widget _buildLoadingPlaceholder() {
-    return Positioned.fill(
-      child: Container(
-        color: _brightness == Brightness.dark ? Colors.black : Colors.white,
-        child: Stack(
-          children: [
-            const Center(
-              child: _LoadingDots(),
-            ),
-            Positioned(
-              bottom: 60,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  '行程路线轨迹 App 由 AI 构建',
-                  style: TextStyle(
-                    color: _brightness == Brightness.dark
-                        ? Colors.white
-                        : Colors.black,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _LoadingDots extends StatelessWidget {
