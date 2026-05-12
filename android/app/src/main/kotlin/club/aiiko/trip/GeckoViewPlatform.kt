@@ -138,11 +138,20 @@ class GeckoViewPlatform(
                 methodChannel.invokeMethod("onPageStop", mapOf("success" to success))
                 if (success) {
                     injectGeolocationMock()
+                    injectJSBridge()
                     // 页面加载完成后请求焦点
                     handler.postDelayed({
                         geckoView.requestFocus()
                     }, 200)
                 }
+            }
+        }
+        
+        // 设置消息代理，监听来自网页的消息
+        geckoSession.messageDelegate = object : GeckoSession.MessageDelegate {
+            override fun onMessage(session: GeckoSession, message: Any, targetOrigin: String) {
+                Log.d("GeckoViewPlatform", "Received message from web: $message")
+                methodChannel.invokeMethod("onWebMessage", message.toString())
             }
         }
         
@@ -215,6 +224,50 @@ class GeckoViewPlatform(
             })();
         """.trimIndent()
         geckoSession.loadUri("javascript:$mockScript")
+    }
+
+    private fun injectJSBridge() {
+        val bridgeScript = """
+            (function() {
+                // 创建 ReactNativeWebView 对象，模拟 RN 环境
+                if (!window.ReactNativeWebView) {
+                    window.ReactNativeWebView = {
+                        postMessage: function(message) {
+                            window.postMessage(message, '*');
+                        }
+                    };
+                }
+
+                // 监听来自 Flutter 的消息
+                window.addEventListener('message', function(event) {
+                    try {
+                        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                        
+                        // 处理不同类型的消息
+                        if (data.type === 'location') {
+                            // 位置数据
+                            if (window.onLocationUpdate) {
+                                window.onLocationUpdate(data.payload);
+                            }
+                        } else if (data.type === 'appConfig') {
+                            // 应用配置
+                            if (window.onAppConfig) {
+                                window.onAppConfig(data.payload);
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Failed to parse message:', e);
+                    }
+                });
+
+                // 发送消息给 Flutter 的便捷方法
+                window.sendToFlutter = function(type, payload) {
+                    const message = JSON.stringify({ type, payload });
+                    window.postMessage(message, '*');
+                };
+            })();
+        """.trimIndent()
+        geckoSession.loadUri("javascript:$bridgeScript")
     }
 
     private var lastGeolocationCallback: String? = null

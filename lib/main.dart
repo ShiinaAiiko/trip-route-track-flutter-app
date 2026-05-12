@@ -8,6 +8,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'local_server.dart';
+import 'modules/flutter_bridge/flutter_bridge.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +53,32 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    _appState = state;
+    
+    if (state == AppLifecycleState.resumed) {
+      if (_bridge.enableBackgroundTasks) {
+        _bridge.stop();
+        _stopBackgroundNotificationTimer();
+      }
+      if (_bridge.keepScreenOn) {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      } else {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      }
+      if (_bridge.enableLocation) {
+        _startLocationUpdates();
+      }
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      if (_bridge.enableBackgroundTasks) {
+        _bridge.start();
+        _startBackgroundNotificationTimer();
+      }
+    }
+  }
+
+  @override
   void didChangePlatformBrightness() {
     setState(() {
       _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
@@ -81,6 +108,7 @@ class WebViewContainer extends StatefulWidget {
 
 class _WebViewContainerState extends State<WebViewContainer>
     with WidgetsBindingObserver {
+  final BridgeController _bridge = BridgeController();
   MethodChannel? _channel;
   StreamSubscription<GyroscopeEvent>? _gyroSubscription;
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
@@ -92,9 +120,12 @@ class _WebViewContainerState extends State<WebViewContainer>
   Brightness _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
   Position? _currentPosition;
   bool _isLocationUpdating = false;
+  String _currentLanguage = 'system';
 
   Timer? _sensorTimer;
   Timer? _loadTimeoutTimer;
+  Timer? _backgroundNotificationTimer;
+  AppLifecycleState? _appState;
 
   @override
   void initState() {
@@ -102,11 +133,12 @@ class _WebViewContainerState extends State<WebViewContainer>
     WidgetsBinding.instance.addObserver(this);
     _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     _initSensorStreams();
-    // 延迟500ms后再申请权限，确保加载动画已完全显示
+    _initBridge();
+    
     Future.delayed(const Duration(milliseconds: 500), () {
       _requestLocationPermission();
     });
-    // 添加超时机制，确保网页能正常显示
+    
     _loadTimeoutTimer = Timer(const Duration(seconds: 8), () {
       if (mounted && _isLoading) {
         setState(() {
@@ -118,42 +150,89 @@ class _WebViewContainerState extends State<WebViewContainer>
     });
   }
 
+  Future<void> _initBridge() async {
+    await _bridge.init();
+    _currentLanguage = _bridge.currentLanguage;
+    
+    _bridge.on('enableLocation', (message) {
+      if (_bridge.enableLocation) {
+        _startLocationUpdates();
+      } else {
+        _stopLocationUpdates();
+      }
+    });
+    
+    _bridge.on('keepScreenOn', (message) {
+      if (_bridge.keepScreenOn) {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      } else {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      }
+    });
+    
+    _bridge.on('enableBackgroundTasks', (message) {
+      if (_bridge.enableBackgroundTasks) {
+        _startBackgroundNotificationTimer();
+      } else {
+        _stopBackgroundNotificationTimer();
+      }
+    });
+    
+    _bridge.on('setLanguage', (message) {
+      setState(() {
+        _currentLanguage = _bridge.currentLanguage;
+      });
+    });
+  }
+
   void _startLocationUpdates() {
     if (_isLocationUpdating) {
-      return; // 已经在更新位置，不需要重复启动
+      return;
     }
     
     _isLocationUpdating = true;
     _positionSubscription?.cancel();
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: AndroidSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 0,
-        forceLocationManager: true,
-        intervalDuration: Duration(seconds: 1), // Android特有：1秒更新一次
-      ),
-    ).listen((Position position) {
-      setState(() {
-        _currentPosition = position;
-      });
-      _channel?.invokeMethod('setGeolocation', {
-        'latitude': position.latitude,
-        'longitude': position.longitude,
-        'accuracy': position.accuracy,
-        'altitude': position.altitude,
-        'heading': position.heading,
-        'speed': position.speed,
-        'timestamp': position.timestamp.millisecondsSinceEpoch.toDouble(),
-      });
-    }, onError: (error) {
-      _isLocationUpdating = false;
-      _channel?.invokeMethod('setGeolocationError', {
-        'code': 'POSITION_UNAVAILABLE',
-        'message': error.toString(),
-      });
-    }, onDone: () {
-      _isLocationUpdating = false;
+    
+    _bridge.startLocationUpdates(
+      onPositionChange: (Position position) {
+        setState(() {
+          _currentPosition = position;
+        });
+        _channel?.invokeMethod('setGeolocation', {
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'accuracy': position.accuracy,
+          'altitude': position.altitude,
+          'heading': position.heading,
+          'speed': position.speed,
+          'timestamp': position.timestamp.millisecondsSinceEpoch.toDouble(),
+        });
+      },
+      onError: (error) {
+        _isLocationUpdating = false;
+        _channel?.invokeMethod('setGeolocationError', {
+          'code': 'POSITION_UNAVAILABLE',
+          'message': error,
+        });
+      },
+    );
+  }
+
+  void _stopLocationUpdates() {
+    _isLocationUpdating = false;
+    _bridge.stopLocationUpdates();
+  }
+
+  void _startBackgroundNotificationTimer() {
+    _stopBackgroundNotificationTimer();
+    _backgroundNotificationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _bridge.updateBackgroundNotification();
     });
+  }
+
+  void _stopBackgroundNotificationTimer() {
+    _backgroundNotificationTimer?.cancel();
+    _backgroundNotificationTimer = null;
   }
 
   @override
@@ -257,6 +336,8 @@ class _WebViewContainerState extends State<WebViewContainer>
     _sensorTimer?.cancel();
     _loadTimeoutTimer?.cancel();
     _positionSubscription?.cancel();
+    _backgroundNotificationTimer?.cancel();
+    _bridge.dispose();
     super.dispose();
   }
 
@@ -311,8 +392,14 @@ class _WebViewContainerState extends State<WebViewContainer>
 
   Widget _buildGeckoView() {
     const viewType = 'geckoView';
+    
+    final baseUrl = 'http://localhost:8080/';
+    final url = _currentLanguage == 'system' || _currentLanguage.isEmpty
+        ? baseUrl
+        : '$baseUrl$_currentLanguage';
+    
     final creationParams = <String, dynamic>{
-      'initialUrl': 'http://localhost:8080/',
+      'initialUrl': url,
       'isDarkMode': _brightness == Brightness.dark,
     };
 
@@ -336,6 +423,7 @@ class _WebViewContainerState extends State<WebViewContainer>
           );
           controller.addOnPlatformViewCreatedListener((int id) {
             _channel = MethodChannel('gecko_view_$id');
+            _bridge.setChannel(_channel);
             _channel?.setMethodCallHandler(_handleMethodCall);
             params.onPlatformViewCreated(id);
           });
