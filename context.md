@@ -1,4 +1,3 @@
-## 指令
 You are only allowed to modify files within the current directory. Never touch or mention any parent or sibling directories. 你只允许修改当前目录下的文件。切勿触及或提及任何父级或同级目录。
 
 ---
@@ -114,6 +113,57 @@ You are only allowed to modify files within the current directory. Never touch o
 **解决方案**：
 - 在 local_server.dart 中添加了 URL 解码
 - 实现了类似 nginx 的 .html 后缀自动添加功能
+
+### Flutter Bridge SDK 实现
+
+**功能概述**：实现了完整的 Flutter 与 WebView 之间的桥接通信功能
+
+**模块结构**：`modules/flutter_bridge/`
+
+**核心组件**：
+
+1. **BridgeController**（单例）：
+   - 统一管理桥接通信
+   - 支持消息订阅和分发
+   - 管理 MethodChannel 通信
+
+2. **LanguageService**：
+   - 使用 SharedPreferences 持久化存储语言设置
+   - 支持设置和获取当前语言
+   - 提供 URL 本地化方法 `getLocalizedUrl()`
+
+3. **KeepAwakeService**：
+   - 管理屏幕唤醒状态
+   - 支持保持屏幕常亮
+
+4. **BackgroundService**：
+   - 管理后台任务状态
+   - 支持后台定位更新
+
+**消息传递机制**：
+- 前端通过 `window.ReactNativeWebView.postMessage()` 发送消息
+- 使用 XMLHttpRequest 发送到 `http://localhost:8080/__flutter_bridge__`
+- 本地服务器拦截并转发给 BridgeController
+- BridgeController 处理消息并分发给注册的 handler
+
+**语言持久化流程**：
+- App 启动时初始化 BridgeController，加载保存的语言
+- 根据语言设置构建本地化 URL（如 `http://localhost:8080/zh-CN`）
+- URL 作为全局常量，只计算一次
+- 前端调用 `setLanguage()` 时保存到 SharedPreferences
+
+**修复的问题**：
+- ✅ MethodChannel 只能绑定一个 handler 的问题（通过外部 handler 机制解决）
+- ✅ GeckoRuntime 单例创建问题（双重检查锁）
+- ✅ loading 动画延迟问题（页面开始加载时立即关闭）
+- ✅ 黑屏问题（移除不必要的 handler.post 调用）
+
+**关键代码位置**：
+- `modules/flutter_bridge/lib/src/bridge_controller.dart`
+- `modules/flutter_bridge/lib/src/services/language_service.dart`
+- `android/app/src/main/kotlin/club/aiiko/trip/GeckoViewPlatform.kt`
+- `lib/local_server.dart`（`/__flutter_bridge__` 端点）
+- `lib/main.dart`（桥接初始化和 URL 构建）
 
 ## 待解决问题
 

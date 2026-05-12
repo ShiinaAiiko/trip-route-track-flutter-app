@@ -14,12 +14,15 @@ dependencies:
   sensors_plus: ^6.1.2
   permission_handler: ^11.3.1
   geolocator: ^12.0.0
-  shared_preferences: ^2.2.2
+  shared_preferences: ^2.2.0
 
   cupertino_icons: ^1.0.8
 
   shelf: ^1.4.1
   shelf_static: ^1.1.2
+
+  flutter_bridge:
+    path: modules/flutter_bridge
 
 dev_dependencies:
   flutter_test:
@@ -34,20 +37,20 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/TUIRJ2lwk8eH6cTtxy5KQ/
+    - assets/out/_next/XYRu5BjB5DCs93pN4GIGX/
     - assets/out/_next/data/
-    - assets/out/_next/data/TUIRJ2lwk8eH6cTtxy5KQ/
-    - assets/out/_next/data/TUIRJ2lwk8eH6cTtxy5KQ/en-US/
-    - assets/out/_next/data/TUIRJ2lwk8eH6cTtxy5KQ/en-US/journeyMemories/
-    - assets/out/_next/data/TUIRJ2lwk8eH6cTtxy5KQ/en-US/trip/
-    - assets/out/_next/data/TUIRJ2lwk8eH6cTtxy5KQ/zh-CN/
-    - assets/out/_next/data/TUIRJ2lwk8eH6cTtxy5KQ/zh-CN/journeyMemories/
-    - assets/out/_next/data/TUIRJ2lwk8eH6cTtxy5KQ/zh-CN/trip/
-    - assets/out/_next/data/TUIRJ2lwk8eH6cTtxy5KQ/zh-TW/
-    - assets/out/_next/data/TUIRJ2lwk8eH6cTtxy5KQ/zh-TW/journeyMemories/
-    - assets/out/_next/data/TUIRJ2lwk8eH6cTtxy5KQ/zh-TW/trip/
+    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/
+    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/en-US/
+    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/en-US/journeyMemories/
+    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/en-US/trip/
+    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-CN/
+    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-CN/journeyMemories/
+    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-CN/trip/
+    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-TW/
+    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-TW/journeyMemories/
+    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/TUIRJ2lwk8eH6cTtxy5KQ/
+    - assets/out/_next/static/XYRu5BjB5DCs93pN4GIGX/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/

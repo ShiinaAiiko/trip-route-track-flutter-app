@@ -68,12 +68,12 @@ class BackgroundService : Service() {
     }
 
     private fun createNotification(): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(taskTitle)
             .setContentText(taskDesc)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
-            .build()
+        builder.priority = NotificationCompat.PRIORITY_LOW
+        return builder.build()
     }
 }

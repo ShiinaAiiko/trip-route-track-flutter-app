@@ -8,6 +8,7 @@ import 'services/background_service.dart';
 import 'services/language_service.dart';
 
 typedef MessageHandler = void Function(BridgeMessage message);
+typedef FlutterMethodCallHandler = void Function(MethodCall call);
 
 class BridgeController {
   static final BridgeController _instance = BridgeController._internal();
@@ -21,6 +22,7 @@ class BridgeController {
   MethodChannel? _channel;
   StreamSubscription<Position>? _positionSubscription;
   final Map<String, List<MessageHandler>> _messageHandlers = {};
+  FlutterMethodCallHandler? _externalHandler;
 
   bool _enableLocation = false;
   int _backgroundLocationCount = 0;
@@ -32,14 +34,19 @@ class BridgeController {
   bool get keepScreenOn => _keepAwakeService.isKeepAwake;
   bool get enableBackgroundTasks => _backgroundService.enableBackgroundTasks;
   String get currentLanguage => _languageService.currentLanguage;
+  LanguageService get languageService => _languageService;
 
   Future<void> init() async {
     await _languageService.init();
   }
 
-  void setChannel(MethodChannel channel) {
+  void setChannel(MethodChannel? channel) {
     _channel = channel;
     _channel?.setMethodCallHandler(_handleMethodCall);
+  }
+
+  void setExternalHandler(FlutterMethodCallHandler? handler) {
+    _externalHandler = handler;
   }
 
   void on(String type, MessageHandler handler) {
@@ -49,6 +56,10 @@ class BridgeController {
 
   void off(String type, MessageHandler handler) {
     _messageHandlers[type]?.remove(handler);
+  }
+
+  void handleWebMessage(String messageString) {
+    _handleWebMessage(messageString);
   }
 
   void _dispatchMessage(BridgeMessage message) {
@@ -77,6 +88,7 @@ class BridgeController {
         _handleWebMessage(call.arguments as String);
         break;
     }
+    _externalHandler?.call(call);
   }
 
   void _handleWebMessage(String messageString) {

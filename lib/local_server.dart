@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
+import 'package:flutter_bridge/src/bridge_controller.dart';
 
 class LocalServer {
   static LocalServer? _instance;
@@ -90,6 +91,24 @@ class LocalServer {
     }
 
     print('Request: $path');
+
+    // 处理 bridge 请求
+    if (path == '__flutter_bridge__') {
+      final message = request.url.queryParameters['message'];
+      if (message != null) {
+        try {
+          final decodedMessage = Uri.decodeComponent(message);
+          print('Received bridge message: $decodedMessage');
+          BridgeController().handleWebMessage(decodedMessage);
+        } catch (e) {
+          print('Failed to handle bridge message: $e');
+        }
+      }
+      return Response.ok('', headers: {
+        'Content-Type': 'text/plain',
+        'Access-Control-Allow-Origin': '*',
+      });
+    }
 
     // 默认返回 index.html
     if (path.isEmpty) {

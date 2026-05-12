@@ -39,19 +39,31 @@ class GeckoViewPlatform(
         
         fun getRuntime(context: Context): GeckoRuntime {
             if (geckoRuntime == null) {
-                val settings = GeckoRuntimeSettings.Builder()
-                    .javaScriptEnabled(true)
-                    .remoteDebuggingEnabled(true)
-                    .build()
-                geckoRuntime = GeckoRuntime.create(context, settings)
+                synchronized(this) {
+                    if (geckoRuntime == null) {
+                        try {
+                            val settings = GeckoRuntimeSettings.Builder()
+                                .javaScriptEnabled(true)
+                                .remoteDebuggingEnabled(true)
+                                .build()
+                            geckoRuntime = GeckoRuntime.create(context.applicationContext, settings)
+                            Log.d("GeckoViewPlatform", "GeckoRuntime created successfully")
+                        } catch (e: Exception) {
+                            Log.e("GeckoViewPlatform", "Failed to create GeckoRuntime: ${e.message}")
+                            throw e
+                        }
+                    }
+                }
             }
             return geckoRuntime!!
         }
     }
 
     init {
+        Log.d("GeckoViewPlatform", "Creating MethodChannel with id: $id")
         methodChannel = MethodChannel(messenger, "gecko_view_$id")
         methodChannel.setMethodCallHandler(this)
+        Log.d("GeckoViewPlatform", "MethodChannel created: gecko_view_$id")
 
         val isDarkMode = creationParams?.get("isDarkMode") as? Boolean ?: true
         val bgColor = if (isDarkMode) {
@@ -129,29 +141,29 @@ class GeckoViewPlatform(
         // 设置页面加载完成后的回调
         geckoSession.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
+                Log.d("GeckoViewPlatform", "onPageStart called: $url")
                 isLoading = true
-                methodChannel.invokeMethod("onPageStart", mapOf("url" to url))
+                try {
+                    methodChannel.invokeMethod("onPageStart", mapOf("url" to url))
+                    Log.d("GeckoViewPlatform", "invokeMethod onPageStart succeeded")
+                } catch (e: Exception) {
+                    Log.e("GeckoViewPlatform", "invokeMethod onPageStart failed: ${e.message}")
+                }
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
+                Log.d("GeckoViewPlatform", "onPageStop called: success=$success")
                 isLoading = false
+                // 先发送 onPageStop 消息，确保 Flutter 端能及时关闭 loading
                 methodChannel.invokeMethod("onPageStop", mapOf("success" to success))
                 if (success) {
-                    injectGeolocationMock()
-                    injectJSBridge()
-                    // 页面加载完成后请求焦点
+                    // 延迟注入 JavaScript，避免干扰页面加载状态
                     handler.postDelayed({
+                        injectGeolocationMock()
+                        injectJSBridge()
                         geckoView.requestFocus()
-                    }, 200)
+                    }, 300)
                 }
-            }
-        }
-        
-        // 设置消息代理，监听来自网页的消息
-        geckoSession.messageDelegate = object : GeckoSession.MessageDelegate {
-            override fun onMessage(session: GeckoSession, message: Any, targetOrigin: String) {
-                Log.d("GeckoViewPlatform", "Received message from web: $message")
-                methodChannel.invokeMethod("onWebMessage", message.toString())
             }
         }
         
@@ -228,44 +240,16 @@ class GeckoViewPlatform(
 
     private fun injectJSBridge() {
         val bridgeScript = """
-            (function() {
-                // 创建 ReactNativeWebView 对象，模拟 RN 环境
-                if (!window.ReactNativeWebView) {
-                    window.ReactNativeWebView = {
-                        postMessage: function(message) {
-                            window.postMessage(message, '*');
-                        }
-                    };
-                }
-
-                // 监听来自 Flutter 的消息
-                window.addEventListener('message', function(event) {
-                    try {
-                        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                        
-                        // 处理不同类型的消息
-                        if (data.type === 'location') {
-                            // 位置数据
-                            if (window.onLocationUpdate) {
-                                window.onLocationUpdate(data.payload);
-                            }
-                        } else if (data.type === 'appConfig') {
-                            // 应用配置
-                            if (window.onAppConfig) {
-                                window.onAppConfig(data.payload);
-                            }
-                        }
-                    } catch (e) {
-                        console.error('Failed to parse message:', e);
+            window.isFlutterApp = true;
+            if (!window.ReactNativeWebView) {
+                window.ReactNativeWebView = {
+                    postMessage: function(message) {
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('GET', 'http://localhost:8080/__flutter_bridge__?message=' + encodeURIComponent(message), true);
+                        xhr.send();
                     }
-                });
-
-                // 发送消息给 Flutter 的便捷方法
-                window.sendToFlutter = function(type, payload) {
-                    const message = JSON.stringify({ type, payload });
-                    window.postMessage(message, '*');
                 };
-            })();
+            }
         """.trimIndent()
         geckoSession.loadUri("javascript:$bridgeScript")
     }
@@ -295,7 +279,7 @@ class GeckoViewPlatform(
             "postMessage" -> {
                 val message = call.argument<String>("message")
                 if (message != null) {
-                    geckoSession.loadUri("javascript:if (window.postMessage) { window.postMessage($message, '*'); }")
+                    geckoSession.loadUri("javascript:if (window.onFlutterMessage) { window.onFlutterMessage($message); }")
                     result.success(null)
                 } else {
                     result.error("INVALID_MESSAGE", "Message is null", null)

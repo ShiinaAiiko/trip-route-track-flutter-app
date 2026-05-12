@@ -8,13 +8,20 @@ import 'package:sensors_plus/sensors_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'local_server.dart';
-import 'modules/flutter_bridge/flutter_bridge.dart';
+import 'package:flutter_bridge/src/bridge_controller.dart';
+
+String? _initialUrl;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   // 启动本地HTTP服务器
   await LocalServer.instance.start();
+  
+  // 初始化 BridgeController 并获取本地化 URL
+  await BridgeController().init();
+  final languageService = BridgeController().languageService;
+  _initialUrl = languageService.getLocalizedUrl('http://localhost:8080/');
   
   final brightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
@@ -53,32 +60,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    _appState = state;
-    
-    if (state == AppLifecycleState.resumed) {
-      if (_bridge.enableBackgroundTasks) {
-        _bridge.stop();
-        _stopBackgroundNotificationTimer();
-      }
-      if (_bridge.keepScreenOn) {
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      } else {
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      }
-      if (_bridge.enableLocation) {
-        _startLocationUpdates();
-      }
-    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      if (_bridge.enableBackgroundTasks) {
-        _bridge.start();
-        _startBackgroundNotificationTimer();
-      }
-    }
-  }
-
-  @override
   void didChangePlatformBrightness() {
     setState(() {
       _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
@@ -108,7 +89,6 @@ class WebViewContainer extends StatefulWidget {
 
 class _WebViewContainerState extends State<WebViewContainer>
     with WidgetsBindingObserver {
-  final BridgeController _bridge = BridgeController();
   MethodChannel? _channel;
   StreamSubscription<GyroscopeEvent>? _gyroSubscription;
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
@@ -120,12 +100,9 @@ class _WebViewContainerState extends State<WebViewContainer>
   Brightness _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
   Position? _currentPosition;
   bool _isLocationUpdating = false;
-  String _currentLanguage = 'system';
 
   Timer? _sensorTimer;
   Timer? _loadTimeoutTimer;
-  Timer? _backgroundNotificationTimer;
-  AppLifecycleState? _appState;
 
   @override
   void initState() {
@@ -133,12 +110,12 @@ class _WebViewContainerState extends State<WebViewContainer>
     WidgetsBinding.instance.addObserver(this);
     _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     _initSensorStreams();
-    _initBridge();
-    
+    _initBridgeController();
+    // 延迟500ms后再申请权限，确保加载动画已完全显示
     Future.delayed(const Duration(milliseconds: 500), () {
       _requestLocationPermission();
     });
-    
+    // 添加超时机制，确保网页能正常显示
     _loadTimeoutTimer = Timer(const Duration(seconds: 8), () {
       if (mounted && _isLoading) {
         setState(() {
@@ -150,89 +127,52 @@ class _WebViewContainerState extends State<WebViewContainer>
     });
   }
 
-  Future<void> _initBridge() async {
-    await _bridge.init();
-    _currentLanguage = _bridge.currentLanguage;
-    
-    _bridge.on('enableLocation', (message) {
-      if (_bridge.enableLocation) {
-        _startLocationUpdates();
-      } else {
-        _stopLocationUpdates();
-      }
-    });
-    
-    _bridge.on('keepScreenOn', (message) {
-      if (_bridge.keepScreenOn) {
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      } else {
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      }
-    });
-    
-    _bridge.on('enableBackgroundTasks', (message) {
-      if (_bridge.enableBackgroundTasks) {
-        _startBackgroundNotificationTimer();
-      } else {
-        _stopBackgroundNotificationTimer();
-      }
-    });
-    
-    _bridge.on('setLanguage', (message) {
-      setState(() {
-        _currentLanguage = _bridge.currentLanguage;
-      });
-    });
+  void _initBridgeController() {
+    // BridgeController 已经在 main() 中初始化过了
+    // 这里只需要启动传感器和位置更新
+    _startSensorBridge();
+    _startLocationUpdates();
   }
 
   void _startLocationUpdates() {
     if (_isLocationUpdating) {
-      return;
+      return; // 已经在更新位置，不需要重复启动
     }
     
     _isLocationUpdating = true;
     _positionSubscription?.cancel();
-    
-    _bridge.startLocationUpdates(
-      onPositionChange: (Position position) {
-        setState(() {
-          _currentPosition = position;
-        });
-        _channel?.invokeMethod('setGeolocation', {
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 0,
+        forceLocationManager: true,
+        intervalDuration: Duration(seconds: 1), // Android特有：1秒更新一次
+      ),
+    ).listen((Position position) {
+      setState(() {
+        _currentPosition = position;
+      });
+      // 通过 bridge controller 发送位置信息
+      BridgeController().sendMessage('location', {
+        'coords': {
           'latitude': position.latitude,
           'longitude': position.longitude,
           'accuracy': position.accuracy,
           'altitude': position.altitude,
           'heading': position.heading,
           'speed': position.speed,
-          'timestamp': position.timestamp.millisecondsSinceEpoch.toDouble(),
-        });
-      },
-      onError: (error) {
-        _isLocationUpdating = false;
-        _channel?.invokeMethod('setGeolocationError', {
-          'code': 'POSITION_UNAVAILABLE',
-          'message': error,
-        });
-      },
-    );
-  }
-
-  void _stopLocationUpdates() {
-    _isLocationUpdating = false;
-    _bridge.stopLocationUpdates();
-  }
-
-  void _startBackgroundNotificationTimer() {
-    _stopBackgroundNotificationTimer();
-    _backgroundNotificationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      _bridge.updateBackgroundNotification();
+        },
+        'timestamp': position.timestamp.millisecondsSinceEpoch,
+      });
+    }, onError: (error) {
+      _isLocationUpdating = false;
+      _channel?.invokeMethod('setGeolocationError', {
+        'code': 'POSITION_UNAVAILABLE',
+        'message': error.toString(),
+      });
+    }, onDone: () {
+      _isLocationUpdating = false;
     });
-  }
-
-  void _stopBackgroundNotificationTimer() {
-    _backgroundNotificationTimer?.cancel();
-    _backgroundNotificationTimer = null;
   }
 
   @override
@@ -336,8 +276,6 @@ class _WebViewContainerState extends State<WebViewContainer>
     _sensorTimer?.cancel();
     _loadTimeoutTimer?.cancel();
     _positionSubscription?.cancel();
-    _backgroundNotificationTimer?.cancel();
-    _bridge.dispose();
     super.dispose();
   }
 
@@ -392,14 +330,10 @@ class _WebViewContainerState extends State<WebViewContainer>
 
   Widget _buildGeckoView() {
     const viewType = 'geckoView';
-    
-    final baseUrl = 'http://localhost:8080/';
-    final url = _currentLanguage == 'system' || _currentLanguage.isEmpty
-        ? baseUrl
-        : '$baseUrl$_currentLanguage';
-    
+    final initialUrl = _initialUrl ?? 'http://localhost:8080/';
+    // print('initialUrl language: $initialUrl');
     final creationParams = <String, dynamic>{
-      'initialUrl': url,
+      'initialUrl': initialUrl,
       'isDarkMode': _brightness == Brightness.dark,
     };
 
@@ -422,9 +356,14 @@ class _WebViewContainerState extends State<WebViewContainer>
             creationParamsCodec: const StandardMessageCodec(),
           );
           controller.addOnPlatformViewCreatedListener((int id) {
+            print('PlatformView created with id: $id');
             _channel = MethodChannel('gecko_view_$id');
-            _bridge.setChannel(_channel);
-            _channel?.setMethodCallHandler(_handleMethodCall);
+            print('MethodChannel created: gecko_view_$id');
+            // 初始化 bridge controller（它会设置 MethodCallHandler）
+            BridgeController().setChannel(_channel);
+            // 设置外部 handler，让 main.dart 也能收到消息
+            BridgeController().setExternalHandler(_handleMethodCall);
+            print('BridgeController initialized');
             params.onPlatformViewCreated(id);
           });
           controller.create();
@@ -439,17 +378,18 @@ class _WebViewContainerState extends State<WebViewContainer>
   }
 
   Future<dynamic> _handleMethodCall(MethodCall call) async {
+    print('_handleMethodCall: ${call.method}');
     switch (call.method) {
       case 'onPageStart':
-        setState(() {
-          _isLoading = true;
-        });
+        // 页面开始加载时就关闭 loading，让用户立即看到网页加载过程
+      
         break;
       case 'onPageStop':
-        _loadTimeoutTimer?.cancel();
         setState(() {
           _isLoading = false;
         });
+
+        _loadTimeoutTimer?.cancel();
         _startSensorBridge();
         _startLocationUpdates();
         break;
