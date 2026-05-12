@@ -11,6 +11,7 @@ You are only allowed to modify files within the current directory. Never touch o
 3. **Java 版本**：升级到 **Java 17**
 4. **加载动画的逻辑**：当启动app后，立即显示加载动画，背景色根据系统颜色自动设置。此时后台的webview内核立即加载。但是必须隐藏。直到网页加载成功后，再隐藏加载动画，并显示webview
 5. **以静态形式加载网站**：网站是由next开发的，静态目录的形式加载，提升加载速度
+6. **PlatformView 渲染模式**：使用 **Hybrid Composition** 模式（通过 `PlatformViewLink`），解决 VirtualDisplay 模式下输入法无法唤起的问题
 
 ## 已完成的修改
 
@@ -31,14 +32,16 @@ You are only allowed to modify files within the current directory. Never touch o
   - 添加 GeckoView 143.0.20250929153833 依赖
 - `android/build.gradle`：移除 `allprojects` 块（避免覆盖 settings.gradle 的仓库配置）
 - `android/settings.gradle`：已有 Mozilla 仓库配置
+- `android/app/src/main/AndroidManifest.xml`：添加 Hybrid Composition 配置 `<meta-data android:name="flutter.platform_views_mode" android:value="hybrid" />`
 
 ### 3. Android 代码
 - 新建 `GeckoViewFactory.kt`：PlatformView 工厂
-- 新建 `GeckoViewPlatform.kt`：GeckoView 集成核心逻辑，支持加载 URL、执行 JS、发送消息
-- 修改 `MainActivity.kt`：注册 GeckoView PlatformView
+- 新建 `GeckoViewPlatform.kt`：GeckoView 集成核心逻辑，支持加载 URL、执行 JS、发送消息，包含自定义 `GeckoViewWrapper` 类处理焦点和输入法
+- 修改 `MainActivity.kt`：注册 GeckoView PlatformView，添加窗口软输入模式设置 `SOFT_INPUT_ADJUST_RESIZE`
 
 ### 4. Flutter 代码
-- 修改 `lib/main.dart`：使用 `AndroidView` 集成 GeckoView，保持传感器数据传递功能
+- 修改 `lib/main.dart`：使用 `PlatformViewLink`（Hybrid Composition）集成 GeckoView，保持传感器数据传递功能
+- 新增 `lib/local_server.dart`：本地静态文件服务器，支持 URL 解码和类似 nginx 的路径匹配策略
 
 ### 5. GPS 定位功能
 - 添加 `permission_handler` 和 `geolocator` 依赖
