@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -314,13 +317,30 @@ class _WebViewContainerState extends State<WebViewContainer>
     };
 
     if (Theme.of(context).platform == TargetPlatform.android) {
-      return AndroidView(
+      return PlatformViewLink(
         viewType: viewType,
-        creationParams: creationParams,
-        creationParamsCodec: const StandardMessageCodec(),
-        onPlatformViewCreated: (id) {
-          _channel = MethodChannel('gecko_view_$id');
-          _channel?.setMethodCallHandler(_handleMethodCall);
+        surfaceFactory: (BuildContext context, PlatformViewController controller) {
+          return AndroidViewSurface(
+            controller: controller as AndroidViewController,
+            gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
+            hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+          );
+        },
+        onCreatePlatformView: (PlatformViewCreationParams params) {
+          final controller = PlatformViewsService.initSurfaceAndroidView(
+            id: params.id,
+            viewType: viewType,
+            layoutDirection: TextDirection.ltr,
+            creationParams: creationParams,
+            creationParamsCodec: const StandardMessageCodec(),
+          );
+          controller.addOnPlatformViewCreatedListener((int id) {
+            _channel = MethodChannel('gecko_view_$id');
+            _channel?.setMethodCallHandler(_handleMethodCall);
+            params.onPlatformViewCreated(id);
+          });
+          controller.create();
+          return controller;
         },
       );
     } else {

@@ -6,8 +6,10 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.View
-import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import androidx.core.app.ActivityCompat
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
@@ -59,27 +61,20 @@ class GeckoViewPlatform(
         }
 
         geckoSession = GeckoSession()
-        geckoView = GeckoView(context).apply {
+        
+        // 使用自定义的 GeckoViewWrapper 来增强焦点和输入法支持
+        geckoView = GeckoViewWrapper(context).apply {
             setBackgroundColor(bgColor)
             
-            // 确保可以获取焦点
-            isFocusable = true
-            isFocusableInTouchMode = true
-            isClickable = true
-            
-            // 设置焦点变化监听
-            setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus) {
-                    // 获取焦点时确保显示输入法
-                    showInputMethod()
-                }
-            }
-            
-            // 设置触摸事件监听
-            setOnTouchListener { _, _ ->
-                // 触摸时请求焦点
-                if (!hasFocus()) {
-                    requestFocus()
+            // 设置触摸事件监听 - 只请求焦点，不强制唤起输入法
+            // 输入法唤起由 GeckoView 内部根据输入框点击自动处理
+            setOnTouchListener { v, event ->
+                if (event.action == android.view.MotionEvent.ACTION_UP) {
+                    v.postDelayed({
+                        if (!v.hasFocus()) {
+                            v.requestFocus()
+                        }
+                    }, 100) // 给系统 100ms 的缓冲时间来切换 View 状态
                 }
                 false
             }
@@ -153,13 +148,6 @@ class GeckoViewPlatform(
         
         // 加载本地服务器
         geckoSession.loadUri(initialUrl)
-    }
-
-    private fun showInputMethod() {
-        handler.postDelayed({
-            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-            imm?.showSoftInput(geckoView, InputMethodManager.SHOW_IMPLICIT)
-        }, 100)
     }
 
     private fun hasLocationPermission(): Boolean {
@@ -319,6 +307,92 @@ class GeckoViewPlatform(
                 result.success(null)
             }
             else -> result.notImplemented()
+        }
+    }
+}
+
+/**
+ * 自定义 GeckoView 包装类
+ * 解决 Flutter PlatformView 中焦点传递问题
+ * 实现 GeckoView 官方补丁思路：先清空焦点再重新请求
+ */
+class GeckoViewWrapper(context: Context) : GeckoView(context) {
+
+    private val TAG = "GeckoViewWrapper"
+
+    init {
+        Log.d(TAG, "GeckoViewWrapper initialized")
+        // 确保可以获取焦点
+        isFocusable = true
+        isFocusableInTouchMode = true
+        isClickable = true
+        isFocusedByDefault = true
+    }
+
+    override fun onCheckIsTextEditor(): Boolean {
+        // 返回 true，表示这是一个文本编辑器，可以接受输入
+        Log.d(TAG, "onCheckIsTextEditor called, returning true")
+        return true
+    }
+
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
+        // 调用父类的实现，让 GeckoView 自己处理输入连接
+        Log.d(TAG, "onCreateInputConnection called, delegating to super class")
+        return super.onCreateInputConnection(outAttrs)
+    }
+
+    override fun checkInputConnectionProxy(view: View?): Boolean {
+        // 告诉系统：即使输入连接看起来不是直接来自这个 View，也请信任并处理它
+        Log.d(TAG, "checkInputConnectionProxy called")
+        return true
+    }
+
+    /**
+     * 实现官方补丁的思路：先清空焦点再重新请求，以触发系统重新评估输入法服务
+     */
+    fun showSoftInput() {
+        Log.w(TAG, "========== showSoftInput() called ==========")
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+        if (imm != null) {
+            val isActive = imm.isActive(this)
+            Log.w(TAG, "hasFocus=${hasFocus()}, isFocused=${isFocused()}, isActive=$isActive")
+            
+            if (isActive) {
+                Log.w(TAG, "SUCCESS: View IS active, showing soft input directly")
+                imm.showSoftInput(this, 0)
+            } else {
+                Log.w(TAG, "PROBLEM: View has focus but NOT active (VirtualDisplay issue)")
+                // 尝试反射方案：绕过 isActive 检查
+                try {
+                    Log.w(TAG, "Attempting reflection workaround")
+                    val method = imm.javaClass.getMethod(
+                        "showSoftInput",
+                        android.view.View::class.java,
+                        Int::class.javaPrimitiveType,
+                        android.os.ResultReceiver::class.java
+                    )
+                    method.invoke(imm, this, 0, null)
+                    Log.w(TAG, "Reflection call succeeded")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Reflection failed: ${e.message}")
+                    // 回退到传统方法
+                    if (hasFocus()) {
+                        Log.w(TAG, "Attempting fix: clearFocus() then requestFocus()")
+                        clearFocus()
+                        requestFocus()
+                    }
+                    post {
+                        val newIsActive = imm.isActive(this)
+                        Log.w(TAG, "After post: hasFocus=${hasFocus()}, isActive=$newIsActive")
+                        if (hasFocus()) {
+                            Log.w(TAG, "Calling showSoftInput after post")
+                            imm.showSoftInput(this@GeckoViewWrapper, 0)
+                        }
+                    }
+                }
+            }
+        } else {
+            Log.w(TAG, "ERROR: InputMethodManager is null!")
         }
     }
 }

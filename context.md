@@ -71,21 +71,26 @@ You are only allowed to modify files within the current directory. Never touch o
   - 添加 .html 后缀
   - 添加 /index.html 后缀
 
-### 输入法问题（未完全解决）
-**问题**：网页内的 input 标签无法唤起输入法
+### 输入法问题（已解决）
+**问题**：网页内的 input 标签无法唤起输入法，以及输入内容无法进入输入框
 
-**尝试的解决方案**：
-1. MainActivity.kt - 添加了 windowSoftInputMode 配置
-2. GeckoViewPlatform.kt - 添加了焦点和输入法处理：
-   - isFocusable = true
-   - isFocusableInTouchMode = true
-   - isClickable = true
-   - 焦点变化监听器
-   - 触摸事件监听器
-   - showInputMethod() 方法
-   - 页面加载完成后延迟请求焦点
+**根本原因**：
+- Flutter 的 PlatformView 默认使用 VirtualDisplay 模式，导致 Android 系统认为 View 不是活跃的输入目标（isActive=false）
+- 输入连接没有正确建立，导致输入内容无法传递给网页
 
-**当前状态**：输入法仍然无法唤起，需要进一步调试
+**解决方案**：
+1. **启用 Hybrid Composition**：
+   - 在 `lib/main.dart` 中使用 `PlatformViewLink` 替代 `AndroidView`
+   - 在 `AndroidManifest.xml` 中添加 `<meta-data android:name="flutter.platform_views_mode" android:value="hybrid" />`
+   
+2. **修复输入连接**：
+   - `GeckoViewWrapper.onCheckIsTextEditor()` 返回 `true`
+   - `GeckoViewWrapper.onCreateInputConnection()` 委托给父类处理
+   - 移除 touch listener 中的强制 `showSoftInput()` 调用，让 GeckoView 内部根据输入框点击自动处理
+
+**修复效果**：
+- ✅ 只有点击输入框时才唤起输入法
+- ✅ 输入内容可以正确显示在输入框中
 
 ### 语言切换问题
 **问题**：从 `/` 切换到 `/zh-CN` 时，部分文件 404
@@ -96,11 +101,4 @@ You are only allowed to modify files within the current directory. Never touch o
 
 ## 待解决问题
 
-### 1. 输入法无法唤起
-GeckoView 中的网页 input 标签无法唤起 Android 输入法
-需要进一步研究 GeckoView 的焦点和输入法集成
-
-### 2. 可能需要研究的方向
-- GeckoView 的嵌入式编辑器模式
-- Android WebView vs GeckoView 的输入法处理差异
-- 可能需要通过 JavaScript 注入来触发输入法的显示
+（当前无待解决问题）
