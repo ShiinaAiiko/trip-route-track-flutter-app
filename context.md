@@ -63,6 +63,18 @@ You are only allowed to modify files within the current directory. Never touch o
 - 在 `release.sh` 的 `dev()` 和 `_build()` 函数中集成了自动化更新逻辑
 - 每次运行 `./release.sh dev` 或 `./release.sh build` 时都会自动更新 pubspec.yaml
 
+### App 图标自动更新
+**功能**：每次更新网站时，自动从 `assets/out/icons/` 目录复制图标到 Android mipmap 目录
+
+**映射关系**：
+- `48x48.png` → `mipmap-mdpi/ic_launcher.png`
+- `64x64.png` → `mipmap-hdpi/ic_launcher.png`
+- `128x128.png` → `mipmap-xhdpi/ic_launcher.png`
+- `256x256.png` → `mipmap-xxhdpi/ic_launcher.png`
+- `512x512.png` → `mipmap-xxxhdpi/ic_launcher.png`
+
+**集成方式**：已集成到 `update_flutter_assets.sh` 脚本中，每次运行 `./release.sh dev` 或 `./release.sh build` 时自动更新
+
 ### 本地静态服务器增强
 **文件**：`lib/local_server.dart`
 
