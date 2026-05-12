@@ -9,6 +9,7 @@ import 'services/keep_awake_service.dart';
 import 'services/background_service.dart';
 import 'services/language_service.dart';
 import 'services/notification_service.dart';
+import 'services/vehicle_service.dart';
 
 typedef MessageHandler = void Function(BridgeMessage message);
 typedef FlutterMethodCallHandler = void Function(MethodCall call);
@@ -21,11 +22,13 @@ class BridgeController {
   final KeepAwakeService _keepAwakeService = KeepAwakeService();
   final BackgroundService _backgroundService = BackgroundService();
   final LanguageService _languageService = LanguageService();
+  final VehicleService _vehicleService = VehicleService();
 
   MethodChannel? _channel;
   StreamSubscription<Position>? _positionSubscription;
   final Map<String, List<MessageHandler>> _messageHandlers = {};
   FlutterMethodCallHandler? _externalHandler;
+  StreamSubscription<Map<String, dynamic>>? _carDataSubscription;
 
   bool _enableLocation = false;
   bool _enableBackgroundLocation = false;
@@ -41,9 +44,18 @@ class BridgeController {
   bool get enableBackgroundTasks => _backgroundService.enableBackgroundTasks;
   String get currentLanguage => _languageService.currentLanguage;
   LanguageService get languageService => _languageService;
+  VehicleService get vehicleService => _vehicleService;
 
   Future<void> init() async {
     await _languageService.init();
+    await _vehicleService.init();
+    _setupCarDataListener();
+  }
+
+  void _setupCarDataListener() {
+    _carDataSubscription = _vehicleService.carDataStream?.listen((data) {
+      sendMessage('carData', data);
+    });
   }
 
   void setChannel(MethodChannel? channel) {
@@ -380,6 +392,7 @@ class BridgeController {
       final Map<String, dynamic> json = jsonDecode(messageString) as Map<String, dynamic>;
       final message = BridgeMessage.fromJson(json);
       
+      print('message.type ${message.type}');
       switch (message.type) {
         case 'load':
           _handleLoadMessage();
@@ -408,6 +421,18 @@ class BridgeController {
           break;
         case 'setLanguage':
           _languageService.setLanguage(message.payload as String);
+          _dispatchMessage(message);
+          break;
+        case 'enableCarData':
+          if (message.payload == true) {
+            _vehicleService.startCarDataUpdates();
+          } else {
+            _vehicleService.stopCarDataUpdates();
+          }
+          _dispatchMessage(message);
+          break;
+        case 'getCarData':
+          _vehicleService.requestCarData();
           _dispatchMessage(message);
           break;
         default:
@@ -497,6 +522,8 @@ class BridgeController {
 
   void dispose() {
     _positionSubscription?.cancel();
+    _carDataSubscription?.cancel();
+    _vehicleService.dispose();
     _messageHandlers.clear();
   }
 }

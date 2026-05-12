@@ -2,7 +2,7 @@ name: flutter_app
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.1+4113
+version: 1.0.1+2964
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -40,20 +40,20 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/01gCp97FyeIr7ToiuxFCZ/
+    - assets/out/_next/EF7arNFAR-FPddFovi6cL/
     - assets/out/_next/data/
-    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/
-    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/en-US/
-    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/en-US/journeyMemories/
-    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/en-US/trip/
-    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-CN/
-    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-CN/journeyMemories/
-    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-CN/trip/
-    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-TW/
-    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-TW/journeyMemories/
-    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-TW/trip/
+    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/
+    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/en-US/
+    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/en-US/journeyMemories/
+    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/en-US/trip/
+    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-CN/
+    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-CN/journeyMemories/
+    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-CN/trip/
+    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-TW/
+    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-TW/journeyMemories/
+    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/01gCp97FyeIr7ToiuxFCZ/
+    - assets/out/_next/static/EF7arNFAR-FPddFovi6cL/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/

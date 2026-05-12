@@ -9,6 +9,11 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "flutter_background"
+    private val BYD_CHANNEL = "byd_vehicle"
+
+    private var bydVehicleService: BYDAutoVehicleService? = null
+    private var bydMethodChannel: MethodChannel? = null
+    private var isBydServiceAvailable = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -38,6 +43,71 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                 }
             }
+        }
+
+        // 注册 BYD 车辆数据 MethodChannel
+        bydMethodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BYD_CHANNEL)
+        bydMethodChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "startCarDataUpdates" -> {
+                    if (bydVehicleService == null) {
+                        try {
+                            bydVehicleService = BYDAutoVehicleService(applicationContext)
+                            bydVehicleService?.setMethodChannel(bydMethodChannel!!)
+                            isBydServiceAvailable = true
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            isBydServiceAvailable = false
+                        }
+                    }
+                    if (isBydServiceAvailable) {
+                        bydVehicleService?.start()
+                    }
+                    result.success(null)
+                }
+                "stopCarDataUpdates" -> {
+                    if (isBydServiceAvailable) {
+                        bydVehicleService?.stop()
+                    }
+                    result.success(null)
+                }
+                "requestCarData" -> {
+                    if (isBydServiceAvailable && bydVehicleService != null) {
+                        bydVehicleService?.requestCarData()
+                    } else {
+                        sendEmptyCarData()
+                    }
+                    result.success(null)
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+    }
+
+    private fun sendEmptyCarData() {
+        try {
+            val emptyData = mapOf(
+                "speed" to 0.0,
+                "elecPercentage" to 0.0,
+                "fuelPercentage" to 0,
+                "accelerateDepth" to 0,
+                "brakeDepth" to 0,
+                "totalMileage" to 0,
+                "evMileage" to 0,
+                "tyrePressure" to mapOf(
+                    "leftFront" to 0,
+                    "rightFront" to 0,
+                    "leftRear" to 0,
+                    "rightRear" to 0
+                ),
+                "timestamp" to System.currentTimeMillis()
+            )
+            val jsonString = org.json.JSONObject(emptyData).toString()
+            bydMethodChannel?.invokeMethod("onCarDataChanged", jsonString)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 

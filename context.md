@@ -197,11 +197,86 @@ You are only allowed to modify files within the current directory. Never touch o
 - `modules/flutter_bridge/lib/src/services/keep_awake_service.dart`
 - `modules/flutter_bridge/lib/src/services/background_service.dart`
 - `modules/flutter_bridge/lib/src/services/notification_service.dart`
+- `modules/flutter_bridge/lib/src/services/vehicle_service.dart`
 - `android/app/src/main/kotlin/club/aiiko/trip/GeckoViewPlatform.kt`
 - `android/app/src/main/kotlin/club/aiiko/trip/BackgroundService.kt`
 - `android/app/src/main/kotlin/club/aiiko/trip/MainActivity.kt`
+- `android/app/src/main/kotlin/club/aiiko/trip/BYDAutoVehicleService.kt`
 - `lib/local_server.dart`（`/__flutter_bridge__` 端点）
 - `lib/main.dart`（桥接初始化和 URL 构建）
+
+### 比亚迪车辆数据功能
+
+**功能概述**：通过比亚迪车机开放API获取车辆实时数据，并通过 Flutter Bridge 发送给前端
+
+**数据项**：
+| 数据项 | API 类 | 方法 | 说明 |
+|--------|--------|------|------|
+| 车速 | BYDAutoSpeedDevice | getCurrentSpeed() | 0 ~ 282.0 km/h |
+| 电量 | BYDAutoStatisticDevice | getElecPercentageValue() | 0 ~ 100% |
+| 油量 | BYDAutoStatisticDevice | getFuelPercentageValue() | 0 ~ 100% |
+| 油门深度 | BYDAutoSpeedDevice | getAccelerateDeepness() | 0 ~ 100% |
+| 刹车深度 | BYDAutoSpeedDevice | getBrakeDeepness() | 0 ~ 100% |
+| 总里程 | BYDAutoStatisticDevice | getTotalMileageValue() | 0 ~ 999999 km |
+| 混动里程 | BYDAutoStatisticDevice | getEVMileageValue() | 0 ~ 999999 km |
+| 胎压 | BYDAutoTyreDevice | getTyrePressureValue(area) | 0 ~ 4094 kpa（四轮独立） |
+
+**消息类型**：`carData`
+
+**消息格式**：
+```json
+{
+  "type": "carData",
+  "payload": {
+    "speed": 60.5,
+    "elecPercentage": 75.0,
+    "fuelPercentage": 45,
+    "accelerateDepth": 30,
+    "brakeDepth": 0,
+    "totalMileage": 125000,
+    "evMileage": 45000,
+    "tyrePressure": {
+      "leftFront": 230,
+      "rightFront": 228,
+      "leftRear": 225,
+      "rightRear": 232
+    },
+    "chargeStatus": 1,
+    "chargePower": 60,
+    "timestamp": 1699999999999
+  }
+}
+```
+
+**前端控制**：
+- 发送 `enableCarData: true` 开启车辆数据监听
+- 发送 `enableCarData: false` 停止车辆数据监听
+- 数据有变化时立即发送，无需轮询
+- 发送 `getCarData` 立即获取当前数据（无论是否变化）
+
+**主动查询机制**：
+- `getCarData` 消息用于前端主动获取当前车辆数据
+- 无论数据是否变化，都会立即返回当前缓存的数据
+- 返回格式与 `carData` 完全一致
+
+**非比亚迪设备兼容**：
+- 当 JAR 为 stub 或 API 不可用时，返回全 0 数据
+- `isBydServiceAvailable` 标志跟踪服务是否可用
+- `sendEmptyCarData()` 方法发送全 0 数据作为 fallback
+- 避免 `Stub!` 异常导致应用崩溃
+
+**比亚迪 API 推送模式**：
+- 采用注册监听器（Listener）方式，数据由 API 主动推送
+- 非轮询模式，数据变化时 API 自动回调通知
+
+**权限配置**：
+- `BYDAUTO_AC_COMMON` - 通用权限（需动态申请）
+- `BYDAUTO_SPEED_GET` - 车速数据权限
+- `BYDAUTO_STATISTIC_GET` - 行驶数据权限
+- `BYDAUTO_TYRE_GET` - 轮胎数据权限
+
+**依赖**：
+- `bydauto-openapi.jar` - 比亚迪官方SDK
 
 ## 待解决问题
 

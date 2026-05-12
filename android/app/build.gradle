@@ -28,6 +28,13 @@ android {
     compileSdk = 35
     ndkVersion = "26.1.10909125"
 
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['libs']
+            java.srcDirs += ['libs']
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -77,12 +84,18 @@ repositories {
     google()
     mavenCentral()
     maven { url "https://maven.mozilla.org/maven2/" }
+    flatDir {
+        dirs 'libs'
+    }
 }
 
 dependencies {
     // GeckoView 143.0 (最新稳定版，支持多架构)
     implementation "org.mozilla.geckoview:geckoview:143.0.20250929153833"
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+
+    // BYD Auto OpenAPI
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
 }
 
 flutter {

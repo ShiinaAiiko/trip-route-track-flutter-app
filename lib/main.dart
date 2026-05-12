@@ -107,14 +107,14 @@ class _WebViewContainerState extends State<WebViewContainer>
     WidgetsBinding.instance.addObserver(this);
     _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     // _initSensorStreams();
-    _initBridgeController();
+    // _initBridgeController();
     // 添加超时机制，确保网页能正常显示
     _loadTimeoutTimer = Timer(const Duration(seconds: 8), () {
       if (mounted && _isLoading) {
         setState(() {
           _isLoading = false;
         });
-        _startSensorBridge();
+        // _startSensorBridge();
       }
     });
   }
@@ -293,7 +293,7 @@ class _WebViewContainerState extends State<WebViewContainer>
         });
 
         _loadTimeoutTimer?.cancel();
-        _startSensorBridge();
+        // _startSensorBridge();
         break;
     }
   }
