@@ -29,6 +29,16 @@ class BackgroundService : Service() {
         if (!isRunning) {
             isRunning = true
             startForeground(NOTIFICATION_ID, createNotification())
+        } else {
+            // 处理更新通知的请求
+            intent?.let {
+                val action = it.getStringExtra("action")
+                if (action == "update") {
+                    val title = it.getStringExtra("title")
+                    val desc = it.getStringExtra("desc")
+                    updateNotification(title, desc)
+                }
+            }
         }
         return START_STICKY
     }

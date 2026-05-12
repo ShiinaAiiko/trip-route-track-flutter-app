@@ -31,6 +31,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
     }
 
     kotlinOptions {
@@ -81,6 +82,7 @@ repositories {
 dependencies {
     // GeckoView 143.0 (最新稳定版，支持多架构)
     implementation "org.mozilla.geckoview:geckoview:143.0.20250929153833"
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
 }
 
 flutter {

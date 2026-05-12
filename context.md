@@ -126,6 +126,8 @@ You are only allowed to modify files within the current directory. Never touch o
    - 统一管理桥接通信
    - 支持消息订阅和分发
    - 管理 MethodChannel 通信
+   - 管理 GPS 定位状态和后台定位
+   - 管理屏幕常亮状态
 
 2. **LanguageService**：
    - 使用 SharedPreferences 持久化存储语言设置
@@ -134,11 +136,16 @@ You are only allowed to modify files within the current directory. Never touch o
 
 3. **KeepAwakeService**：
    - 管理屏幕唤醒状态
-   - 支持保持屏幕常亮
+   - 支持保持屏幕常亮（使用 wakelock_plus）
 
 4. **BackgroundService**：
    - 管理后台任务状态
    - 支持后台定位更新
+   - 管理前台服务通知
+
+5. **NotificationService**：
+   - 管理系统通知显示
+   - 支持常驻通知
 
 **消息传递机制**：
 - 前端通过 `window.ReactNativeWebView.postMessage()` 发送消息
@@ -152,16 +159,47 @@ You are only allowed to modify files within the current directory. Never touch o
 - URL 作为全局常量，只计算一次
 - 前端调用 `setLanguage()` 时保存到 SharedPreferences
 
+**GPS 和屏幕常亮控制**：
+- 完全由前端指令控制，不再默认启动
+- `enableLocation`：控制是否开启 GPS 定位
+- `keepScreenOn`：控制是否保持屏幕常亮
+- `enableBackgroundLocation`：控制是否开启后台定位
+- 开启时自动申请必要权限，发送系统通知提醒用户
+
+**后台定位实现**：
+- 使用 Android 前台服务（Foreground Service）确保后台持续运行
+- 在通知中实时显示持续时间和定位次数
+- 通知格式：`已开启XX分XX秒，已记录XXX个定位`
+- geolocator 配合前台服务通知实现后台定位
+
+**appConfig 消息**：
+- 前端 SDK 初始化完成后发送 `load` 消息
+- Flutter 返回 `appConfig`，包含 `version` 和 `system`（值为 "Flutter App"）
+
 **修复的问题**：
 - ✅ MethodChannel 只能绑定一个 handler 的问题（通过外部 handler 机制解决）
 - ✅ GeckoRuntime 单例创建问题（双重检查锁）
 - ✅ loading 动画延迟问题（页面开始加载时立即关闭）
 - ✅ 黑屏问题（移除不必要的 handler.post 调用）
+- ✅ GPS 默认启动问题（改为前端控制）
+- ✅ 通知权限问题（Android 13+ 需要显式申请）
+- ✅ 前台服务权限问题（添加 FOREGROUND_SERVICE 和 FOREGROUND_SERVICE_LOCATION）
+- ✅ 重复通知问题（只保留 Android 后台服务通知）
+
+**依赖新增**：
+- `wakelock_plus: ^1.2.1`
+- `flutter_local_notifications: ^17.2.3`
+- `package_info_plus: ^8.0.0`
 
 **关键代码位置**：
 - `modules/flutter_bridge/lib/src/bridge_controller.dart`
 - `modules/flutter_bridge/lib/src/services/language_service.dart`
+- `modules/flutter_bridge/lib/src/services/keep_awake_service.dart`
+- `modules/flutter_bridge/lib/src/services/background_service.dart`
+- `modules/flutter_bridge/lib/src/services/notification_service.dart`
 - `android/app/src/main/kotlin/club/aiiko/trip/GeckoViewPlatform.kt`
+- `android/app/src/main/kotlin/club/aiiko/trip/BackgroundService.kt`
+- `android/app/src/main/kotlin/club/aiiko/trip/MainActivity.kt`
 - `lib/local_server.dart`（`/__flutter_bridge__` 端点）
 - `lib/main.dart`（桥接初始化和 URL 构建）
 

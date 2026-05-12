@@ -92,14 +92,11 @@ class _WebViewContainerState extends State<WebViewContainer>
   MethodChannel? _channel;
   StreamSubscription<GyroscopeEvent>? _gyroSubscription;
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
-  StreamSubscription<Position>? _positionSubscription;
 
   double _pitch = 0.0;
   double _roll = 0.0;
   bool _isLoading = true;
   Brightness _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-  Position? _currentPosition;
-  bool _isLocationUpdating = false;
 
   Timer? _sensorTimer;
   Timer? _loadTimeoutTimer;
@@ -109,12 +106,8 @@ class _WebViewContainerState extends State<WebViewContainer>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    _initSensorStreams();
+    // _initSensorStreams();
     _initBridgeController();
-    // 延迟500ms后再申请权限，确保加载动画已完全显示
-    Future.delayed(const Duration(milliseconds: 500), () {
-      _requestLocationPermission();
-    });
     // 添加超时机制，确保网页能正常显示
     _loadTimeoutTimer = Timer(const Duration(seconds: 8), () {
       if (mounted && _isLoading) {
@@ -122,57 +115,14 @@ class _WebViewContainerState extends State<WebViewContainer>
           _isLoading = false;
         });
         _startSensorBridge();
-        _startLocationUpdates();
       }
     });
   }
 
   void _initBridgeController() {
     // BridgeController 已经在 main() 中初始化过了
-    // 这里只需要启动传感器和位置更新
+    // 这里只需要启动传感器（GPS由前端控制）
     _startSensorBridge();
-    _startLocationUpdates();
-  }
-
-  void _startLocationUpdates() {
-    if (_isLocationUpdating) {
-      return; // 已经在更新位置，不需要重复启动
-    }
-    
-    _isLocationUpdating = true;
-    _positionSubscription?.cancel();
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: AndroidSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 0,
-        forceLocationManager: true,
-        intervalDuration: Duration(seconds: 1), // Android特有：1秒更新一次
-      ),
-    ).listen((Position position) {
-      setState(() {
-        _currentPosition = position;
-      });
-      // 通过 bridge controller 发送位置信息
-      BridgeController().sendMessage('location', {
-        'coords': {
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-          'accuracy': position.accuracy,
-          'altitude': position.altitude,
-          'heading': position.heading,
-          'speed': position.speed,
-        },
-        'timestamp': position.timestamp.millisecondsSinceEpoch,
-      });
-    }, onError: (error) {
-      _isLocationUpdating = false;
-      _channel?.invokeMethod('setGeolocationError', {
-        'code': 'POSITION_UNAVAILABLE',
-        'message': error.toString(),
-      });
-    }, onDone: () {
-      _isLocationUpdating = false;
-    });
   }
 
   @override
@@ -188,52 +138,6 @@ class _WebViewContainerState extends State<WebViewContainer>
       systemNavigationBarIconBrightness:
           _brightness == Brightness.dark ? Brightness.light : Brightness.dark,
     ));
-  }
-
-  void _requestLocationPermission() async {
-    try {
-      final status = await Permission.locationWhenInUse.status;
-      if (status.isDenied) {
-        final result = await Permission.locationWhenInUse.request();
-        if (result.isGranted) {
-          await _checkAndStartLocation();
-        }
-      } else if (status.isGranted) {
-        await _checkAndStartLocation();
-      }
-    } catch (e) {
-      // 静默处理异常，不影响加载流程
-    }
-  }
-
-  Future<void> _checkAndStartLocation() async {
-    try {
-      // 检查位置服务是否启用
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        // 位置服务未启用，尝试打开设置
-        await Geolocator.openLocationSettings();
-        setState(() {
-          _currentPosition = null;
-        });
-        return;
-      }
-
-      // 先尝试立即获取一次位置
-      final currentPosition = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      
-      setState(() {
-        _currentPosition = currentPosition;
-      });
-
-      // 然后启动持续位置更新
-      _startLocationUpdates();
-    } catch (e) {
-      // 打印错误日志
-      print('GPS Error: $e');
-    }
   }
 
   void _initSensorStreams() {
@@ -275,7 +179,6 @@ class _WebViewContainerState extends State<WebViewContainer>
     _accelSubscription?.cancel();
     _sensorTimer?.cancel();
     _loadTimeoutTimer?.cancel();
-    _positionSubscription?.cancel();
     super.dispose();
   }
 
@@ -391,7 +294,6 @@ class _WebViewContainerState extends State<WebViewContainer>
 
         _loadTimeoutTimer?.cancel();
         _startSensorBridge();
-        _startLocationUpdates();
         break;
     }
   }

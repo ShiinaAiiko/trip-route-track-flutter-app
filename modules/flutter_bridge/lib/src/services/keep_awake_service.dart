@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class KeepAwakeService {
   static final KeepAwakeService _instance = KeepAwakeService._internal();
@@ -11,17 +12,14 @@ class KeepAwakeService {
 
   Future<void> activate() async {
     if (!_isKeepAwake) {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-      ]);
+      await WakelockPlus.enable();
       _isKeepAwake = true;
     }
   }
 
   Future<void> deactivate() async {
     if (_isKeepAwake) {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      await WakelockPlus.disable();
       _isKeepAwake = false;
     }
   }

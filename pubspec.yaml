@@ -15,6 +15,9 @@ dependencies:
   permission_handler: ^11.3.1
   geolocator: ^12.0.0
   shared_preferences: ^2.2.0
+  package_info_plus: ^8.0.0
+  flutter_local_notifications: ^17.2.0
+  wakelock_plus: ^1.2.1
 
   cupertino_icons: ^1.0.8
 
@@ -37,20 +40,20 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/XYRu5BjB5DCs93pN4GIGX/
+    - assets/out/_next/01gCp97FyeIr7ToiuxFCZ/
     - assets/out/_next/data/
-    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/
-    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/en-US/
-    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/en-US/journeyMemories/
-    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/en-US/trip/
-    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-CN/
-    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-CN/journeyMemories/
-    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-CN/trip/
-    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-TW/
-    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-TW/journeyMemories/
-    - assets/out/_next/data/XYRu5BjB5DCs93pN4GIGX/zh-TW/trip/
+    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/
+    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/en-US/
+    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/en-US/journeyMemories/
+    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/en-US/trip/
+    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-CN/
+    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-CN/journeyMemories/
+    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-CN/trip/
+    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-TW/
+    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-TW/journeyMemories/
+    - assets/out/_next/data/01gCp97FyeIr7ToiuxFCZ/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/XYRu5BjB5DCs93pN4GIGX/
+    - assets/out/_next/static/01gCp97FyeIr7ToiuxFCZ/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/
