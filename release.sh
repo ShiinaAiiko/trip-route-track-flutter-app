@@ -7,7 +7,7 @@ version="v1.0.2"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
-allowMethods=("adb dev run stop protos start build buildDev setVersion")
+allowMethods=("install adb dev run stop protos start build buildDev setVersion")
 
 dev() {
 	# adb logcat | grep "GeckoViewPlatform\|gps1"
@@ -155,6 +155,12 @@ _build() {
 	fi
 
 	adb install $OUT_DIR/$name-$version-arm64-v8a.apk
+
+}
+
+install() {
+	OUT_DIR="$DIR/out"
+	echo adb install $OUT_DIR/$name-$version-arm64-v8a.apk
 }
 
 main() {

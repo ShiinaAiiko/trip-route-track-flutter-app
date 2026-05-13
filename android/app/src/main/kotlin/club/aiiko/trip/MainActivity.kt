@@ -15,6 +15,7 @@ class MainActivity : FlutterActivity() {
     private val CHANNEL = "flutter_background"
     private val BYD_CHANNEL = "byd_vehicle"
     private val LANGUAGE_CHANNEL = "app_language"
+    private val NOTIFICATION_CLICK_CHANNEL = "notification_click"
 
     private var bydVehicleService: BYDAutoVehicleService? = null
     private var bydMethodChannel: MethodChannel? = null
@@ -62,6 +63,18 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NOTIFICATION_CLICK_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "openApp" -> {
+                    openApp()
+                    result.success(null)
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+
         bydMethodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BYD_CHANNEL)
         bydMethodChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -100,6 +113,12 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+    }
+
+    private fun openApp() {
+        val intent = Intent(this, MainActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        startActivity(intent)
     }
 
     private fun sendEmptyCarData() {

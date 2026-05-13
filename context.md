@@ -164,7 +164,7 @@ You are only allowed to modify files within the current directory. Never touch o
 
 5. **NotificationService**：
    - 管理系统通知显示
-   - 支持常驻通知
+   - 支持常驻通知和带自动关闭的通知
 
 **消息传递机制**：
 
@@ -371,6 +371,42 @@ You are only allowed to modify files within the current directory. Never touch o
 - `android/app/src/main/kotlin/club/aiiko/trip/MainActivity.kt` (`updateAppTitle()` 方法)
 - `android/app/src/main/res/xml/shortcuts.xml`
 - `android/app/src/main/AndroidManifest.xml`
+
+### 通知点击和自动关闭功能
+
+**功能概述**：实现了完整的通知交互功能，包括点击通知打开 App 和自动关闭机制
+
+**核心修改**：
+
+1. **NotificationService 增强** (`modules/flutter_bridge/lib/src/services/notification_service.dart`)：
+   - 添加 `onDidReceiveNotificationResponse` 回调处理通知点击事件
+   - 创建 `_onNotificationClicked()` 方法，通过 MethodChannel 调用 Android 原生方法打开 App
+   - 添加 `showNotificationWithAutoClose()` 方法，支持指定延时自动关闭通知（默认 4000ms）
+
+2. **MainActivity 扩展** (`android/app/src/main/kotlin/club/aiiko/trip/MainActivity.kt`)：
+   - 添加新的 MethodChannel `notification_click`
+   - 添加 `openApp()` 方法，通过 Intent 打开 MainActivity
+   - 设置 `FLAG_ACTIVITY_NEW_TASK` 和 `FLAG_ACTIVITY_CLEAR_TOP` 标志
+
+**通知行为规则**：
+
+| 通知类型 | 点击行为 | 自动关闭 |
+|----------|----------|----------|
+| 常驻通知（后台定位） | 打开 App | ❌ 不关闭 |
+| 非常驻通知（定位开启/关闭、屏幕常亮开启/关闭） | 打开 App | ✅ 4秒后自动关闭 |
+
+**自动关闭通知列表**：
+- 定位开启通知（ID: 1）
+- 定位关闭通知（ID: 1）
+- 屏幕常亮开启通知（ID: 2）
+- 屏幕常亮关闭通知（ID: 2）
+
+**常驻通知列表**：
+- 后台定位通知（由 Android 前台服务管理）
+
+**关键代码位置**：
+- `modules/flutter_bridge/lib/src/services/notification_service.dart`
+- `android/app/src/main/kotlin/club/aiiko/trip/MainActivity.kt`（`openApp()` 方法和 `NOTIFICATION_CLICK_CHANNEL`）
 
 ## 待解决问题
 

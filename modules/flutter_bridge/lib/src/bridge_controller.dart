@@ -131,7 +131,7 @@ class BridgeController {
 
       _startLocationUpdatesInternal();
 
-      NotificationService().showNotification(
+      NotificationService().showNotificationWithAutoClose(
         title: _i18nService.t('location_enabled'),
         body: '',
         id: 1,
@@ -139,7 +139,7 @@ class BridgeController {
     } else {
       _stopLocationUpdates();
 
-      NotificationService().showNotification(
+      NotificationService().showNotificationWithAutoClose(
         title: _i18nService.t('location_disabled'),
         body: '',
         id: 1,
@@ -214,13 +214,13 @@ class BridgeController {
     _keepAwakeService.setKeepAwake(enable);
     
     if (enable) {
-      NotificationService().showNotification(
+      NotificationService().showNotificationWithAutoClose(
         title: _i18nService.t('screen_kept_on'),
         body: '',
         id: 2,
       );
     } else {
-      NotificationService().showNotification(
+      NotificationService().showNotificationWithAutoClose(
         title: _i18nService.t('screen_kept_off'),
         body: '',
         id: 2,
@@ -231,7 +231,7 @@ class BridgeController {
   Future<void> _handleEnableBackgroundLocation(bool enable) async {
     if (enable) {
       if (!_enableLocation) {
-        NotificationService().showNotification(
+        NotificationService().showNotificationWithAutoClose(
           title: _i18nService.t('background_location_enable_failed'),
           body: _i18nService.t('foreground_location_first'),
           id: 3,
@@ -305,7 +305,7 @@ class BridgeController {
         _startLocationUpdatesInternal();
       }
 
-      NotificationService().showNotification(
+      NotificationService().showNotificationWithAutoClose(
         title: _i18nService.t('background_location_disabled'),
         body: '',
         id: 4,
@@ -493,8 +493,13 @@ class BridgeController {
     }
 
     _backgroundService.updateNotification(
-      taskTitle: '正在后台定位',
-      taskDesc: '行程已持续${formatDuration()} | 已获取$_backgroundLocationCount次定位 | 速度${(speedKmh * 10).round() / 10}km/h | 海拔${(altitudeM * 10).round() / 10}米',
+      taskTitle: _i18nService.t('background_tracking_title'),
+      taskDesc: _i18nService.t('background_tracking_content', {
+        'duration': formatDuration(),
+        'count': '$_backgroundLocationCount',
+        'speed': '${(speedKmh * 10).round() / 10}',
+        'altitude': '${(altitudeM * 10).round() / 10}',
+      }),
     );
   }
 
