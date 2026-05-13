@@ -2,7 +2,7 @@ name: flutter_app
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.1+2964
+version: 1.0.2+4943
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -26,6 +26,8 @@ dependencies:
 
   flutter_bridge:
     path: modules/flutter_bridge
+  i18n:
+    path: modules/i18n
 
 dev_dependencies:
   flutter_test:
@@ -40,20 +42,19 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/EF7arNFAR-FPddFovi6cL/
     - assets/out/_next/data/
-    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/
-    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/en-US/
-    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/en-US/journeyMemories/
-    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/en-US/trip/
-    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-CN/
-    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-CN/journeyMemories/
-    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-CN/trip/
-    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-TW/
-    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-TW/journeyMemories/
-    - assets/out/_next/data/EF7arNFAR-FPddFovi6cL/zh-TW/trip/
+    - assets/out/_next/data/sUjgXSVLQSn8VoHlRdOfZ/
+    - assets/out/_next/data/sUjgXSVLQSn8VoHlRdOfZ/en-US/
+    - assets/out/_next/data/sUjgXSVLQSn8VoHlRdOfZ/en-US/journeyMemories/
+    - assets/out/_next/data/sUjgXSVLQSn8VoHlRdOfZ/en-US/trip/
+    - assets/out/_next/data/sUjgXSVLQSn8VoHlRdOfZ/zh-CN/
+    - assets/out/_next/data/sUjgXSVLQSn8VoHlRdOfZ/zh-CN/journeyMemories/
+    - assets/out/_next/data/sUjgXSVLQSn8VoHlRdOfZ/zh-CN/trip/
+    - assets/out/_next/data/sUjgXSVLQSn8VoHlRdOfZ/zh-TW/
+    - assets/out/_next/data/sUjgXSVLQSn8VoHlRdOfZ/zh-TW/journeyMemories/
+    - assets/out/_next/data/sUjgXSVLQSn8VoHlRdOfZ/zh-TW/trip/
+    - assets/out/_next/sUjgXSVLQSn8VoHlRdOfZ/
     - assets/out/_next/static/
-    - assets/out/_next/static/EF7arNFAR-FPddFovi6cL/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/
@@ -62,6 +63,7 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
+    - assets/out/_next/static/sUjgXSVLQSn8VoHlRdOfZ/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/

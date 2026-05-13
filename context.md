@@ -3,9 +3,11 @@ You are only allowed to modify files within the current directory. Never touch o
 ---
 
 ## 项目背景
-这是一个**旅行路线追踪 Flutter 应用**（trip-route-track-flutter-app），主要功能是用 WebView 加载 `https://trip.aiiko.club/zh-CN` 并将手机传感器数据传递给网页。
+
+这是一个**行程路线轨迹 Flutter 应用**（trip-route-track-flutter-app），主要功能是用 WebView 加载 `https://trip.aiiko.club/zh-CN` 并将手机传感器数据传递给网页。
 
 ## 重要决策
+
 1. **浏览器引擎选择**：使用 **GeckoView 替代系统 WebView**，解决老版本 Android 手机 WebView 版本过旧的问题
 2. **GeckoView 版本要求**：必须 ≥ 130，当前使用 **143.0.20250929153833**
 3. **Java 版本**：升级到 **Java 17**
@@ -16,16 +18,19 @@ You are only allowed to modify files within the current directory. Never touch o
 ## 已完成的修改
 
 ### 1. pubspec.yaml
+
 - 移除 `flutter_inappwebview` 依赖
 - 添加静态资源配置（assets/out/ 目录）
 
 ### 2. 静态目录加载
+
 - 将 Next.js 项目构建为静态文件（`npm run build`）
 - 静态文件存放在 `assets/out/` 目录
 - 通过 Base64 编码的 data URL 加载本地静态页面（避免 GeckoView 直接访问 assets 路径的问题）
 - Flutter assets 配置：`assets/out/` 及其子目录
 
 ### 2. Android 配置
+
 - `android/app/build.gradle`：
   - 更新 Java 版本从 1.8 → 17
   - 添加 `repositories` 块，包含 Mozilla Maven 仓库
@@ -35,15 +40,18 @@ You are only allowed to modify files within the current directory. Never touch o
 - `android/app/src/main/AndroidManifest.xml`：添加 Hybrid Composition 配置 `<meta-data android:name="flutter.platform_views_mode" android:value="hybrid" />`
 
 ### 3. Android 代码
+
 - 新建 `GeckoViewFactory.kt`：PlatformView 工厂
 - 新建 `GeckoViewPlatform.kt`：GeckoView 集成核心逻辑，支持加载 URL、执行 JS、发送消息，包含自定义 `GeckoViewWrapper` 类处理焦点和输入法
 - 修改 `MainActivity.kt`：注册 GeckoView PlatformView，添加窗口软输入模式设置 `SOFT_INPUT_ADJUST_RESIZE`
 
 ### 4. Flutter 代码
+
 - 修改 `lib/main.dart`：使用 `PlatformViewLink`（Hybrid Composition）集成 GeckoView，保持传感器数据传递功能
 - 新增 `lib/local_server.dart`：本地静态文件服务器，支持 URL 解码和类似 nginx 的路径匹配策略
 
 ### 5. GPS 定位功能
+
 - 添加 `permission_handler` 和 `geolocator` 依赖
 - 在 `lib/main.dart` 中实现：
   - 静默后台申请位置权限（`locationWhenInUse`）
@@ -56,17 +64,21 @@ You are only allowed to modify files within the current directory. Never touch o
 ## 新增/更新的内容
 
 ### 静态资源自动更新
+
 **问题**：Flutter 的 pubspec.yaml 不能递归包含子目录，每次构建网站后需要手动列出所有子目录。
 
 **解决方案**：
+
 - 创建了 `update_flutter_assets.sh` 脚本，自动扫描 `assets/out/` 下所有子目录
 - 在 `release.sh` 的 `dev()` 和 `_build()` 函数中集成了自动化更新逻辑
 - 每次运行 `./release.sh dev` 或 `./release.sh build` 时都会自动更新 pubspec.yaml
 
 ### App 图标自动更新
+
 **功能**：每次更新网站时，自动从 `assets/out/icons/` 目录复制图标到 Android mipmap 目录
 
 **映射关系**：
+
 - `48x48.png` → `mipmap-mdpi/ic_launcher.png`
 - `64x64.png` → `mipmap-hdpi/ic_launcher.png`
 - `128x128.png` → `mipmap-xhdpi/ic_launcher.png`
@@ -76,9 +88,11 @@ You are only allowed to modify files within the current directory. Never touch o
 **集成方式**：已集成到 `update_flutter_assets.sh` 脚本中，每次运行 `./release.sh dev` 或 `./release.sh build` 时自动更新
 
 ### 本地静态服务器增强
+
 **文件**：`lib/local_server.dart`
 
 **功能**：
+
 - 从 AssetManifest.json 加载所有资源
 - URL 解码处理（解决 `%5B` 等 URL 编码问题）
 - 类似 nginx 的路径匹配策略：
@@ -87,30 +101,35 @@ You are only allowed to modify files within the current directory. Never touch o
   - 添加 /index.html 后缀
 
 ### 输入法问题（已解决）
+
 **问题**：网页内的 input 标签无法唤起输入法，以及输入内容无法进入输入框
 
 **根本原因**：
+
 - Flutter 的 PlatformView 默认使用 VirtualDisplay 模式，导致 Android 系统认为 View 不是活跃的输入目标（isActive=false）
 - 输入连接没有正确建立，导致输入内容无法传递给网页
 
 **解决方案**：
+
 1. **启用 Hybrid Composition**：
    - 在 `lib/main.dart` 中使用 `PlatformViewLink` 替代 `AndroidView`
    - 在 `AndroidManifest.xml` 中添加 `<meta-data android:name="flutter.platform_views_mode" android:value="hybrid" />`
-   
 2. **修复输入连接**：
    - `GeckoViewWrapper.onCheckIsTextEditor()` 返回 `true`
    - `GeckoViewWrapper.onCreateInputConnection()` 委托给父类处理
    - 移除 touch listener 中的强制 `showSoftInput()` 调用，让 GeckoView 内部根据输入框点击自动处理
 
 **修复效果**：
+
 - ✅ 只有点击输入框时才唤起输入法
 - ✅ 输入内容可以正确显示在输入框中
 
 ### 语言切换问题
+
 **问题**：从 `/` 切换到 `/zh-CN` 时，部分文件 404
 
 **解决方案**：
+
 - 在 local_server.dart 中添加了 URL 解码
 - 实现了类似 nginx 的 .html 后缀自动添加功能
 
@@ -148,18 +167,21 @@ You are only allowed to modify files within the current directory. Never touch o
    - 支持常驻通知
 
 **消息传递机制**：
+
 - 前端通过 `window.ReactNativeWebView.postMessage()` 发送消息
 - 使用 XMLHttpRequest 发送到 `http://localhost:8080/__flutter_bridge__`
 - 本地服务器拦截并转发给 BridgeController
 - BridgeController 处理消息并分发给注册的 handler
 
 **语言持久化流程**：
+
 - App 启动时初始化 BridgeController，加载保存的语言
 - 根据语言设置构建本地化 URL（如 `http://localhost:8080/zh-CN`）
 - URL 作为全局常量，只计算一次
 - 前端调用 `setLanguage()` 时保存到 SharedPreferences
 
 **GPS 和屏幕常亮控制**：
+
 - 完全由前端指令控制，不再默认启动
 - `enableLocation`：控制是否开启 GPS 定位
 - `keepScreenOn`：控制是否保持屏幕常亮
@@ -167,16 +189,19 @@ You are only allowed to modify files within the current directory. Never touch o
 - 开启时自动申请必要权限，发送系统通知提醒用户
 
 **后台定位实现**：
+
 - 使用 Android 前台服务（Foreground Service）确保后台持续运行
 - 在通知中实时显示持续时间和定位次数
 - 通知格式：`已开启XX分XX秒，已记录XXX个定位`
 - geolocator 配合前台服务通知实现后台定位
 
 **appConfig 消息**：
+
 - 前端 SDK 初始化完成后发送 `load` 消息
 - Flutter 返回 `appConfig`，包含 `version` 和 `system`（值为 "Flutter App"）
 
 **修复的问题**：
+
 - ✅ MethodChannel 只能绑定一个 handler 的问题（通过外部 handler 机制解决）
 - ✅ GeckoRuntime 单例创建问题（双重检查锁）
 - ✅ loading 动画延迟问题（页面开始加载时立即关闭）
@@ -187,11 +212,13 @@ You are only allowed to modify files within the current directory. Never touch o
 - ✅ 重复通知问题（只保留 Android 后台服务通知）
 
 **依赖新增**：
+
 - `wakelock_plus: ^1.2.1`
 - `flutter_local_notifications: ^17.2.3`
 - `package_info_plus: ^8.0.0`
 
 **关键代码位置**：
+
 - `modules/flutter_bridge/lib/src/bridge_controller.dart`
 - `modules/flutter_bridge/lib/src/services/language_service.dart`
 - `modules/flutter_bridge/lib/src/services/keep_awake_service.dart`
@@ -224,6 +251,7 @@ You are only allowed to modify files within the current directory. Never touch o
 **消息类型**：`carData`
 
 **消息格式**：
+
 ```json
 {
   "type": "carData",
@@ -249,34 +277,100 @@ You are only allowed to modify files within the current directory. Never touch o
 ```
 
 **前端控制**：
+
 - 发送 `enableCarData: true` 开启车辆数据监听
 - 发送 `enableCarData: false` 停止车辆数据监听
 - 数据有变化时立即发送，无需轮询
 - 发送 `getCarData` 立即获取当前数据（无论是否变化）
 
 **主动查询机制**：
+
 - `getCarData` 消息用于前端主动获取当前车辆数据
 - 无论数据是否变化，都会立即返回当前缓存的数据
 - 返回格式与 `carData` 完全一致
 
 **非比亚迪设备兼容**：
+
 - 当 JAR 为 stub 或 API 不可用时，返回全 0 数据
 - `isBydServiceAvailable` 标志跟踪服务是否可用
 - `sendEmptyCarData()` 方法发送全 0 数据作为 fallback
 - 避免 `Stub!` 异常导致应用崩溃
 
 **比亚迪 API 推送模式**：
+
 - 采用注册监听器（Listener）方式，数据由 API 主动推送
 - 非轮询模式，数据变化时 API 自动回调通知
 
 **权限配置**：
+
 - `BYDAUTO_AC_COMMON` - 通用权限（需动态申请）
 - `BYDAUTO_SPEED_GET` - 车速数据权限
 - `BYDAUTO_STATISTIC_GET` - 行驶数据权限
 - `BYDAUTO_TYRE_GET` - 轮胎数据权限
 
 **依赖**：
+
 - `bydauto-openapi.jar` - 比亚迪官方SDK
+
+### 全局 i18n 国际化系统
+
+**功能概述**：实现了完整的全局国际化系统，支持多语言切换，包括：
+- Flutter UI 文本国际化
+- 桌面 App 标题跟随语言设置
+- 通知文本国际化
+- 语言设置持久化存储
+
+**支持的语言**：
+- `zh-CN` - 简体中文（默认）
+- `en-US` - 英语
+- `zh-TW` - 繁体中文
+
+**核心组件**：
+
+1. **I18nService** (`modules/i18n/lib/i18n_service.dart`)
+   - 单例模式，管理全局语言状态
+   - 使用 `SharedPreferences` 持久化存储语言设置
+   - 支持语言切换事件广播（Stream）
+   - 提供 `translate()` / `t()` 方法进行文本翻译
+   - 支持参数替换（如 `{duration}`、`{count}`）
+   - 自动调用 Android 原生方法更新桌面 App 标题
+
+2. **AppTranslations** (`modules/i18n/lib/translations.dart`)
+   - 定义所有支持的语言和翻译文本
+   - 包含 App 标题、加载文本、通知文本、错误提示等
+
+3. **BridgeController 集成** (`modules/flutter_bridge/lib/src/bridge_controller.dart`)
+   - 初始化时同时初始化 `I18nService` 和 `LanguageService`
+   - 收到前端 `setLanguage` 消息时，同步更新两个服务的语言设置
+   - 所有通知文本、错误提示都通过 `_i18nService.t()` 获取翻译
+
+4. **桌面 App 标题动态更新**
+   - **问题**：App 内设置语言后，桌面显示的 App 名称仍然跟随系统语言
+   - **目标行为**：
+     - 当 App 内语言设置为 "system" 或空时，跟随系统语言
+     - 当 App 内设置为特定语言时，桌面 App 标题使用对应语言
+     - 语言设置变更时，标题立即更新
+   - **解决方案**：使用 Android ShortcutManager API 动态更新桌面 App 标题
+   - **实现细节**：
+     - 新增 `res/xml/shortcuts.xml` - 定义静态快捷方式配置
+     - 修改 `MainActivity.kt` - 新增 `updateAppTitle()` 方法，使用 `ShortcutManager.updateShortcuts()` API
+     - 修改 `AndroidManifest.xml` - 添加 `android:allowBackup="true"` 和 shortcuts 元数据
+     - `i18n_service.dart` 在语言切换时触发 `updateAppTitle()` 调用
+   - **工作原理**：
+     - Android 7.1 (API 25+)：使用 `ShortcutManager.updateShortcuts()` 动态更新快捷方式标签，会反映到桌面 App 名称
+     - 旧版本 Android：尝试切换 Component 启用状态来刷新标题
+     - 标题资源在 `values/strings.xml`、`values-zh/strings.xml`、`values-zh-rTW/strings.xml` 中定义
+   - **限制**：
+     - 不同 Android 启动器有不同的缓存策略
+     - 某些启动器可能需要重新启动 App 或滑动移除后再重新添加才能看到标题更新
+
+**关键代码位置**：
+- `modules/i18n/lib/i18n_service.dart` - 核心国际化服务
+- `modules/i18n/lib/translations.dart` - 翻译文本定义
+- `modules/flutter_bridge/lib/src/bridge_controller.dart` - 桥接控制器中的 i18n 集成
+- `android/app/src/main/kotlin/club/aiiko/trip/MainActivity.kt` (`updateAppTitle()` 方法)
+- `android/app/src/main/res/xml/shortcuts.xml`
+- `android/app/src/main/AndroidManifest.xml`
 
 ## 待解决问题
 

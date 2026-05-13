@@ -9,19 +9,21 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'local_server.dart';
 import 'package:flutter_bridge/src/bridge_controller.dart';
+import 'package:flutter_bridge/src/bridge_message.dart';
+import 'package:i18n/i18n.dart';
 
 String? _initialUrl;
+String _appTitle = '';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // 启动本地HTTP服务器
   await LocalServer.instance.start();
   
-  // 初始化 BridgeController 并获取本地化 URL
   await BridgeController().init();
-  final languageService = BridgeController().languageService;
-  _initialUrl = languageService.getLocalizedUrl('http://localhost:8080/');
+  final i18nService = BridgeController().i18nService;
+  _appTitle = i18nService.t('app_title');
+  _initialUrl = BridgeController().languageService.getLocalizedUrl('http://localhost:8080/');
   
   final brightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
@@ -70,6 +72,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      title: _appTitle,
       theme: ThemeData(
         brightness: _brightness,
         scaffoldBackgroundColor:
@@ -97,32 +100,38 @@ class _WebViewContainerState extends State<WebViewContainer>
   double _roll = 0.0;
   bool _isLoading = true;
   Brightness _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  late String _loadingSubtitle;
 
   Timer? _sensorTimer;
   Timer? _loadTimeoutTimer;
+  
+  late void Function(BridgeMessage) _closeLoadingHandler;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    // _initSensorStreams();
-    // _initBridgeController();
-    // 添加超时机制，确保网页能正常显示
+    _loadingSubtitle = BridgeController().i18nService.t('loading_subtitle');
+    _bridgeHandlerListener();
     _loadTimeoutTimer = Timer(const Duration(seconds: 8), () {
       if (mounted && _isLoading) {
         setState(() {
           _isLoading = false;
         });
-        // _startSensorBridge();
       }
     });
   }
 
-  void _initBridgeController() {
-    // BridgeController 已经在 main() 中初始化过了
-    // 这里只需要启动传感器（GPS由前端控制）
-    _startSensorBridge();
+  void _bridgeHandlerListener() {
+    _closeLoadingHandler = (message) {
+      print('Received closeLoading message');
+      setState(() {
+        _isLoading = false;
+      });
+      _loadTimeoutTimer?.cancel();
+    };
+    BridgeController().on('closeLoading', _closeLoadingHandler);
   }
 
   @override
@@ -179,30 +188,52 @@ class _WebViewContainerState extends State<WebViewContainer>
     _accelSubscription?.cancel();
     _sensorTimer?.cancel();
     _loadTimeoutTimer?.cancel();
+    BridgeController().off('closeLoading', _closeLoadingHandler);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
-      body: SafeArea(
-        top: true,
-        bottom: false,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildGeckoView(),
-            // 加载完成前显示覆盖层，遮挡 GeckoView 的闪烁
-            if (_isLoading)
-              Container(
-                color: _brightness == Brightness.dark ? Colors.black : Colors.white,
-                child: _buildLoadingContent(),
+    return WillPopScope(
+      onWillPop: _handleBackPressed,
+      child: Scaffold(
+        backgroundColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
+        body: SafeArea(
+          top: true,
+          bottom: false,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _buildGeckoView(),
+              AnimatedOpacity(
+                opacity: _isLoading ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 500),
+                child: _isLoading
+                    ? Container(
+                        color: _brightness == Brightness.dark ? Colors.black : Colors.white,
+                        child: _buildLoadingContent(),
+                      )
+                    : null,
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Future<bool> _handleBackPressed() async {
+    if (_channel != null) {
+      try {
+        final result = await _channel!.invokeMethod<bool>('goBack');
+        if (result == true) {
+          return false;
+        }
+      } catch (e) {
+        print('Error calling goBack: $e');
+      }
+    }
+    return true;
   }
 
   Widget _buildLoadingContent() {
@@ -218,7 +249,7 @@ class _WebViewContainerState extends State<WebViewContainer>
           right: 0,
           child: Center(
             child: Text(
-              '行程路线轨迹 App 由 AI 构建',
+              _loadingSubtitle,
               style: TextStyle(
                 color: _brightness == Brightness.dark ? Colors.white : Colors.black,
                 fontSize: 14,
@@ -234,7 +265,6 @@ class _WebViewContainerState extends State<WebViewContainer>
   Widget _buildGeckoView() {
     const viewType = 'geckoView';
     final initialUrl = _initialUrl ?? 'http://localhost:8080/';
-    // print('initialUrl language: $initialUrl');
     final creationParams = <String, dynamic>{
       'initialUrl': initialUrl,
       'isDarkMode': _brightness == Brightness.dark,
@@ -262,9 +292,7 @@ class _WebViewContainerState extends State<WebViewContainer>
             print('PlatformView created with id: $id');
             _channel = MethodChannel('gecko_view_$id');
             print('MethodChannel created: gecko_view_$id');
-            // 初始化 bridge controller（它会设置 MethodCallHandler）
             BridgeController().setChannel(_channel);
-            // 设置外部 handler，让 main.dart 也能收到消息
             BridgeController().setExternalHandler(_handleMethodCall);
             print('BridgeController initialized');
             params.onPlatformViewCreated(id);
@@ -284,16 +312,8 @@ class _WebViewContainerState extends State<WebViewContainer>
     print('_handleMethodCall: ${call.method}');
     switch (call.method) {
       case 'onPageStart':
-        // 页面开始加载时就关闭 loading，让用户立即看到网页加载过程
-      
         break;
       case 'onPageStop':
-        setState(() {
-          _isLoading = false;
-        });
-
-        _loadTimeoutTimer?.cancel();
-        // _startSensorBridge();
         break;
     }
   }

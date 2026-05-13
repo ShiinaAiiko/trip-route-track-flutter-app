@@ -1,7 +1,11 @@
-
 package club.aiiko.trip
 
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.ComponentName
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.os.Build
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -10,6 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "flutter_background"
     private val BYD_CHANNEL = "byd_vehicle"
+    private val LANGUAGE_CHANNEL = "app_language"
 
     private var bydVehicleService: BYDAutoVehicleService? = null
     private var bydMethodChannel: MethodChannel? = null
@@ -22,7 +27,6 @@ class MainActivity : FlutterActivity() {
             GeckoViewFactory(flutterEngine.dartExecutor.binaryMessenger)
         )
 
-        // 注册 flutter_background MethodChannel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "startBackgroundService" -> {
@@ -45,7 +49,19 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // 注册 BYD 车辆数据 MethodChannel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LANGUAGE_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "updateAppTitle" -> {
+                    val title = call.argument<String>("title")
+                    updateAppTitle(title)
+                    result.success(null)
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+
         bydMethodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BYD_CHANNEL)
         bydMethodChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -113,7 +129,7 @@ class MainActivity : FlutterActivity() {
 
     private fun startBackgroundService() {
         val intent = Intent(this, BackgroundService::class.java)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(intent)
         } else {
             startService(intent)
@@ -127,12 +143,11 @@ class MainActivity : FlutterActivity() {
 
     private fun updateNotification(title: String?, desc: String?) {
         if (BackgroundService.isRunning) {
-            // 通过 Intent 发送更新通知的请求给 BackgroundService
             val intent = Intent(this, BackgroundService::class.java)
             intent.putExtra("action", "update")
             intent.putExtra("title", title)
             intent.putExtra("desc", desc)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(intent)
             } else {
                 startService(intent)
@@ -140,9 +155,44 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun updateAppTitle(title: String?) {
+        try {
+            if (title.isNullOrEmpty()) return
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
+                val shortcutManager = getSystemService(ShortcutManager::class.java)
+                if (shortcutManager != null) {
+                    val shortcutInfo = ShortcutInfo.Builder(this, "app_launcher")
+                        .setShortLabel(title)
+                        .setLongLabel(title)
+                        .setIntent(Intent(Intent.ACTION_MAIN).apply {
+                            setClass(this@MainActivity, MainActivity::class.java)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                        .build()
+                    shortcutManager.updateShortcuts(listOf(shortcutInfo))
+                }
+            }
+            
+            val componentName = ComponentName(this, MainActivity::class.java)
+            packageManager.setComponentEnabledSetting(
+                componentName,
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            packageManager.setComponentEnabledSetting(
+                componentName,
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                PackageManager.DONT_KILL_APP
+            )
+            
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 确保窗口软输入模式正确设置
         window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
     }
 }

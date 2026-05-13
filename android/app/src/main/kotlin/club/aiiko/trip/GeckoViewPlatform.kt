@@ -33,6 +33,8 @@ class GeckoViewPlatform(
     private val methodChannel: MethodChannel
     private var isLoading = true
     private val handler = Handler(Looper.getMainLooper())
+    // 导航历史记录，用于判断是否可以返回
+    private val navigationHistory = mutableListOf<String>()
 
     companion object {
         private var geckoRuntime: GeckoRuntime? = null
@@ -143,6 +145,11 @@ class GeckoViewPlatform(
             override fun onPageStart(session: GeckoSession, url: String) {
                 Log.d("GeckoViewPlatform", "onPageStart called: $url")
                 isLoading = true
+                // 记录导航历史（只在页面开始加载时添加，避免重复）
+                if (navigationHistory.isEmpty() || navigationHistory.last() != url) {
+                    navigationHistory.add(url)
+                    Log.d("GeckoViewPlatform", "Navigation history: $navigationHistory")
+                }
                 try {
                     methodChannel.invokeMethod("onPageStart", mapOf("url" to url))
                     Log.d("GeckoViewPlatform", "invokeMethod onPageStart succeeded")
@@ -256,6 +263,14 @@ class GeckoViewPlatform(
 
     private var lastGeolocationCallback: String? = null
 
+    /**
+     * 判断是否可以返回上一页
+     * 导航历史记录大于1条时表示可以返回
+     */
+    private fun canGoBack(): Boolean {
+        return navigationHistory.size > 1
+    }
+
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "loadUrl" -> {
@@ -342,6 +357,21 @@ class GeckoViewPlatform(
                 """.trimIndent()
                 geckoSession.loadUri("javascript:$js")
                 result.success(null)
+            }
+            "goBack" -> {
+                if (canGoBack()) {
+                    geckoSession.goBack()
+                    // 移除最后一条历史记录（当前页面）
+                    if (navigationHistory.size > 0) {
+                        navigationHistory.removeLast()
+                    }
+                    result.success(true)
+                } else {
+                    result.success(false)
+                }
+            }
+            "canGoBack" -> {
+                result.success(canGoBack())
             }
             else -> result.notImplemented()
         }
