@@ -205,11 +205,17 @@ class _WebViewContainerState extends State<WebViewContainer>
             fit: StackFit.expand,
             children: [
               _buildGeckoView(),
-              AnimatedOpacity(
-                opacity: _isLoading ? 1.0 : 0.0,
+              AnimatedSwitcher(
                 duration: const Duration(milliseconds: 500),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: child,
+                  );
+                },
                 child: _isLoading
                     ? Container(
+                        key: const ValueKey('loading'),
                         color: _brightness == Brightness.dark ? Colors.black : Colors.white,
                         child: _buildLoadingContent(),
                       )

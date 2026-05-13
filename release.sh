@@ -3,7 +3,7 @@ name="trip-route-track"
 runName="$name-flutter-app"
 port=23204
 branch="main"
-version="v1.0.2"
+version="v1.0.3"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
@@ -155,6 +155,7 @@ _build() {
 	fi
 
 	adb install $OUT_DIR/$name-$version-arm64-v8a.apk
+	install
 
 }
 

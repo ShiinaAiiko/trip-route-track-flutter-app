@@ -2,7 +2,7 @@ name: flutter_app
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.0.2+1271
+version: 1.0.3+4117
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -42,19 +42,20 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
+    - assets/out/_next/YIW1H2q1fZGvlKgRBsHaZ/
     - assets/out/_next/data/
-    - assets/out/_next/data/nx12nC_rW-jHUWWsI4llP/
-    - assets/out/_next/data/nx12nC_rW-jHUWWsI4llP/en-US/
-    - assets/out/_next/data/nx12nC_rW-jHUWWsI4llP/en-US/journeyMemories/
-    - assets/out/_next/data/nx12nC_rW-jHUWWsI4llP/en-US/trip/
-    - assets/out/_next/data/nx12nC_rW-jHUWWsI4llP/zh-CN/
-    - assets/out/_next/data/nx12nC_rW-jHUWWsI4llP/zh-CN/journeyMemories/
-    - assets/out/_next/data/nx12nC_rW-jHUWWsI4llP/zh-CN/trip/
-    - assets/out/_next/data/nx12nC_rW-jHUWWsI4llP/zh-TW/
-    - assets/out/_next/data/nx12nC_rW-jHUWWsI4llP/zh-TW/journeyMemories/
-    - assets/out/_next/data/nx12nC_rW-jHUWWsI4llP/zh-TW/trip/
-    - assets/out/_next/nx12nC_rW-jHUWWsI4llP/
+    - assets/out/_next/data/YIW1H2q1fZGvlKgRBsHaZ/
+    - assets/out/_next/data/YIW1H2q1fZGvlKgRBsHaZ/en-US/
+    - assets/out/_next/data/YIW1H2q1fZGvlKgRBsHaZ/en-US/journeyMemories/
+    - assets/out/_next/data/YIW1H2q1fZGvlKgRBsHaZ/en-US/trip/
+    - assets/out/_next/data/YIW1H2q1fZGvlKgRBsHaZ/zh-CN/
+    - assets/out/_next/data/YIW1H2q1fZGvlKgRBsHaZ/zh-CN/journeyMemories/
+    - assets/out/_next/data/YIW1H2q1fZGvlKgRBsHaZ/zh-CN/trip/
+    - assets/out/_next/data/YIW1H2q1fZGvlKgRBsHaZ/zh-TW/
+    - assets/out/_next/data/YIW1H2q1fZGvlKgRBsHaZ/zh-TW/journeyMemories/
+    - assets/out/_next/data/YIW1H2q1fZGvlKgRBsHaZ/zh-TW/trip/
     - assets/out/_next/static/
+    - assets/out/_next/static/YIW1H2q1fZGvlKgRBsHaZ/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/
@@ -63,7 +64,6 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
-    - assets/out/_next/static/nx12nC_rW-jHUWWsI4llP/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/

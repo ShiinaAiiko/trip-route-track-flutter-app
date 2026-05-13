@@ -301,16 +301,45 @@ You are only allowed to modify files within the current directory. Never touch o
 - 采用注册监听器（Listener）方式，数据由 API 主动推送
 - 非轮询模式，数据变化时 API 自动回调通知
 
-**权限配置**：
+**权限配置**（已扩展）：
 
-- `BYDAUTO_AC_COMMON` - 通用权限（需动态申请）
+- `BYDAUTO_AC_COMMON` - 空调通用权限
+- `BYDAUTO_BODYWORK_COMMON` - 车身通用权限
+- `BYDAUTO_ENGINE_COMMON` - 发动机通用权限
+- `BYDAUTO_TYRE_COMMON` - 轮胎通用权限
+- `BYDAUTO_INSTRUMENT_COMMON` - 仪表通用权限
+- `BYDAUTO_DOORLOCK_COMMON` - 门锁通用权限
+- `BYDAUTO_PANORAMA_COMMON` - 全景通用权限
+- `BYDAUTO_VEHICLESET_COMMON` - 车辆设置通用权限
 - `BYDAUTO_SPEED_GET` - 车速数据权限
 - `BYDAUTO_STATISTIC_GET` - 行驶数据权限
 - `BYDAUTO_TYRE_GET` - 轮胎数据权限
+- `BYDAUTO_ENGINE_GET` - 发动机数据权限
+- `BYDAUTO_ENERGY_GET` - 能量数据权限
+- `BYDAUTO_CHARGE_GET` - 充电数据权限
+
+**签名配置**：
+
+- 参考 `car-staus-helper` 项目使用平台密钥（`platform.keystore`）进行测试
+- 密钥库密码：`android`
+- 密钥别名：`androiddebugkey`
+- 密钥密码：`android`
+- 原始签名已备份至 `keystore_backup/trip-release-key.keystore.backup`
 
 **依赖**：
 
 - `bydauto-openapi.jar` - 比亚迪官方SDK
+- `BydApiReflectHelper.kt` - 反射调用隐藏API工具类
+
+**当前问题**：
+
+- 比亚迪车机 API 需要系统签名才能正常工作
+- 当前使用平台密钥（`platform.keystore`）进行测试，但不确定是否与目标车机系统签名匹配
+- 权限检查通过但无法获取数据，可能原因：
+  1. 签名不匹配（车机使用自定义签名而非标准平台签名）
+  2. 包名未在车机白名单中
+  3. API 调用方式不正确
+- 待在真实比亚迪车机上进行测试验证
 
 ### 全局 i18n 国际化系统
 
@@ -410,4 +439,15 @@ You are only allowed to modify files within the current directory. Never touch o
 
 ## 待解决问题
 
-（当前无待解决问题）
+1. **比亚迪车机 API 数据获取问题**：
+   - 权限检查通过但无法获取车辆数据
+   - 可能原因：
+     - 签名不匹配（车机使用自定义签名而非标准平台签名）
+     - 包名未在车机白名单中
+     - API 调用方式不正确
+   - 待在真实比亚迪车机上进行测试验证
+
+2. **开发环境应用标题标识**：
+   - 已通过 flavor 特定资源目录实现 Dev 环境标题添加 "Dev" 前缀
+   - 生产环境保持原标题不变
+   - 无需额外处理
