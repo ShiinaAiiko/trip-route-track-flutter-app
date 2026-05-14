@@ -7,53 +7,50 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     
-    <!-- BYD Auto API Permissions - 根据网上资料 -->
-    <!-- 车辆信息类的权限 COMMON必须要动态注册 -->
-    <uses-permission android:name="android.permission.BYDAUTO_BODYWORK_COMMON"/>
-    <uses-permission android:name="android.permission.BYDAUTO_BODYWORK_GET"/>
-    
-    <!-- 空调类的权限 -->
+    <!-- BYD Auto API Permissions - 参考车况助手项目 -->
+    <uses-permission android:name="android.permission.BYDAUTO_POWER_COMMON"/>
+    <uses-permission android:name="android.permission.BYDAUTO_POWER_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_POWER_SET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_BIGDATA_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_REAR_VIEW_MIRROR_COMMON"/>
+    <uses-permission android:name="android.permission.BYDAUTO_REAR_VIEW_MIRROR_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_REAR_VIEW_MIRROR_SET"/>
     <uses-permission android:name="android.permission.BYDAUTO_AC_COMMON"/>
     <uses-permission android:name="android.permission.BYDAUTO_AC_GET"/>
-    
-    <!-- 传感器类获取的权限 -->
-    <uses-permission android:name="android.permission.BYDAUTO_SENSOR_GET"/>
-    
-    <!-- 速度权限 -->
-    <uses-permission android:name="android.permission.BYDAUTO_SPEED_GET"/>
-    
-    <!-- 发动机权限 -->
-    <uses-permission android:name="android.permission.BYDAUTO_ENGINE_COMMON"/>
+    <uses-permission android:name="android.permission.BYDAUTO_AC_SET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_AUDIO_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_BODYWORK_COMMON"/>
+    <uses-permission android:name="android.permission.BYDAUTO_BODYWORK_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_BODYWORK_SET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_CHARGING_COMMON"/>
+    <uses-permission android:name="android.permission.BYDAUTO_CHARGING_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_CHARGING_SET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_DOOR_LOCK_COMMON"/>
+    <uses-permission android:name="android.permission.BYDAUTO_DOOR_LOCK_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_ENERGY_GET"/>
     <uses-permission android:name="android.permission.BYDAUTO_ENGINE_GET"/>
-    
-    <!-- 变速箱权限 -->
     <uses-permission android:name="android.permission.BYDAUTO_GEARBOX_GET"/>
-    
-    <!-- 雷达权限 -->
-    <uses-permission android:name="android.permission.BYDAUTO_RADAR_GET"/>
-    
-    <!-- 轮胎权限 -->
-    <uses-permission android:name="android.permission.BYDAUTO_TYRE_COMMON"/>
-    <uses-permission android:name="android.permission.BYDAUTO_TYRE_GET"/>
-    
-    <!-- 行驶数据/统计权限 -->
-    <uses-permission android:name="android.permission.BYDAUTO_STATISTIC_GET"/>
-    
-    <!-- 仪表类权限 -->
     <uses-permission android:name="android.permission.BYDAUTO_INSTRUMENT_COMMON"/>
     <uses-permission android:name="android.permission.BYDAUTO_INSTRUMENT_GET"/>
-    
-    <!-- 门锁类权限 -->
-    <uses-permission android:name="android.permission.BYDAUTO_DOORLOCK_COMMON"/>
-    <uses-permission android:name="android.permission.BYDAUTO_DOORLOCK_GET"/>
-    
-    <!-- 全景影像类权限 -->
+    <uses-permission android:name="android.permission.BYDAUTO_INSTRUMENT_SET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_LIGHT_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_LOCATION_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_MULTIMEDIA_GET"/>
     <uses-permission android:name="android.permission.BYDAUTO_PANORAMA_COMMON"/>
     <uses-permission android:name="android.permission.BYDAUTO_PANORAMA_GET"/>
-    
-    <!-- 车辆设置类权限 -->
-    <uses-permission android:name="android.permission.BYDAUTO_VEHICLESET_COMMON"/>
-    <uses-permission android:name="android.permission.BYDAUTO_VEHICLESET_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_PM2P5_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_RADAR_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_SAFETY_BELT_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_SENSOR_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_SETTING_COMMON"/>
+    <uses-permission android:name="android.permission.BYDAUTO_SETTING_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_SETTING_SET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_SPEED_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_STATISTIC_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_TIME_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_TYRE_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_ADAS_GET"/>
+    <uses-permission android:name="android.permission.BYDAUTO_COLLISION_GET"/>
     
     <application
         android:label="@string/app_name"
@@ -96,6 +93,21 @@
         <service
             android:name="club.aiiko.trip.BackgroundService"
             android:foregroundServiceType="location"
+            android:exported="false" />
+
+        <!-- Flutter Foreground Task Service -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false"
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keep app alive in background" />
+        </service>
+        
+        <receiver
+            android:name="com.pravera.flutter_foreground_task.receiver.ForegroundServiceReceiver"
             android:exported="false" />
     </application>
     <queries>

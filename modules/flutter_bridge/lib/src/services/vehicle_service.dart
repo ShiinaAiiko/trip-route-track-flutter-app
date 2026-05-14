@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import '../bridge_controller.dart';
 
 class VehicleService {
   static final VehicleService _instance = VehicleService._internal();
@@ -31,11 +32,21 @@ class VehicleService {
         onCarDataChanged?.call(data);
         _carDataController?.add(data);
         break;
+      case 'onBydLog':
+        final logMessage = call.arguments as String;
+        print('[VehicleService] BYD Log received: $logMessage');
+        try {
+          BridgeController().sendMessage('bydLog', logMessage);
+        } catch (e) {
+          print('[VehicleService] Failed to send bydLog via BridgeController: $e');
+        }
+        break;
     }
   }
 
   Map<String, dynamic> _parseCarData(String jsonString) {
     try {
+      print('[VehicleService] _parseCarData() called with: $jsonString');
       final RegExp boolRegex = RegExp(r'(\w+):\s*(true|false)');
       String normalized = jsonString;
       normalized = normalized.replaceAllMapped(boolRegex, (match) {
@@ -47,8 +58,11 @@ class VehicleService {
         return ': null${match.group(1)}';
       });
 
-      return _parseJsonString(normalized);
+      final result = _parseJsonString(normalized);
+      print('[VehicleService] _parseCarData() parsed result: $result');
+      return result;
     } catch (e) {
+      print('[VehicleService] _parseCarData() failed: $e');
       return {};
     }
   }
@@ -179,19 +193,31 @@ class VehicleService {
   }
 
   Future<void> startCarDataUpdates() async {
-    if (_isStarted) return;
+    if (_isStarted) {
+      print('[VehicleService] startCarDataUpdates() skipped - already started');
+      return;
+    }
+    print('[VehicleService] startCarDataUpdates() calling native method');
     await _channel.invokeMethod('startCarDataUpdates');
     _isStarted = true;
+    print('[VehicleService] startCarDataUpdates() completed');
   }
 
   Future<void> stopCarDataUpdates() async {
-    if (!_isStarted) return;
+    if (!_isStarted) {
+      print('[VehicleService] stopCarDataUpdates() skipped - not started');
+      return;
+    }
+    print('[VehicleService] stopCarDataUpdates() calling native method');
     await _channel.invokeMethod('stopCarDataUpdates');
     _isStarted = false;
+    print('[VehicleService] stopCarDataUpdates() completed');
   }
 
   Future<void> requestCarData() async {
+    print('[VehicleService] requestCarData() calling native method');
     await _channel.invokeMethod('requestCarData');
+    print('[VehicleService] requestCarData() completed');
   }
 
   void dispose() {

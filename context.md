@@ -1,4 +1,6 @@
-You are only allowed to modify files within the current directory. Never touch or mention any parent or sibling directories. 你只允许修改当前目录下的文件。切勿触及或提及任何父级或同级目录。
+## 指令
+1、You are only allowed to modify files within the current directory. Never touch or mention any parent or sibling directories. 你只允许修改当前目录下的文件。切勿触及或提及任何父级或同级目录。
+2、每次改了代码都要告知我改了啥，为何这么改
 
 ---
 
@@ -14,6 +16,7 @@ You are only allowed to modify files within the current directory. Never touch o
 4. **加载动画的逻辑**：当启动app后，立即显示加载动画，背景色根据系统颜色自动设置。此时后台的webview内核立即加载。但是必须隐藏。直到网页加载成功后，再隐藏加载动画，并显示webview
 5. **以静态形式加载网站**：网站是由next开发的，静态目录的形式加载，提升加载速度
 6. **PlatformView 渲染模式**：使用 **Hybrid Composition** 模式（通过 `PlatformViewLink`），解决 VirtualDisplay 模式下输入法无法唤起的问题
+7. **状态栏动态变化**：前端通过 `setStatusBar` 消息动态控制状态栏样式和显示模式
 
 ## 已完成的修改
 
@@ -341,6 +344,34 @@ You are only allowed to modify files within the current directory. Never touch o
   3. API 调用方式不正确
 - 待在真实比亚迪车机上进行测试验证
 
+**白屏问题修复**（已实现）：
+
+1. **本地服务状态检测**：
+   - 添加 `ServerStatus` 枚举（stopped/starting/running/error）
+   - 添加 `checkServerHealth()` 方法检测服务健康状态
+   - 添加自动重启机制（最多重试 3 次）
+
+2. **App 前后台切换处理**：
+   - 在 `didChangeAppLifecycleState` 中检测 `AppLifecycleState.resumed`
+   - 进入前台时自动检测本地服务状态
+   - 服务异常时自动重启并重新加载页面
+
+3. **通知提醒**：
+   - 服务启动失败时发送通知提醒用户
+   - 使用 `flutter_local_notifications` 实现通知功能
+
+4. **页面加载保护**：
+   - 添加 `_isPageLoaded` 标记页面是否成功加载
+   - 服务正常时不强制刷新页面，保护用户工作状态
+
+**参考 [car-staus-helper](https://gitee.com/ljwzz/car-staus-helper/blob/master/release/%E5%BC%80%E5%8F%91%E7%AC%94%E8%AE%B0.txt) 项目的关键发现**（来自开发者笔记）：
+
+1. **权限声明**：AndroidManifest.xml 中必须声明权限，否则 requestPermissions 不会弹权限请求窗口
+2. **系统签名**：必须使用 platform.keystore 签名
+3. **监听器类型**：registerListener 必须使用 abstract class（如 AbsBYDAutoSpeedListener），不能改为 interface
+4. **监听器包名**：注册的抽象类包名必须与 device 一致（继承自 android.hardware.bydauto.* 包）
+5. **监听器方法**：可以只实现代码中需要的方法，无需实现全部抽象方法
+
 ### 全局 i18n 国际化系统
 
 **功能概述**：实现了完整的全局国际化系统，支持多语言切换，包括：
@@ -437,6 +468,83 @@ You are only allowed to modify files within the current directory. Never touch o
 - `modules/flutter_bridge/lib/src/services/notification_service.dart`
 - `android/app/src/main/kotlin/club/aiiko/trip/MainActivity.kt`（`openApp()` 方法和 `NOTIFICATION_CLICK_CHANNEL`）
 
+### 状态栏动态变化功能
+
+**功能概述**：前端通过 `setStatusBar` 消息动态控制 Android 系统状态栏的样式和显示模式
+
+**支持的类型**：
+| 类型 | 状态栏颜色 | 图标颜色 | SystemUiMode | SafeArea |
+|------|------------|----------|--------------|----------|
+| `system` | 透明 | 跟随系统 | edgeToEdge | ✅ 启用 |
+| `light` | 白色 (#FFFFFF) | 黑色 | edgeToEdge | ✅ 启用 |
+| `dark` | 黑色 (#000000) | 白色 | edgeToEdge | ✅ 启用 |
+| `transparent` | 半透明黑色 (50% opacity) | 白色 | edgeToEdge | ✅ 启用 |
+| `hide` | 隐藏 | 隐藏 | immersiveSticky | ❌ 禁用 |
+| `transparent-light` | 完全透明 | 黑色 | edgeToEdge | ❌ 禁用 |
+| `transparent-dark` | 完全透明 | 白色 | edgeToEdge | ❌ 禁用 |
+
+**消息格式**：
+```json
+{
+  "type": "setStatusBar",
+  "payload": "light"
+}
+```
+
+**消息流向**：
+```
+前端 → BridgeController → SystemChrome.setSystemUIOverlayStyle()
+                                   ↓
+                          同时更新 SafeAreaTop 状态
+```
+
+**关键代码位置**：
+- `modules/flutter_bridge/lib/src/bridge_controller.dart` (`_handleSetStatusBar()` 方法)
+- `lib/main.dart` (`_statusBarHandlerListener()` 和 `SafeArea` 控制)
+
+### 比亚迪车机日志系统
+
+**功能概述**：为比亚迪车机相关代码添加完整的日志系统，通过 `bydLog` 消息类型发送给前端，便于调试和问题排查
+
+**日志来源**：
+1. **BYDAutoVehicleService.kt** - 车辆服务初始化、设备启动/停止、数据更新
+2. **BydApiReflectHelper.kt** - 反射 API 调用（参数、返回值、异常）
+3. **vehicle_service.dart** - Flutter 层方法调用、数据解析
+
+**新增方法**：
+- `BYDAutoVehicleService.sendBydLogToFlutter()` - 通过 MethodChannel 发送日志到 Flutter
+- `VehicleService._handleMethodCall()` - 新增 `onBydLog` case 处理
+
+**日志流向**：
+```
+Android 原生层
+   ↓ MethodChannel: onBydLog
+Flutter 层 (VehicleService)
+   ↓ BridgeController().sendMessage('bydLog', ...)
+前端网页
+```
+
+**日志内容**：
+- 服务初始化状态
+- 设备连接/断开事件
+- 权限检查结果
+- 数据变化监听回调
+- 反射 API 调用详情
+- JSON 数据解析过程
+- 所有异常堆栈信息
+
+**异常类型细化**（BydApiReflectHelper）：
+- `ClassNotFoundException` - 类未找到
+- `NoSuchMethodException` - 方法未找到
+- `IllegalAccessException` - 访问权限被拒绝
+- `InvocationTargetException` - 内部异常（包含 cause）
+- `Exception` - 其他未知异常
+
+**关键代码位置**：
+- `android/app/src/main/kotlin/club/aiiko/trip/BYDAutoVehicleService.kt`
+- `android/app/src/main/kotlin/club/aiiko/trip/BydApiReflectHelper.kt`
+- `modules/flutter_bridge/lib/src/services/vehicle_service.dart`
+
 ## 待解决问题
 
 1. **比亚迪车机 API 数据获取问题**：
@@ -447,7 +555,105 @@ You are only allowed to modify files within the current directory. Never touch o
      - API 调用方式不正确
    - 待在真实比亚迪车机上进行测试验证
 
-2. **开发环境应用标题标识**：
-   - 已通过 flavor 特定资源目录实现 Dev 环境标题添加 "Dev" 前缀
-   - 生产环境保持原标题不变
-   - 无需额外处理
+2. **输入法收起后底部黑色区域问题**：
+   - 已在 `GeckoViewWrapper` 中添加键盘变化监听器
+   - 输入法收起时强制刷新布局
+   - 需实际测试验证效果
+
+3. **前台服务与 MIUI 兼容性问题**（⚠️ 开发中）：
+   - `flutter_foreground_task` 插件与 MIUI 系统不兼容
+   - 症状：调用 `FlutterForegroundTask.startService()` 时触发 MIUI 系统日志权限检查，导致 `Process is going to kill itself!` 崩溃
+   - 错误日志：
+     ```
+     W/FileUtils: Failed to chmod(/data/miuilog/stability/jetrace)
+     W/RuntimeInitImpl: dump java trace fail
+     I/Process: Process is going to kill itself!
+     ```
+   - 当前状态：**前台服务已暂时禁用**
+   - 状态检测逻辑仍然正常工作，可以确保 App 返回时正确恢复状态
+
+---
+
+## App 前后台切换状态检测与恢复机制
+
+### 功能概述
+
+实现了一套完整的 App 前后台切换状态检测与恢复机制，确保 App 在后台被系统回收后重新进入时能够正确恢复状态，同时最大化保留用户操作状态。
+
+### 核心组件
+
+**静态持久化变量**（防止 Widget 重建时状态丢失）：
+```dart
+static bool _isLoadingStatic = true;
+static bool _isPageLoadedStatic = false;
+static LoadingStep _loadingStepStatic = LoadingStep.initial;
+static List<String> _loadingLogStatic = [];
+static DateTime? _lastBackgroundTimeStatic;
+static bool _isInBackgroundStatic = false;
+static DateTime? _lastRecoveryTimeStatic;
+static bool _isRecoveringStatic = false;
+static bool _kernelHealthyStatic = false;
+```
+
+**关键检测方法**：
+- `LocalServer.instance.checkServerHealth()` - 检测 LocalServer 服务健康状态
+- `checkKernelHealth()` - 检测 GeckoView 内核健康状态（通过 `_channel != null` 判断）
+
+### 检测逻辑
+
+```dart
+Future<void> _checkAndRecoverState() async {
+  // 1. 检测 LocalServer 服务状态
+  final serverHealthy = LocalServer.instance.checkServerHealth();
+
+  // 2. 检测 GeckoView 内核状态
+  final kernelHealthy = checkKernelHealth();
+
+  // 3. 任一不健康时触发恢复
+  if (!serverHealthy || !kernelHealthy) {
+    await _performRecovery();
+  }
+}
+```
+
+### 日志前缀
+
+| 标识 | 含义 |
+|------|------|
+| `[NYANYA-LIFECYCLE]` | 生命周期状态变化 |
+| `[NYANYA-CHECK]` | 状态检测结果 |
+| `[NYANYA-SERVER]` | LocalServer 服务日志 |
+| `[NYANYA-RECOVERY]` | 恢复操作日志 |
+| `[NYANYA-FGS]` | 前台服务日志（暂时禁用） |
+| `[NYANYA-INIT]` | initState 日志 |
+
+### AndroidManifest.xml 修改
+
+**服务配置**：
+```xml
+<service
+    android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+    android:foregroundServiceType="specialUse"
+    android:exported="false"
+    android:stopWithTask="false">
+    <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Keep app alive in background" />
+</service>
+```
+
+**说明**：`stopWithTask="false"` 确保当用户从最近任务中划掉 App 时，前台服务不会自动停止。
+
+### 关键代码位置
+
+- `lib/main.dart` - 状态检测逻辑、生命周期管理
+- `lib/local_server.dart` - LocalServer 服务健康检测
+- `android/app/src/main/AndroidManifest.xml` - 前台服务配置
+
+### 前台服务状态
+
+| 组件 | 状态 |
+|------|------|
+| flutter_foreground_task 插件 | ⚠️ 暂时禁用（MIUI 不兼容） |
+| 状态检测逻辑 | ✅ 正常工作 |
+| stopWithTask 属性 | 已设置为 false |

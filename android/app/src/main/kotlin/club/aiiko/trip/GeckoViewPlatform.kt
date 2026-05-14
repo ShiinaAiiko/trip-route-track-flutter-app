@@ -3,11 +3,13 @@ package club.aiiko.trip
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.View
+import android.view.ViewTreeObserver
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.core.app.ActivityCompat
@@ -78,7 +80,8 @@ class GeckoViewPlatform(
         
         // 使用自定义的 GeckoViewWrapper 来增强焦点和输入法支持
         geckoView = GeckoViewWrapper(context).apply {
-            setBackgroundColor(bgColor)
+            // 设置透明背景，让状态栏设置完全控制显示效果
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
             
             // 设置触摸事件监听 - 只请求焦点，不强制唤起输入法
             // 输入法唤起由 GeckoView 内部根据输入框点击自动处理
@@ -386,6 +389,11 @@ class GeckoViewPlatform(
 class GeckoViewWrapper(context: Context) : GeckoView(context) {
 
     private val TAG = "GeckoViewWrapper"
+    
+    // 用于检测输入法变化的监听器
+    private var layoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
+    private var lastVisibleHeight = 0
+    private var isKeyboardVisible = false
 
     init {
         Log.d(TAG, "GeckoViewWrapper initialized")
@@ -394,6 +402,54 @@ class GeckoViewWrapper(context: Context) : GeckoView(context) {
         isFocusableInTouchMode = true
         isClickable = true
         isFocusedByDefault = true
+        
+        // 设置输入法变化监听器
+        setupKeyboardChangeListener()
+    }
+
+    /**
+     * 设置键盘变化监听器
+     * 当输入法收起时，强制刷新布局以修复底部黑色区域问题
+     */
+    private fun setupKeyboardChangeListener() {
+        layoutListener = ViewTreeObserver.OnGlobalLayoutListener {
+            if (rootView == null) return@OnGlobalLayoutListener
+            
+            val r = Rect()
+            rootView.getWindowVisibleDisplayFrame(r)
+            val screenHeight = rootView.rootView.height
+            val visibleHeight = r.height()
+            
+            // 检测输入法状态变化
+            val keyboardHeight = screenHeight - visibleHeight
+            val currentKeyboardVisible = keyboardHeight > screenHeight * 0.15
+            
+            // 当输入法从显示变为隐藏时
+            if (isKeyboardVisible && !currentKeyboardVisible) {
+                Log.w(TAG, "========== Keyboard closed, triggering layout fix ==========")
+                // 强制刷新布局，修复底部黑色区域
+                postDelayed({
+                    requestLayout()
+                    invalidate()
+                    // 额外的强制重绘
+                    parent?.requestLayout()
+                    Log.w(TAG, "Layout refreshed after keyboard close")
+                }, 100)
+            }
+            
+            isKeyboardVisible = currentKeyboardVisible
+            lastVisibleHeight = visibleHeight
+        }
+        
+        viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        // 移除监听器，避免内存泄漏
+        layoutListener?.let {
+            viewTreeObserver.removeOnGlobalLayoutListener(it)
+        }
     }
 
     override fun onCheckIsTextEditor(): Boolean {

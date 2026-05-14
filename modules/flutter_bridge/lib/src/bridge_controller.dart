@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -14,6 +15,7 @@ import 'services/vehicle_service.dart';
 
 typedef MessageHandler = void Function(BridgeMessage message);
 typedef FlutterMethodCallHandler = void Function(MethodCall call);
+typedef StatusBarChangeHandler = void Function(String type);
 
 class BridgeController {
   static final BridgeController _instance = BridgeController._internal();
@@ -30,6 +32,7 @@ class BridgeController {
   StreamSubscription<Position>? _positionSubscription;
   final Map<String, List<MessageHandler>> _messageHandlers = {};
   FlutterMethodCallHandler? _externalHandler;
+  StatusBarChangeHandler? _statusBarChangeHandler;
   StreamSubscription<Map<String, dynamic>>? _carDataSubscription;
 
   bool _enableLocation = false;
@@ -78,6 +81,10 @@ class BridgeController {
 
   void off(String type, MessageHandler handler) {
     _messageHandlers[type]?.remove(handler);
+  }
+
+  void setStatusBarChangeHandler(StatusBarChangeHandler handler) {
+    _statusBarChangeHandler = handler;
   }
 
   void handleWebMessage(String messageString) {
@@ -355,6 +362,73 @@ class BridgeController {
     }
   }
 
+  void _handleSetStatusBar(String type) {
+    switch (type) {
+      case 'system':
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        SystemChrome.setSystemUIOverlayStyle(
+          const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+          ),
+        );
+        break;
+      case 'light':
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        SystemChrome.setSystemUIOverlayStyle(
+          const SystemUiOverlayStyle(
+            statusBarColor: Colors.white,
+            statusBarIconBrightness: Brightness.dark,
+          ),
+        );
+        break;
+      case 'dark':
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        SystemChrome.setSystemUIOverlayStyle(
+          const SystemUiOverlayStyle(
+            statusBarColor: Colors.black,
+            statusBarIconBrightness: Brightness.light,
+          ),
+        );
+        break;
+      case 'transparent':
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        SystemChrome.setSystemUIOverlayStyle(
+          SystemUiOverlayStyle(
+            statusBarColor: Colors.black.withOpacity(0.5),
+            statusBarIconBrightness: Brightness.light,
+          ),
+        );
+        break;
+      case 'hide':
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+        break;
+      case 'transparent-light':
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        SystemChrome.setSystemUIOverlayStyle(
+          const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+          ),
+        );
+        break;
+      case 'transparent-dark':
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        SystemChrome.setSystemUIOverlayStyle(
+          const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.light,
+          ),
+        );
+        break;
+    }
+    _statusBarChangeHandler?.call(type);
+  }
+
+  void _handleGetThemeColor() {
+    final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    sendMessage('themeColor', brightness == Brightness.dark ? 'dark' : 'light');
+  }
+
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'onWebMessage':
@@ -411,6 +485,14 @@ class BridgeController {
           break;
         case 'getCarData':
           _vehicleService.requestCarData();
+          _dispatchMessage(message);
+          break;
+        case 'setStatusBar':
+          _handleSetStatusBar(message.payload as String);
+          _dispatchMessage(message);
+          break;
+        case 'getThemeColor':
+          _handleGetThemeColor();
           _dispatchMessage(message);
           break;
         default:

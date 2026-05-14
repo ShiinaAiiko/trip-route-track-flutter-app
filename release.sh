@@ -147,6 +147,8 @@ _build() {
 	echo "-> 打包完成！新 APK 文件已整理至：$OUT_DIR"
 	ls -la "$OUT_DIR"
 
+	# 在 WSL2 终端输入
+	# 加上 -Force 确保覆盖
 	# 只有生产包才上传到服务器
 	if [ "$flavor" == "prod" ]; then
 		# 上传到服务器

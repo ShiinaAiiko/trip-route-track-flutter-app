@@ -46,3 +46,5 @@ app.*.map.json
 /out
 /flutter_log.txt
 /assets/out
+
+/tmp

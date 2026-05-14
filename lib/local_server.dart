@@ -7,11 +7,23 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:flutter_bridge/src/bridge_controller.dart';
 
+enum ServerStatus {
+  stopped,
+  starting,
+  running,
+  error,
+}
+
 class LocalServer {
   static LocalServer? _instance;
   HttpServer? _server;
   int _port = 8080;
   List<String> _allAssets = [];
+  ServerStatus _status = ServerStatus.stopped;
+  String? _lastError;
+  int _restartAttempts = 0;
+  static const int _maxRestartAttempts = 3;
+  Completer<void>? _startCompleter;
 
   static LocalServer get instance {
     _instance ??= LocalServer();
@@ -19,31 +31,106 @@ class LocalServer {
   }
 
   String get url => 'http://localhost:$_port';
+  ServerStatus get status => _status;
+  String? get lastError => _lastError;
+  bool get isRunning => _status == ServerStatus.running;
+  bool get serverExists => _server != null;
 
-  Future<void> start() async {
-    if (_server != null) {
-      print('Server already running on $_port');
+  Future<void> start({bool forceRestart = false}) async {
+    print('[NYANYA-SERVER] start(): _status=$_status, _server=${_server == null ? "null" : "exists"}');
+    
+    // 如果已经运行且不需要强制重启，直接返回
+    if (_status == ServerStatus.running && !forceRestart) {
+      print('[NYANYA-SERVER]   already running, returning');
       return;
     }
 
-    print('Starting local server...');
+    // 如果正在启动，等待完成
+    if (_status == ServerStatus.starting && _startCompleter != null) {
+      print('[NYANYA-SERVER]   starting in progress, waiting...');
+      await _startCompleter!.future;
+      return;
+    }
 
-    // 加载所有 assets
-    await _loadAllAssets();
+    // 创建新的 completer
+    _startCompleter = Completer<void>();
+    _status = ServerStatus.starting;
+    _lastError = null;
 
-    // 创建 handler
-    final handler = const Pipeline()
-        .addMiddleware(logRequests())
-        .addHandler(_handleRequest);
+    print('[NYANYA-SERVER]   starting server...');
 
     try {
+      // 加载所有 assets
+      await _loadAllAssets();
+
+      // 创建 handler
+      final handler = const Pipeline()
+          .addMiddleware(logRequests())
+          .addHandler(_handleRequest);
+
+      // 停止旧服务器（如果存在）
+      if (_server != null) {
+        await _server!.close(force: true);
+        _server = null;
+      }
+
+      // 启动服务器
+      print('[NYANYA-SERVER]   binding to port $_port...');
       _server = await shelf_io.serve(handler, InternetAddress.loopbackIPv4, _port);
-      print('=== Local server started on http://localhost:$_port ===');
-      print('Total assets available: ${_allAssets.length}');
+      print('[NYANYA-SERVER]   bound, _server: ${_server == null ? "NULL" : "exists"}');
+      
+      _status = ServerStatus.running;
+      _restartAttempts = 0;
+      print('[NYANYA-SERVER] STARTED on http://localhost:$_port (assets: ${_allAssets.length})');
+      _startCompleter?.complete();
+
     } catch (e) {
-      print('Failed to start server: $e');
-      rethrow;
+      _status = ServerStatus.error;
+      _lastError = e.toString();
+      _server = null;
+      print('[NYANYA-SERVER] FAILED: $e');
+      
+      if (_restartAttempts < _maxRestartAttempts) {
+        _restartAttempts++;
+        print('[NYANYA-SERVER]   retry ${_restartAttempts}/$_maxRestartAttempts...');
+        await Future.delayed(const Duration(seconds: 1));
+        await start(forceRestart: true);
+      } else {
+        print('[NYANYA-SERVER]   max retries, giving up');
+        _startCompleter?.completeError(e);
+        rethrow;
+      }
     }
+  }
+
+  Future<void> ensureRunning() async {
+    if (_status != ServerStatus.running) {
+      await start();
+    }
+  }
+
+  bool checkServerHealth() {
+    print('[NYANYA-SERVER] checkServerHealth: _server=${_server == null ? "NULL" : "exists"}, _status=$_status');
+    
+    if (_server == null) {
+      print('[NYANYA-SERVER]   -> FALSE (server is null)');
+      return false;
+    }
+    
+    try {
+      final isHealthy = _status == ServerStatus.running;
+      print('[NYANYA-SERVER]   -> $isHealthy');
+      return isHealthy;
+    } catch (e) {
+      print('[NYANYA-SERVER]   -> FALSE (exception: $e)');
+      return false;
+    }
+  }
+
+  Future<void> restart() async {
+    print('Restarting local server...');
+    _restartAttempts = 0;
+    await start(forceRestart: true);
   }
 
   Future<void> _loadAllAssets() async {
@@ -76,6 +163,7 @@ class LocalServer {
     if (_server != null) {
       await _server!.close();
       _server = null;
+      _status = ServerStatus.stopped;
       print('Local server stopped');
     }
   }

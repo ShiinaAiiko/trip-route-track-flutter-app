@@ -400,6 +400,7 @@ class BYDAutoVehicleService(private val context: Context) {
     }
 
     private fun sendCarLog(log: String) {
+        sendBydLogToFlutter(log)
         try {
             val logData = mapOf(
                 "type" to "carLog",
@@ -410,6 +411,15 @@ class BYDAutoVehicleService(private val context: Context) {
             Log.d("BYDAutoVehicleService", log)
         } catch (e: Exception) {
             Log.e("BYDAutoVehicleService", "发送日志失败: ${e.message}")
+        }
+    }
+
+    private fun sendBydLogToFlutter(log: String) {
+        try {
+            methodChannel?.invokeMethod("onBydLog", log)
+            Log.d("BYDAutoVehicleService", "[BYD-LOG] $log")
+        } catch (e: Exception) {
+            Log.e("BYDAutoVehicleService", "发送BYD日志到Flutter失败: ${e.message}")
         }
     }
 
