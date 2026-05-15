@@ -1,8 +1,8 @@
 name: flutter_app
-description: "A new Flutter project."
+description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.3+0435
+version: 1.0.5+4
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -18,7 +18,6 @@ dependencies:
   package_info_plus: ^8.0.0
   flutter_local_notifications: ^17.2.0
   wakelock_plus: ^1.2.1
-  flutter_foreground_task: ^6.5.0
 
   cupertino_icons: ^1.0.8
 
@@ -37,26 +36,25 @@ dev_dependencies:
   flutter_lints: ^3.0.2
 
 flutter:
-
   uses-material-design: true
 
   assets:
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/SkEr-i2-be9XUXjBD8891/
+    - assets/out/_next/BzPLcntF5q0x0PkaskhTk/
     - assets/out/_next/data/
-    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/
-    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/en-US/
-    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/en-US/journeyMemories/
-    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/en-US/trip/
-    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-CN/
-    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-CN/journeyMemories/
-    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-CN/trip/
-    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-TW/
-    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-TW/journeyMemories/
-    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-TW/trip/
+    - assets/out/_next/data/BzPLcntF5q0x0PkaskhTk/
+    - assets/out/_next/data/BzPLcntF5q0x0PkaskhTk/en-US/
+    - assets/out/_next/data/BzPLcntF5q0x0PkaskhTk/en-US/journeyMemories/
+    - assets/out/_next/data/BzPLcntF5q0x0PkaskhTk/en-US/trip/
+    - assets/out/_next/data/BzPLcntF5q0x0PkaskhTk/zh-CN/
+    - assets/out/_next/data/BzPLcntF5q0x0PkaskhTk/zh-CN/journeyMemories/
+    - assets/out/_next/data/BzPLcntF5q0x0PkaskhTk/zh-CN/trip/
+    - assets/out/_next/data/BzPLcntF5q0x0PkaskhTk/zh-TW/
+    - assets/out/_next/data/BzPLcntF5q0x0PkaskhTk/zh-TW/journeyMemories/
+    - assets/out/_next/data/BzPLcntF5q0x0PkaskhTk/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/SkEr-i2-be9XUXjBD8891/
+    - assets/out/_next/static/BzPLcntF5q0x0PkaskhTk/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/

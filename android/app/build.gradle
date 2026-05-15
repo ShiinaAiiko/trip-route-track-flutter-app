@@ -113,6 +113,13 @@ android {
             shrinkResources false
         }
     }
+    
+    packagingOptions {
+        jniLibs {
+            // 使用传统的打包方式，压缩 native libraries
+            useLegacyPackaging = true
+        }
+    }
 }
 
 repositories {

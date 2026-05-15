@@ -3,11 +3,11 @@ name="trip-route-track"
 runName="$name-flutter-app"
 port=23204
 branch="main"
-version="v1.0.3"
+version="v1.0.5"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
-allowMethods=("install adb dev run stop protos start build buildDev setVersion")
+allowMethods=("build:new install adb dev run stop protos start build buildDev setVersion")
 
 dev() {
 	# adb logcat | grep "GeckoViewPlatform\|gps1"
@@ -67,27 +67,69 @@ protos() {
 	cd $DIR/server
 	./release.sh protos
 }
+addVersion() {
 
+	# 2. 计算新版本号
+	# 使用 awk 自动处理 v1.0.3 -> v1.0.4 的转换
+	new_version=$(echo $version | awk -F. '{$NF = $NF + 1;} 1' OFS=.)
+
+	# 3. 同步到当前进程的变量（让接下来的脚本逻辑拿到新值）
+	old_version=$version
+	version=$new_version
+
+	# 4. 永久写回文件 ($0 代表脚本自身)
+	# 这里的正则会匹配 version="v数字.数字.数字"
+	sed -i "s/version=\"$old_version\"/version=\"$version\"/" "$0"
+
+	# --- 以下是测试代码，验证变量是否已经改变 ---
+	echo "内存中的变量已更新为: $version"
+}
 setVersion() {
 	echo "-> 设置 App 版本为 $version"
-	versionName=$(echo $version | sed 's/v//')
-	versionCode=$(date +%s | cut -c 7-10)
 
-	cd $DIR
-	# 更新 pubspec.yaml
-	sed -i "s/version: .*/version: $versionName+$versionCode/" pubspec.yaml
-	# 更新 local.properties
-	if [ ! -f $DIR/android/local.properties ]; then
-		echo "sdk.dir=\$(dirname \$(which flutter))/cache/artifacts/engine/android-arm64" >$DIR/android/local.properties
+	# 1. 处理 VersionName (去掉开头的 v)
+	versionName=$(echo $version | sed 's/v//')
+
+	# 2. 从 pubspec.yaml 提取当前的 versionCode
+	# 逻辑：找到 version: 行，取 + 号后面的数字
+	oldCode=$(grep "version: " pubspec.yaml | cut -d+ -f2)
+
+	# 3. 如果没找到或格式不对，给个初始值，否则自增 1
+	if [ -z "$oldCode" ]; then
+		versionCode=1
+	else
+		versionCode=$((oldCode + 1))
 	fi
-	sed -i "/flutter.versionName=/d" $DIR/android/local.properties
-	sed -i "/flutter.versionCode=/d" $DIR/android/local.properties
-	echo "flutter.versionName=$versionName" >>$DIR/android/local.properties
-	echo "flutter.versionCode=$versionCode" >>$DIR/android/local.properties
+
+	echo "-> VersionName: $versionName, VersionCode: $versionCode"
+
+	cd "$DIR"
+
+	# 4. 更新 pubspec.yaml
+	# 使用 @ 符号作为分隔符，防止内容里有特殊字符干扰
+	sed -i "s@version: .*@version: $versionName+$versionCode@" pubspec.yaml
+
+	# 5. 更新 local.properties (保持你原有的逻辑，但使用自增后的变量)
+	if [ ! -f "$DIR/android/local.properties" ]; then
+		# 修复：这里的 sdk.dir 路径通常是手动指定的，原脚本逻辑较简单
+		echo "flutter.sdk=$(dirname $(which flutter))" >"$DIR/android/local.properties"
+	fi
+
+	sed -i "/flutter.versionName=/d" "$DIR/android/local.properties"
+	sed -i "/flutter.versionCode=/d" "$DIR/android/local.properties"
+	echo "flutter.versionName=$versionName" >>"$DIR/android/local.properties"
+	echo "flutter.versionCode=$versionCode" >>"$DIR/android/local.properties"
 }
 
 build() {
 	echo "-> 开始打包生产环境 Android APK"
+	_build "prod"
+}
+
+build:new() {
+	echo "-> 开始打包生产环境 Android APK"
+
+	addVersion
 	_build "prod"
 }
 
@@ -112,6 +154,7 @@ _build() {
 	# 清理 out 目录下的旧 APK
 	rm -f "$OUT_DIR"/*.apk
 
+	# addVersion
 	setVersion
 	flutter build apk --release --flavor "$flavor" --split-per-abi --no-shrink
 
@@ -144,8 +187,44 @@ _build() {
 		fi
 	done
 
+	# echo "-> 压缩 APK 中的 native libraries..." # 暂时禁用
+	# KEYSTORE="$DIR/android/app/platform.keystore"
+	# TMP_DIR="/tmp/apk_compress_$$"
+	# for apk_file in "$OUT_DIR"/*.apk; do
+	# 	if [ -f "$apk_file" ]; then
+	# 		echo "   压缩: $(basename "$apk_file")"
+	# 		rm -rf "$TMP_DIR"
+	# 		mkdir -p "$TMP_DIR"
+	# 		cd "$TMP_DIR"
+	#
+	# 		# 解压整个 APK
+	# 		unzip -q "$apk_file"
+	#
+	# 		# 删除原 APK 和旧签名
+	# 		rm -f "$apk_file"
+	# 		rm -rf META-INF
+	#
+	# 		# 重新打包（最高压缩级别）
+	# 		zip -r -9 "$apk_file" . >/dev/null 2>&1
+	#
+	# 		# 重新签名
+	# 		if [ -f "$KEYSTORE" ]; then
+	# 			echo "   重新签名..."
+	# 			jarsigner -keystore "$KEYSTORE" -storepass "android" -keypass "android" "$apk_file" "androiddebugkey" >/dev/null 2>&1
+	# 		else
+	# 			echo "   警告：找不到签名文件 $KEYSTORE"
+	# 		fi
+	#
+	# 		cd "$DIR"
+	# 	fi
+	# done
+	# rm -rf "$TMP_DIR"
+	# echo "-> 压缩完成！"
+
 	echo "-> 打包完成！新 APK 文件已整理至：$OUT_DIR"
 	ls -la "$OUT_DIR"
+
+	install
 
 	# 在 WSL2 终端输入
 	# 加上 -Force 确保覆盖
@@ -157,7 +236,6 @@ _build() {
 	fi
 
 	adb install $OUT_DIR/$name-$version-arm64-v8a.apk
-	install
 
 }
 

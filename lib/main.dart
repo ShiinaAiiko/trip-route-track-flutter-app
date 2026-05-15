@@ -8,7 +8,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+// import 'package:flutter_foreground_task/flutter_foreground_task.dart'; // 暂时禁用
 import 'local_server.dart';
 import 'components/components.dart';
 import 'package:flutter_bridge/src/bridge_controller.dart';
@@ -55,56 +55,56 @@ Future<void> _showNotification(String title, String body) async {
 }
 
 /// 初始化前台服务
-Future<void> _initForegroundTask(dynamic i18nService) async {
-  FlutterForegroundTask.init(
-    androidNotificationOptions: AndroidNotificationOptions(
-      channelId: 'foreground_task',
-      channelName: i18nService.t('foreground_task_channel_name'),
-      channelDescription: i18nService.t('foreground_task_channel_description'),
-      channelImportance: NotificationChannelImportance.LOW,
-      priority: NotificationPriority.LOW,
-      iconData: const NotificationIconData(
-        resType: ResourceType.mipmap,
-        resPrefix: ResourcePrefix.ic,
-        name: 'launcher',
-      ),
-    ),
-    iosNotificationOptions: const IOSNotificationOptions(),
-    foregroundTaskOptions: const ForegroundTaskOptions(
-      interval: 5000,
-      autoRunOnBoot: false,
-      allowWakeLock: true,
-      allowWifiLock: true,
-    ),
-  );
-  
-  await FlutterForegroundTask.requestNotificationPermission();
-}
+// Future<void> _initForegroundTask(dynamic i18nService) async {
+//   FlutterForegroundTask.init(
+//     androidNotificationOptions: AndroidNotificationOptions(
+//       channelId: 'foreground_task',
+//       channelName: i18nService.t('foreground_task_channel_name'),
+//       channelDescription: i18nService.t('foreground_task_channel_description'),
+//       channelImportance: NotificationChannelImportance.LOW,
+//       priority: NotificationPriority.LOW,
+//       iconData: const NotificationIconData(
+//         resType: ResourceType.mipmap,
+//         resPrefix: ResourcePrefix.ic,
+//         name: 'launcher',
+//       ),
+//     ),
+//     iosNotificationOptions: const IOSNotificationOptions(),
+//     foregroundTaskOptions: const ForegroundTaskOptions(
+//       interval: 5000,
+//       autoRunOnBoot: false,
+//       allowWakeLock: true,
+//       allowWifiLock: true,
+//     ),
+//   );
+//   
+//   await FlutterForegroundTask.requestNotificationPermission();
+// }
 
 /// 启动前台服务（进入后台时调用）
-Future<void> _startForegroundTask(dynamic i18nService) async {
-  try {
-    print('[NYANYA-FGS] Starting foreground service...');
-    await FlutterForegroundTask.startService(
-      notificationTitle: i18nService.t('foreground_task_notification_title'),
-      notificationText: i18nService.t('foreground_task_notification_text'),
-    );
-    print('[NYANYA-FGS] Foreground service started');
-  } catch (e) {
-    print('[NYANYA-FGS] Failed to start foreground service: $e');
-  }
-}
+// Future<void> _startForegroundTask(dynamic i18nService) async {
+//   try {
+//     print('[NYANYA-FGS] Starting foreground service...');
+//     await FlutterForegroundTask.startService(
+//       notificationTitle: i18nService.t('foreground_task_notification_title'),
+//       notificationText: i18nService.t('foreground_task_notification_text'),
+//     );
+//     print('[NYANYA-FGS] Foreground service started');
+//   } catch (e) {
+//     print('[NYANYA-FGS] Failed to start foreground service: $e');
+//   }
+// }
 
 /// 停止前台服务（回到前台时调用）
-Future<void> _stopForegroundTask() async {
-  try {
-    print('[NYANYA-FGS] Stopping foreground service...');
-    await FlutterForegroundTask.stopService();
-    print('[NYANYA-FGS] Foreground service stopped');
-  } catch (e) {
-    print('[NYANYA-FGS] Failed to stop foreground service: $e');
-  }
-}
+// Future<void> _stopForegroundTask() async {
+//   try {
+//     print('[NYANYA-FGS] Stopping foreground service...');
+//     await FlutterForegroundTask.stopService();
+//     print('[NYANYA-FGS] Foreground service stopped');
+//   } catch (e) {
+//     print('[NYANYA-FGS] Failed to stop foreground service: $e');
+//   }
+// }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -122,7 +122,7 @@ void main() async {
   _initialUrl = BridgeController().languageService.getLocalizedUrl(localServerUrl);
   
   // 初始化前台服务（提升应用在后台的存活概率）- 需要 i18n
-  await _initForegroundTask(i18nService);
+  // await _initForegroundTask(i18nService); // 暂时禁用
   
   // 启动本地服务（带重试机制）
   try {
@@ -434,36 +434,36 @@ class _WebViewContainerState extends State<WebViewContainer>
     }
   }
 
-  void _startForegroundTaskSafe() {
-    Future.delayed(const Duration(milliseconds: 500), () {
-      try {
-        if (_isInBackgroundStatic) {
-          _startForegroundTaskImpl();
-        }
-      } catch (e, stack) {
-        print('[NYANYA-FGS] _startForegroundTaskSafe failed: $e');
-        print('[NYANYA-FGS] stack: $stack');
-      }
-    });
-  }
+  // void _startForegroundTaskSafe() {
+  //   Future.delayed(const Duration(milliseconds: 500), () {
+  //     try {
+  //       if (_isInBackgroundStatic) {
+  //         _startForegroundTaskImpl();
+  //       }
+  //     } catch (e, stack) {
+  //       print('[NYANYA-FGS] _startForegroundTaskSafe failed: $e');
+  //       print('[NYANYA-FGS] stack: $stack');
+  //     }
+  //   });
+  // }
 
-  void _stopForegroundTaskSafe() {
-    try {
-      _stopForegroundTaskImpl();
-    } catch (e, stack) {
-      print('[NYANYA-FGS] _stopForegroundTaskSafe failed: $e');
-      print('[NYANYA-FGS] stack: $stack');
-    }
-  }
+  // void _stopForegroundTaskSafe() {
+  //   try {
+  //     _stopForegroundTaskImpl();
+  //   } catch (e, stack) {
+  //     print('[NYANYA-FGS] _stopForegroundTaskSafe failed: $e');
+  //     print('[NYANYA-FGS] stack: $stack');
+  //   }
+  // }
 
-  void _startForegroundTaskImpl() {
-    final service = BridgeController().i18nService;
-    _startForegroundTask(service);
-  }
+  // void _startForegroundTaskImpl() {
+  //   final service = BridgeController().i18nService;
+  //   _startForegroundTask(service);
+  // }
 
-  void _stopForegroundTaskImpl() {
-    _stopForegroundTask();
-  }
+  // void _stopForegroundTaskImpl() {
+  //   _stopForegroundTask();
+  // }
 
   /// 检测并恢复应用状态
   /// 

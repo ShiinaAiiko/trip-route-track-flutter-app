@@ -347,16 +347,20 @@ class BridgeController {
     );
   }
 
-  Future<void> _handleLoadMessage() async {
+Future<void> _handleLoadMessage() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
       sendMessage('appConfig', {
-        'version': packageInfo.version,
+        'version': packageInfo.version,       // 例如 "1.0.5"
+        'buildNumber': packageInfo.buildNumber, // 例如 "11372"
+        'fullVersion': '${packageInfo.version}+${packageInfo.buildNumber}', // 组合版
         'system': 'Flutter App',
       });
     } catch (e) {
       sendMessage('appConfig', {
         'version': 'unknown',
+        'buildNumber': 'unknown',
+        'fullVersion':'unknown',
         'system': 'Flutter App',
       });
     }
