@@ -426,7 +426,38 @@ class BridgeController {
 
   void _handleGetThemeColor() {
     final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    sendMessage('themeColor', brightness == Brightness.dark ? 'dark' : 'light');
+    sendMessage('getThemeColor', brightness == Brightness.dark ? 'dark' : 'light');
+  }
+
+  void _handleGetStatusBarData() {
+    final mediaQuery = MediaQueryData.fromWindow(WidgetsBinding.instance.window);
+    final statusBarHeight = mediaQuery.padding.top;
+    final bottomPadding = mediaQuery.padding.bottom;
+    final viewPaddingTop = mediaQuery.viewPadding.top;
+    final viewPaddingBottom = mediaQuery.viewPadding.bottom;
+    final viewInsetsTop = mediaQuery.viewInsets.top;
+    final viewInsetsBottom = mediaQuery.viewInsets.bottom;
+    final size = WidgetsBinding.instance.window.physicalSize;
+    final devicePixelRatio = WidgetsBinding.instance.window.devicePixelRatio;
+    final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    
+    final statusBarData = {
+      'statusBarHeight': statusBarHeight,
+      'bottomPadding': bottomPadding,
+      'viewPaddingTop': viewPaddingTop,
+      'viewPaddingBottom': viewPaddingBottom,
+      'viewInsetsTop': viewInsetsTop,
+      'viewInsetsBottom': viewInsetsBottom,
+      'screenWidth': size.width / devicePixelRatio,
+      'screenHeight': size.height / devicePixelRatio,
+      'physicalWidth': size.width,
+      'physicalHeight': size.height,
+      'devicePixelRatio': devicePixelRatio,
+      'isDarkMode': brightness == Brightness.dark,
+      'safeAreaTop': statusBarHeight,
+      'safeAreaBottom': bottomPadding,
+    };
+    sendMessage('getStatusBarData', statusBarData);
   }
 
   Future<dynamic> _handleMethodCall(MethodCall call) async {
@@ -489,6 +520,10 @@ class BridgeController {
           break;
         case 'setStatusBar':
           _handleSetStatusBar(message.payload as String);
+          _dispatchMessage(message);
+          break;
+        case 'getStatusBarData':
+          _handleGetStatusBarData();
           _dispatchMessage(message);
           break;
         case 'getThemeColor':

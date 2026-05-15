@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -17,13 +18,17 @@ enum ServerStatus {
 class LocalServer {
   static LocalServer? _instance;
   HttpServer? _server;
-  int _port = 8080;
+  final int _port;
   List<String> _allAssets = [];
   ServerStatus _status = ServerStatus.stopped;
   String? _lastError;
   int _restartAttempts = 0;
   static const int _maxRestartAttempts = 3;
+  static const int _devPort = 13218;
+  static const int _prodPort = 13219;
   Completer<void>? _startCompleter;
+
+  LocalServer() : _port = kDebugMode ? _devPort : _prodPort;
 
   static LocalServer get instance {
     _instance ??= LocalServer();
@@ -31,6 +36,8 @@ class LocalServer {
   }
 
   String get url => 'http://localhost:$_port';
+  // String get url => 'http://192.168.0.112:23202';
+  int get port => _port;
   ServerStatus get status => _status;
   String? get lastError => _lastError;
   bool get isRunning => _status == ServerStatus.running;

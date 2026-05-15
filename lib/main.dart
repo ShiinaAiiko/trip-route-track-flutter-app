@@ -116,7 +116,10 @@ void main() async {
   await BridgeController().init();
   final i18nService = BridgeController().i18nService;
   _appTitle = i18nService.t('app_title');
-  _initialUrl = BridgeController().languageService.getLocalizedUrl('http://localhost:8080/');
+  
+  // 先访问 LocalServer.instance 确保单例初始化（端口已确定）
+  final localServerUrl = LocalServer.instance.url;
+  _initialUrl = BridgeController().languageService.getLocalizedUrl(localServerUrl);
   
   // 初始化前台服务（提升应用在后台的存活概率）- 需要 i18n
   await _initForegroundTask(i18nService);
@@ -124,7 +127,7 @@ void main() async {
   // 启动本地服务（带重试机制）
   try {
     await LocalServer.instance.start();
-    print('Local server started successfully');
+    print('Local server started successfully on $localServerUrl');
   } catch (e) {
     print('Failed to start local server after retries: $e');
     await _showNotification(i18nService.t('service_start_failed_title'), i18nService.t('service_start_failed_content'));
@@ -584,7 +587,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   void _reloadWebView() {
     if (_channel != null) {
       try {
-        final url = _initialUrl ?? 'http://localhost:8080/';
+        final url = _initialUrl ?? LocalServer.instance.url;
         _channel!.invokeMethod('loadUrl', {'url': url});
         print('Reloading webview with URL: $url');
       } catch (e) {
@@ -709,9 +712,11 @@ class _WebViewContainerState extends State<WebViewContainer>
 
   Widget _buildGeckoView() {
     const viewType = 'geckoView';
-    final initialUrl = _initialUrl ?? 'http://localhost:8080/';
+    final initialUrl = _initialUrl ?? LocalServer.instance.url;
+    final serverPort = LocalServer.instance.port;
     final creationParams = <String, dynamic>{
       'initialUrl': initialUrl,
+      'serverPort': serverPort,
       'isDarkMode': _brightness == Brightness.dark,
     };
 

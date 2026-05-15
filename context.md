@@ -17,6 +17,7 @@
 5. **以静态形式加载网站**：网站是由next开发的，静态目录的形式加载，提升加载速度
 6. **PlatformView 渲染模式**：使用 **Hybrid Composition** 模式（通过 `PlatformViewLink`），解决 VirtualDisplay 模式下输入法无法唤起的问题
 7. **状态栏动态变化**：前端通过 `setStatusBar` 消息动态控制状态栏样式和显示模式
+8. **本地服务器端口区分**：开发环境使用 **13218**，生产环境使用 **13219**
 
 ## 已完成的修改
 
@@ -544,6 +545,89 @@ Flutter 层 (VehicleService)
 - `android/app/src/main/kotlin/club/aiiko/trip/BYDAutoVehicleService.kt`
 - `android/app/src/main/kotlin/club/aiiko/trip/BydApiReflectHelper.kt`
 - `modules/flutter_bridge/lib/src/services/vehicle_service.dart`
+
+### 本地服务器端口区分
+
+**功能概述**：本地静态服务器在不同构建环境下使用不同端口，便于本地网站在线调试
+
+**端口配置**：
+
+| 环境 | 端口 | 说明 |
+|------|------|------|
+| 开发环境 (`kDebugMode`) | **13218** | `flutter run` 时使用 |
+| 生产环境 (`kReleaseMode`) | **13219** | `flutter run --release` 或打包时使用 |
+
+**实现方式**：
+- 使用 `flutter/foundation.dart` 中的 `kDebugMode` 判断当前环境
+- `LocalServer` 构造函数中根据环境选择端口
+- 添加 `port` getter 暴露端口值
+
+**涉及文件**：
+- `lib/local_server.dart` - 添加 `port` getter 和环境判断
+- `lib/main.dart` - 传递 `serverPort` 到 Android 端
+- `GeckoViewPlatform.kt` - 接收 `serverPort` 参数用于 JS Bridge
+
+**本地调试配置**：
+如需连接远程开发服务器，可直接修改 `local_server.dart` 中的 `url` getter：
+```dart
+String get url => 'http://192.168.0.112:23202';  // 远程调试地址
+```
+
+### 状态栏数据获取接口
+
+**功能概述**：前端通过 `getStatusBarData` 消息获取当前状态栏高度、屏幕尺寸等数据
+
+**消息格式**：
+
+前端发送：
+```json
+{
+  "type": "getStatusBarData",
+  "payload": null
+}
+```
+
+Flutter 返回：
+```json
+{
+  "type": "getStatusBarData",
+  "payload": {
+    "statusBarHeight": 44,
+    "statusBarHeightRaw": 46.769,
+    "bottomPadding": 34,
+    "bottomPaddingRaw": 34.0,
+    "viewPaddingTop": 44,
+    "viewPaddingBottom": 34,
+    "viewInsetsTop": 0,
+    "viewInsetsBottom": 0,
+    "screenWidth": 390,
+    "screenHeight": 844,
+    "physicalWidth": 1170,
+    "physicalHeight": 2532,
+    "devicePixelRatio": 3.0,
+    "isDarkMode": false,
+    "safeAreaTop": 44,
+    "safeAreaBottom": 34
+  }
+}
+```
+
+**返回字段说明**：
+
+| 字段 | 说明 | 单位 |
+|------|------|------|
+| `statusBarHeight` | 状态栏高度（取整后） | 逻辑像素 |
+| `statusBarHeightRaw` | 状态栏高度（原始值） | 逻辑像素 |
+| `bottomPadding` | 底部安全区域高度（取整后） | 逻辑像素 |
+| `viewPaddingTop/Bottom` | 视图内边距 | 逻辑像素 |
+| `viewInsetsTop/Bottom` | 视图插入区域（如软键盘） | 逻辑像素 |
+| `screenWidth/Height` | 屏幕宽高（逻辑像素） | 逻辑像素 |
+| `physicalWidth/Height` | 屏幕物理像素宽高 | 物理像素 |
+| `devicePixelRatio` | 设备像素比 | - |
+| `isDarkMode` | 是否深色模式 | Boolean |
+
+**关键代码位置**：
+- `modules/flutter_bridge/lib/src/bridge_controller.dart` (`_handleGetStatusBarData()` 方法)
 
 ## 待解决问题
 

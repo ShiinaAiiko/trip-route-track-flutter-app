@@ -43,19 +43,20 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
+    - assets/out/_next/SkEr-i2-be9XUXjBD8891/
     - assets/out/_next/data/
-    - assets/out/_next/data/q8tQA35X5Rd5qhvH5ZCys/
-    - assets/out/_next/data/q8tQA35X5Rd5qhvH5ZCys/en-US/
-    - assets/out/_next/data/q8tQA35X5Rd5qhvH5ZCys/en-US/journeyMemories/
-    - assets/out/_next/data/q8tQA35X5Rd5qhvH5ZCys/en-US/trip/
-    - assets/out/_next/data/q8tQA35X5Rd5qhvH5ZCys/zh-CN/
-    - assets/out/_next/data/q8tQA35X5Rd5qhvH5ZCys/zh-CN/journeyMemories/
-    - assets/out/_next/data/q8tQA35X5Rd5qhvH5ZCys/zh-CN/trip/
-    - assets/out/_next/data/q8tQA35X5Rd5qhvH5ZCys/zh-TW/
-    - assets/out/_next/data/q8tQA35X5Rd5qhvH5ZCys/zh-TW/journeyMemories/
-    - assets/out/_next/data/q8tQA35X5Rd5qhvH5ZCys/zh-TW/trip/
-    - assets/out/_next/q8tQA35X5Rd5qhvH5ZCys/
+    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/
+    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/en-US/
+    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/en-US/journeyMemories/
+    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/en-US/trip/
+    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-CN/
+    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-CN/journeyMemories/
+    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-CN/trip/
+    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-TW/
+    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-TW/journeyMemories/
+    - assets/out/_next/data/SkEr-i2-be9XUXjBD8891/zh-TW/trip/
     - assets/out/_next/static/
+    - assets/out/_next/static/SkEr-i2-be9XUXjBD8891/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/
@@ -64,7 +65,6 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
-    - assets/out/_next/static/q8tQA35X5Rd5qhvH5ZCys/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/

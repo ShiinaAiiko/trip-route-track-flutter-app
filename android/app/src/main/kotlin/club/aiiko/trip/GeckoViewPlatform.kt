@@ -35,6 +35,7 @@ class GeckoViewPlatform(
     private val methodChannel: MethodChannel
     private var isLoading = true
     private val handler = Handler(Looper.getMainLooper())
+    private val serverPort: Int
     // 导航历史记录，用于判断是否可以返回
     private val navigationHistory = mutableListOf<String>()
 
@@ -68,6 +69,9 @@ class GeckoViewPlatform(
         methodChannel = MethodChannel(messenger, "gecko_view_$id")
         methodChannel.setMethodCallHandler(this)
         Log.d("GeckoViewPlatform", "MethodChannel created: gecko_view_$id")
+
+        serverPort = creationParams?.get("serverPort") as? Int ?: 8080
+        Log.d("GeckoViewPlatform", "Server port: $serverPort")
 
         val isDarkMode = creationParams?.get("isDarkMode") as? Boolean ?: true
         val bgColor = if (isDarkMode) {
@@ -141,7 +145,8 @@ class GeckoViewPlatform(
         geckoView.setSession(geckoSession)
 
         // 加载初始 URL - 使用本地服务器
-        val initialUrl = creationParams?.get("initialUrl") as? String ?: "http://localhost:8080/"
+        val defaultUrl = "http://localhost:$serverPort/"
+        val initialUrl = creationParams?.get("initialUrl") as? String ?: defaultUrl
         
         // 设置页面加载完成后的回调
         geckoSession.progressDelegate = object : GeckoSession.ProgressDelegate {
@@ -255,7 +260,7 @@ class GeckoViewPlatform(
                 window.ReactNativeWebView = {
                     postMessage: function(message) {
                         var xhr = new XMLHttpRequest();
-                        xhr.open('GET', 'http://localhost:8080/__flutter_bridge__?message=' + encodeURIComponent(message), true);
+                        xhr.open('GET', 'http://localhost:$serverPort/__flutter_bridge__?message=' + encodeURIComponent(message), true);
                         xhr.send();
                     }
                 };
