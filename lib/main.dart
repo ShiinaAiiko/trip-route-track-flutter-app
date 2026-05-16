@@ -231,6 +231,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   static bool _isRecoveringStatic = false; // 标记是否正在恢复中
   static bool _kernelHealthyStatic = false; // 标记内核是否健康
   static bool _safeAreaTopStatic = true; // 标记顶部是否启用 SafeArea
+  static bool _safeAreaBottomStatic = true; // 标记底部是否启用 SafeArea
   // ================================
 
   double _pitch = 0.0;
@@ -663,8 +664,9 @@ class _WebViewContainerState extends State<WebViewContainer>
       child: Scaffold(
         backgroundColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
         body: SafeArea(
+          // top: true,
           top: _safeAreaTop,
-          bottom: false,
+          bottom: true,
           child: Stack(
             fit: StackFit.expand,
             children: [

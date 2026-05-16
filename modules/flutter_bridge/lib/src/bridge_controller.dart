@@ -369,28 +369,46 @@ Future<void> _handleLoadMessage() async {
   void _handleSetStatusBar(String type) {
     switch (type) {
       case 'system':
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        // SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        
+        SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
+        );
         SystemChrome.setSystemUIOverlayStyle(
           const SystemUiOverlayStyle(
             statusBarColor: Colors.transparent,
+            systemNavigationBarColor: Colors.transparent,
           ),
         );
         break;
       case 'light':
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        // 使用 manual 模式，确保底部导航栏可见且有背景色
+        SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
+        );
         SystemChrome.setSystemUIOverlayStyle(
           const SystemUiOverlayStyle(
             statusBarColor: Colors.white,
             statusBarIconBrightness: Brightness.dark,
+            systemNavigationBarColor: Colors.white,
+            systemNavigationBarIconBrightness: Brightness.dark,
           ),
         );
         break;
       case 'dark':
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        // 使用 manual 模式，确保底部导航栏可见且有背景色
+        SystemChrome.setEnabledSystemUIMode(
+          SystemUiMode.manual,
+          overlays: [SystemUiOverlay.top, SystemUiOverlay.bottom],
+        );
         SystemChrome.setSystemUIOverlayStyle(
           const SystemUiOverlayStyle(
             statusBarColor: Colors.black,
             statusBarIconBrightness: Brightness.light,
+            systemNavigationBarColor: Colors.black,
+            systemNavigationBarIconBrightness: Brightness.light,
           ),
         );
         break;

@@ -38,6 +38,8 @@ class GeckoViewPlatform(
     private val serverPort: Int
     // 导航历史记录，用于判断是否可以返回
     private val navigationHistory = mutableListOf<String>()
+    // 定期检查并重新注入 bridge 的任务
+    private var bridgeCheckRunnable: Runnable? = null
 
     companion object {
         private var geckoRuntime: GeckoRuntime? = null
@@ -184,6 +186,9 @@ class GeckoViewPlatform(
         
         // 加载本地服务器
         geckoSession.loadUri(initialUrl)
+        
+        // 启动定期检查和重新注入 bridge 的任务
+        startBridgeChecker()
     }
 
     private fun hasLocationPermission(): Boolean {
@@ -200,12 +205,70 @@ class GeckoViewPlatform(
         }
         return true
     }
+    
+    /**
+     * 启动定期检查和重新注入 bridge 的任务
+     * 确保即使路由变化后 bridge 也不会丢失
+     */
+    private fun startBridgeChecker() {
+        // 先停止旧的任务（如果存在）
+        stopBridgeChecker()
+        
+        // 创建新的检查任务
+        bridgeCheckRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    // 检查 bridge 是否还存在（使用英文注释避免 URL 编码问题）
+                    val checkScript = """
+                        (function() {
+                            // check if bridge exists
+                            var hasBridge = !!(window.isFlutterApp && window.ReactNativeWebView && window.ReactNativeWebView.postMessage);
+                            return hasBridge ? '1' : '0';
+                        })();
+                    """.trimIndent()
+                    
+                    // Inject check script
+                    geckoSession.loadUri("javascript:$checkScript")
+                    
+                    // 不管检查结果如何，都尝试重新注入（这样更安全）
+                    // 稍微延迟一下，避免和上面的检查脚本冲突
+                    handler.postDelayed({
+                        try {
+                            injectJSBridge()
+                        } catch (e: Exception) {
+                            Log.e("GeckoViewPlatform", "Error re-injecting bridge: ${e.message}")
+                        }
+                    }, 100)
+                } catch (e: Exception) {
+                    Log.e("GeckoViewPlatform", "Error in bridge checker: ${e.message}")
+                }
+                
+                // 安排下一次检查（500ms 后）
+                handler.postDelayed(this, 500)
+            }
+        }
+        
+        // 延迟启动，让页面先加载完
+        handler.postDelayed(bridgeCheckRunnable!!, 1000)
+    }
+    
+    /**
+     * 停止定期检查任务
+     */
+    private fun stopBridgeChecker() {
+        bridgeCheckRunnable?.let { 
+            handler.removeCallbacks(it) 
+            bridgeCheckRunnable = null
+        }
+    }
 
     override fun getView(): View {
         return geckoView
     }
 
     override fun dispose() {
+        // 停止 bridge 检查任务
+        stopBridgeChecker()
         geckoSession.close()
         methodChannel.setMethodCallHandler(null)
     }
@@ -256,15 +319,18 @@ class GeckoViewPlatform(
     private fun injectJSBridge() {
         val bridgeScript = """
             window.isFlutterApp = true;
-            if (!window.ReactNativeWebView) {
-                window.ReactNativeWebView = {
-                    postMessage: function(message) {
-                        var xhr = new XMLHttpRequest();
-                        xhr.open('GET', 'http://localhost:$serverPort/__flutter_bridge__?message=' + encodeURIComponent(message), true);
-                        xhr.send();
-                    }
-                };
-            }
+            
+            // 先尝试删除旧的定义，避免冲突
+            try { delete window.ReactNativeWebView; } catch (e) {}
+            
+            // 直接定义 ReactNativeWebView
+            window.ReactNativeWebView = {
+                postMessage: function(message) {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('GET', 'http://localhost:$serverPort/__flutter_bridge__?message=' + encodeURIComponent(message), true);
+                    xhr.send();
+                }
+            };
         """.trimIndent()
         geckoSession.loadUri("javascript:$bridgeScript")
     }
