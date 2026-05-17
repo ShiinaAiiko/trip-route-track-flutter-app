@@ -3,13 +3,11 @@ package club.aiiko.trip
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.View
-import android.view.ViewTreeObserver
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import androidx.core.app.ActivityCompat
@@ -35,11 +33,6 @@ class GeckoViewPlatform(
     private val methodChannel: MethodChannel
     private var isLoading = true
     private val handler = Handler(Looper.getMainLooper())
-    private val serverPort: Int
-    // 导航历史记录，用于判断是否可以返回
-    private val navigationHistory = mutableListOf<String>()
-    // 定期检查并重新注入 bridge 的任务
-    private var bridgeCheckRunnable: Runnable? = null
 
     companion object {
         private var geckoRuntime: GeckoRuntime? = null
@@ -72,9 +65,6 @@ class GeckoViewPlatform(
         methodChannel.setMethodCallHandler(this)
         Log.d("GeckoViewPlatform", "MethodChannel created: gecko_view_$id")
 
-        serverPort = creationParams?.get("serverPort") as? Int ?: 8080
-        Log.d("GeckoViewPlatform", "Server port: $serverPort")
-
         val isDarkMode = creationParams?.get("isDarkMode") as? Boolean ?: true
         val bgColor = if (isDarkMode) {
             android.graphics.Color.BLACK
@@ -86,8 +76,7 @@ class GeckoViewPlatform(
         
         // 使用自定义的 GeckoViewWrapper 来增强焦点和输入法支持
         geckoView = GeckoViewWrapper(context).apply {
-            // 设置透明背景，让状态栏设置完全控制显示效果
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setBackgroundColor(bgColor)
             
             // 设置触摸事件监听 - 只请求焦点，不强制唤起输入法
             // 输入法唤起由 GeckoView 内部根据输入框点击自动处理
@@ -147,19 +136,13 @@ class GeckoViewPlatform(
         geckoView.setSession(geckoSession)
 
         // 加载初始 URL - 使用本地服务器
-        val defaultUrl = "http://localhost:$serverPort/"
-        val initialUrl = creationParams?.get("initialUrl") as? String ?: defaultUrl
+        val initialUrl = creationParams?.get("initialUrl") as? String ?: "http://localhost:8080/"
         
         // 设置页面加载完成后的回调
         geckoSession.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(session: GeckoSession, url: String) {
                 Log.d("GeckoViewPlatform", "onPageStart called: $url")
                 isLoading = true
-                // 记录导航历史（只在页面开始加载时添加，避免重复）
-                if (navigationHistory.isEmpty() || navigationHistory.last() != url) {
-                    navigationHistory.add(url)
-                    Log.d("GeckoViewPlatform", "Navigation history: $navigationHistory")
-                }
                 try {
                     methodChannel.invokeMethod("onPageStart", mapOf("url" to url))
                     Log.d("GeckoViewPlatform", "invokeMethod onPageStart succeeded")
@@ -186,9 +169,6 @@ class GeckoViewPlatform(
         
         // 加载本地服务器
         geckoSession.loadUri(initialUrl)
-        
-        // 启动定期检查和重新注入 bridge 的任务
-        startBridgeChecker()
     }
 
     private fun hasLocationPermission(): Boolean {
@@ -205,70 +185,12 @@ class GeckoViewPlatform(
         }
         return true
     }
-    
-    /**
-     * 启动定期检查和重新注入 bridge 的任务
-     * 确保即使路由变化后 bridge 也不会丢失
-     */
-    private fun startBridgeChecker() {
-        // 先停止旧的任务（如果存在）
-        stopBridgeChecker()
-        
-        // 创建新的检查任务
-        bridgeCheckRunnable = object : Runnable {
-            override fun run() {
-                try {
-                    // 检查 bridge 是否还存在（使用英文注释避免 URL 编码问题）
-                    val checkScript = """
-                        (function() {
-                            // check if bridge exists
-                            var hasBridge = !!(window.isFlutterApp && window.ReactNativeWebView && window.ReactNativeWebView.postMessage);
-                            return hasBridge ? '1' : '0';
-                        })();
-                    """.trimIndent()
-                    
-                    // Inject check script
-                    geckoSession.loadUri("javascript:$checkScript")
-                    
-                    // 不管检查结果如何，都尝试重新注入（这样更安全）
-                    // 稍微延迟一下，避免和上面的检查脚本冲突
-                    handler.postDelayed({
-                        try {
-                            injectJSBridge()
-                        } catch (e: Exception) {
-                            Log.e("GeckoViewPlatform", "Error re-injecting bridge: ${e.message}")
-                        }
-                    }, 100)
-                } catch (e: Exception) {
-                    Log.e("GeckoViewPlatform", "Error in bridge checker: ${e.message}")
-                }
-                
-                // 安排下一次检查（500ms 后）
-                handler.postDelayed(this, 500)
-            }
-        }
-        
-        // 延迟启动，让页面先加载完
-        handler.postDelayed(bridgeCheckRunnable!!, 1000)
-    }
-    
-    /**
-     * 停止定期检查任务
-     */
-    private fun stopBridgeChecker() {
-        bridgeCheckRunnable?.let { 
-            handler.removeCallbacks(it) 
-            bridgeCheckRunnable = null
-        }
-    }
 
     override fun getView(): View {
         return geckoView
     }
 
     override fun dispose() {
-        // 停止 bridge 检查任务
-        stopBridgeChecker()
         geckoSession.close()
         methodChannel.setMethodCallHandler(null)
     }
@@ -319,31 +241,20 @@ class GeckoViewPlatform(
     private fun injectJSBridge() {
         val bridgeScript = """
             window.isFlutterApp = true;
-            
-            // 先尝试删除旧的定义，避免冲突
-            try { delete window.ReactNativeWebView; } catch (e) {}
-            
-            // 直接定义 ReactNativeWebView
-            window.ReactNativeWebView = {
-                postMessage: function(message) {
-                    var xhr = new XMLHttpRequest();
-                    xhr.open('GET', 'http://localhost:$serverPort/__flutter_bridge__?message=' + encodeURIComponent(message), true);
-                    xhr.send();
-                }
-            };
+            if (!window.ReactNativeWebView) {
+                window.ReactNativeWebView = {
+                    postMessage: function(message) {
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('GET', 'http://localhost:8080/__flutter_bridge__?message=' + encodeURIComponent(message), true);
+                        xhr.send();
+                    }
+                };
+            }
         """.trimIndent()
         geckoSession.loadUri("javascript:$bridgeScript")
     }
 
     private var lastGeolocationCallback: String? = null
-
-    /**
-     * 判断是否可以返回上一页
-     * 导航历史记录大于1条时表示可以返回
-     */
-    private fun canGoBack(): Boolean {
-        return navigationHistory.size > 1
-    }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
@@ -432,21 +343,6 @@ class GeckoViewPlatform(
                 geckoSession.loadUri("javascript:$js")
                 result.success(null)
             }
-            "goBack" -> {
-                if (canGoBack()) {
-                    geckoSession.goBack()
-                    // 移除最后一条历史记录（当前页面）
-                    if (navigationHistory.size > 0) {
-                        navigationHistory.removeLast()
-                    }
-                    result.success(true)
-                } else {
-                    result.success(false)
-                }
-            }
-            "canGoBack" -> {
-                result.success(canGoBack())
-            }
             else -> result.notImplemented()
         }
     }
@@ -460,11 +356,6 @@ class GeckoViewPlatform(
 class GeckoViewWrapper(context: Context) : GeckoView(context) {
 
     private val TAG = "GeckoViewWrapper"
-    
-    // 用于检测输入法变化的监听器
-    private var layoutListener: ViewTreeObserver.OnGlobalLayoutListener? = null
-    private var lastVisibleHeight = 0
-    private var isKeyboardVisible = false
 
     init {
         Log.d(TAG, "GeckoViewWrapper initialized")
@@ -473,54 +364,6 @@ class GeckoViewWrapper(context: Context) : GeckoView(context) {
         isFocusableInTouchMode = true
         isClickable = true
         isFocusedByDefault = true
-        
-        // 设置输入法变化监听器
-        setupKeyboardChangeListener()
-    }
-
-    /**
-     * 设置键盘变化监听器
-     * 当输入法收起时，强制刷新布局以修复底部黑色区域问题
-     */
-    private fun setupKeyboardChangeListener() {
-        layoutListener = ViewTreeObserver.OnGlobalLayoutListener {
-            if (rootView == null) return@OnGlobalLayoutListener
-            
-            val r = Rect()
-            rootView.getWindowVisibleDisplayFrame(r)
-            val screenHeight = rootView.rootView.height
-            val visibleHeight = r.height()
-            
-            // 检测输入法状态变化
-            val keyboardHeight = screenHeight - visibleHeight
-            val currentKeyboardVisible = keyboardHeight > screenHeight * 0.15
-            
-            // 当输入法从显示变为隐藏时
-            if (isKeyboardVisible && !currentKeyboardVisible) {
-                Log.w(TAG, "========== Keyboard closed, triggering layout fix ==========")
-                // 强制刷新布局，修复底部黑色区域
-                postDelayed({
-                    requestLayout()
-                    invalidate()
-                    // 额外的强制重绘
-                    parent?.requestLayout()
-                    Log.w(TAG, "Layout refreshed after keyboard close")
-                }, 100)
-            }
-            
-            isKeyboardVisible = currentKeyboardVisible
-            lastVisibleHeight = visibleHeight
-        }
-        
-        viewTreeObserver.addOnGlobalLayoutListener(layoutListener)
-    }
-
-    override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
-        // 移除监听器，避免内存泄漏
-        layoutListener?.let {
-            viewTreeObserver.removeOnGlobalLayoutListener(it)
-        }
     }
 
     override fun onCheckIsTextEditor(): Boolean {
