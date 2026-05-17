@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
@@ -17,6 +18,39 @@ import 'package:i18n/i18n.dart';
 
 String? _initialUrl;
 String _appTitle = '';
+
+// 标签页数据类
+class TabInfo {
+  final dynamic id; // 使用 dynamic 兼容 Long/int
+  final String url;
+  final String title;
+  final bool isCurrent;
+
+  TabInfo({
+    required this.id,
+    required this.url,
+    required this.title,
+    required this.isCurrent,
+  });
+
+  factory TabInfo.fromMap(Map<String, dynamic> map) {
+    return TabInfo(
+      id: map['id'],
+      url: map['url'] as String,
+      title: map['title'] as String,
+      isCurrent: map['isCurrent'] as bool? ?? false,
+    );
+  }
+
+  TabInfo copyWith({String? url, String? title, bool? isCurrent}) {
+    return TabInfo(
+      id: id,
+      url: url ?? this.url,
+      title: title ?? this.title,
+      isCurrent: isCurrent ?? this.isCurrent,
+    );
+  }
+}
 
 // 全局通知服务
 FlutterLocalNotificationsPlugin? _notificationPlugin;
@@ -72,7 +106,7 @@ Future<void> _showNotification(String title, String body) async {
 //     iosNotificationOptions: const IOSNotificationOptions(),
 //     foregroundTaskOptions: const ForegroundTaskOptions(
 //       interval: 5000,
-//       autoRunOnBoot: false,
+//       autoRunBoot: false,
 //       allowWakeLock: true,
 //       allowWifiLock: true,
 //     ),
@@ -219,7 +253,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
 
   // ================================
-  // 静态持久化变量 - 防止 Widget 重建时状态丢失
+  // 静态持久化变量 - 防止Widget重建时状态丢失
   // ================================
   static bool _isLoadingStatic = true;
   static bool _isPageLoadedStatic = false; // 标记页面是否已经成功加载过
@@ -230,8 +264,13 @@ class _WebViewContainerState extends State<WebViewContainer>
   static DateTime? _lastRecoveryTimeStatic; // 记录上次恢复的时间
   static bool _isRecoveringStatic = false; // 标记是否正在恢复中
   static bool _kernelHealthyStatic = false; // 标记内核是否健康
-  static bool _safeAreaTopStatic = true; // 标记顶部是否启用 SafeArea
-  static bool _safeAreaBottomStatic = true; // 标记底部是否启用 SafeArea
+  static bool _safeAreaTopStatic = true; // 标记顶部是否启用SafeArea
+  static bool _safeAreaBottomStatic = true; // 标记底部是否启用SafeArea
+  static List<TabInfo> _tabsStatic = []; // 标签页列表
+  static bool _canGoBackStatic = false; // 是否可以返回上一页
+  static bool _canGoForwardStatic = false; // 是否可以前进到下一页
+  static String _currentTitleStatic = ''; // 当前页面标题
+  static String _currentUrlStatic = ''; // 当前页面URL
   // ================================
 
   double _pitch = 0.0;
@@ -250,9 +289,18 @@ class _WebViewContainerState extends State<WebViewContainer>
   bool _isInBackground = _isInBackgroundStatic;
   DateTime? _lastRecoveryTime = _lastRecoveryTimeStatic;
   bool _safeAreaTop = _safeAreaTopStatic;
+  
+  // 标签页状态
+  List<TabInfo> _tabs = _tabsStatic;
+  bool _canGoBack = _canGoBackStatic;
+  bool _canGoForward = _canGoForwardStatic;
+  String _currentTitle = _currentTitleStatic;
+  String _currentUrl = _currentUrlStatic;
 
   Timer? _sensorTimer;
   Timer? _loadTimeoutTimer;
+  Timer? _exitAppTimer;
+  bool _exitAppRequested = false;
   
   late void Function(BridgeMessage) _closeLoadingHandler;
 
@@ -346,6 +394,24 @@ class _WebViewContainerState extends State<WebViewContainer>
     
     try {
       await LocalServer.instance.start();
+      LocalServer.onUrlChange = (String url, String title) {
+        print('[onUrlChange] url: $url, title: $title');
+        if (mounted) {
+          setState(() {
+            _currentUrl = url;
+            _currentUrlStatic = url;
+            _currentTitle = title;
+            _currentTitleStatic = title;
+            if (_tabs.isNotEmpty) {
+              final currentIndex = _tabs.indexWhere((t) => t.isCurrent);
+              if (currentIndex >= 0) {
+                _tabs[currentIndex] = _tabs[currentIndex].copyWith(url: url, title: title);
+                _tabsStatic = _tabs;
+              }
+            }
+          });
+        }
+      };
       setState(() {
         _loadingStep = LoadingStep.serverSuccess;
         _loadingStepStatic = _loadingStep;
@@ -383,13 +449,56 @@ class _WebViewContainerState extends State<WebViewContainer>
     });
   }
 
+  void _handleExitAppRequest() {
+    if (_exitAppRequested) {
+      // 用户在3秒内再次按了返回键，真正退出App
+      print('Exiting app now');
+      _exitAppTimer?.cancel();
+      _exitOverlayEntry?.remove();
+      _exitOverlayEntry = null;
+      SystemNavigator.pop();
+    } else {
+      // 第一次按，显示提示
+      _exitAppRequested = true;
+      final exitMessage = BridgeController().i18nService.t('press_back_again_to_exit');
+      final screenWidth = MediaQuery.of(context).size.width;
+      final screenHeight = MediaQuery.of(context).size.height;
+
+      _exitOverlayEntry?.remove();
+      _exitOverlayEntry = OverlayEntry(
+        builder: (context) => Positioned(
+          bottom: screenHeight * 0.15,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: _ExitToastWidget(
+              message: exitMessage,
+              maxWidth: screenWidth * 0.666,
+            ),
+          ),
+        ),
+      );
+      Overlay.of(context).insert(_exitOverlayEntry!);
+
+      // 3秒后重置标志并移除提示
+      _exitAppTimer?.cancel();
+      _exitAppTimer = Timer(const Duration(seconds: 3), () {
+        _exitAppRequested = false;
+        _exitOverlayEntry?.remove();
+        _exitOverlayEntry = null;
+      });
+    }
+  }
+
+  OverlayEntry? _exitOverlayEntry;
+
   void _bridgeHandlerListener() {
     _closeLoadingHandler = (message) {
       print('Received closeLoading message');
       
       // 标记网站响应成功
-      final i18n = BridgeController().i18nService;
-      _addLoadingLog(i18n.t('loading_web_success'));
+      final i18n = BridgeController().i18nService.t('loading_web_success');
+      _addLoadingLog(i18n);
       
       setState(() {
         _loadingStep = LoadingStep.webSuccess;
@@ -657,59 +766,316 @@ class _WebViewContainerState extends State<WebViewContainer>
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _handleBackPressed,
-      child: Scaffold(
-        backgroundColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
-        body: SafeArea(
-          // top: true,
-          top: _safeAreaTop,
-          bottom: true,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _buildGeckoView(),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 500),
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: child,
-                  );
-                },
-                child: _isLoading
-                    ? Container(
-                        key: const ValueKey('loading'),
-                        color: _brightness == Brightness.dark ? Colors.black : Colors.white,
-                        child: LoadingContent(
-                          brightness: _brightness,
-                          subtitle: _loadingSubtitle,
-                          loadingLog: _loadingLog,
-                        ),
-                      )
-                    : null,
-              ),
-            ],
+  // ================================
+  // 标签页相关方法 - 放在这里确保在build之前声明
+  // ================================
+  
+  Future<dynamic> _handleMethodCall(MethodCall call) async {
+    print('_handleMethodCall: ${call.method}');
+    switch (call.method) {
+      case 'onPageStart':
+        break;
+      case 'onPageStop':
+        break;
+    }
+  }
+  
+  Future<void> _loadTabs() async {
+    if (_channel == null) return;
+    try {
+      final tabsData = await _channel!.invokeMethod<List<dynamic>>('getTabsInfo');
+      if (tabsData != null && mounted) {
+        setState(() {
+          _tabs = tabsData.map((tab) => TabInfo.fromMap(Map<String, dynamic>.from(tab))).toList();
+          _tabsStatic = _tabs;
+        });
+      }
+    } catch (e) {
+      print('Error loading tabs: $e');
+    }
+  }
+  
+  Future<void> _closeCurrentTab() async {
+    if (_channel == null) return;
+    try {
+      final success = await _channel!.invokeMethod<bool>('closeCurrentTab');
+      if (success == true && mounted) {
+        await _loadTabs();
+      }
+    } catch (e) {
+      print('Error closing current tab: $e');
+    }
+  }
+  
+  Future<void> _closeTab(dynamic tabId) async {
+    if (_channel == null) return;
+    try {
+      final success = await _channel!.invokeMethod<bool>('closeTab', {'tabId': tabId});
+      if (success == true && mounted) {
+        await _loadTabs();
+      }
+    } catch (e) {
+      print('Error closing tab: $e');
+    }
+  }
+
+  // 获取简化的 URL（去掉协议前缀）
+  String _getDisplayUrl(String url) {
+    if (url.startsWith('https://')) {
+      return url.substring(8);
+    }
+    if (url.startsWith('http://')) {
+      return url.substring(7);
+    }
+    return url;
+  }
+
+  // 构建 Chrome PWA 样式的 header
+  Widget _buildPwaHeader() {
+    final textColor = _brightness == Brightness.dark ? Colors.white : Colors.black;
+    final subTextColor = _brightness == Brightness.dark ? Colors.white70 : Colors.black54;
+    final backgroundColor = _brightness == Brightness.dark ? const Color(0xFF202124) : Colors.white;
+    
+    // 获取当前标签
+    final currentTab = _tabs.isNotEmpty 
+        ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first)
+        : null;
+    
+    final displayTitle = currentTab?.title.isNotEmpty == true 
+        ? currentTab!.title 
+        : (_currentTitle.isNotEmpty ? _currentTitle : '');
+    final displayUrl = currentTab?.url.isNotEmpty == true 
+        ? _getDisplayUrl(currentTab!.url) 
+        : '';
+    
+    // 只有标签数 > 1 时才显示 header
+    if (_tabs.length <= 1) {
+      return const SizedBox.shrink();
+    }
+    
+    return Container(
+      color: backgroundColor,
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top,
+        left: 4,
+        right: 4,
+        bottom: 8,
+      ),
+      child: Row(
+        children: [
+          // 左侧 X 按钮
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: IconButton(
+              icon: const Icon(Icons.close, size: 24),
+              padding: EdgeInsets.zero,
+              color: textColor,
+              onPressed: () async {
+                await _closeCurrentTab();
+              },
+            ),
           ),
+          const SizedBox(width: 4),
+          // 中间：标题 + URL（两行）
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (displayTitle.isNotEmpty)
+                  Text(
+                    displayTitle,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                if (displayUrl.isNotEmpty)
+                  Text(
+                    displayUrl,
+                    style: TextStyle(
+                      color: subTextColor,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 右侧三个点按钮
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 24),
+              color: backgroundColor,
+              iconColor: textColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              onSelected: (value) {
+                _handleMenuAction(value);
+              },
+              itemBuilder: (context) {
+                return [
+                  PopupMenuItem<String>(
+                    padding: EdgeInsets.zero,
+                    value: 'actions',
+                    child: Column(
+                      children: [
+                        // 顶部图标按钮行
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildMenuIconButton(
+                              context,
+                              Icons.arrow_back,
+                              'back',
+                              !_canGoBack,
+                            ),
+                            _buildMenuIconButton(
+                              context,
+                              Icons.arrow_forward,
+                              'forward',
+                              !_canGoForward,
+                            ),
+                            _buildMenuIconButton(
+                              context,
+                              Icons.refresh,
+                              'refresh',
+                              false,
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 1),
+                        // 列表项
+                        // _buildMenuItem(context, Icons.open_in_browser, 'open_in_browser'),
+                        _buildMenuItem(context, Icons.share, 'share'),
+                      ],
+                    ),
+                  ),
+                ];
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuIconButton(BuildContext ctx, IconData icon, String action, bool disabled) {
+    final textColor = _brightness == Brightness.dark ? Colors.white : Colors.black;
+    return IconButton(
+      icon: Icon(icon, size: 20),
+      color: disabled ? Colors.grey : textColor,
+      onPressed: disabled ? null : () {
+        Navigator.pop(ctx);
+        _handleMenuAction(action);
+      },
+    );
+  }
+
+  Widget _buildMenuItem(BuildContext ctx, IconData icon, String key) {
+    final textColor = _brightness == Brightness.dark ? Colors.white : Colors.black;
+    final label = BridgeController().i18nService.t(key);
+    return SizedBox(
+      height: 48,
+      child: InkWell(
+        onTap: () {
+          Navigator.pop(ctx);
+          _handleMenuAction(key);
+        },
+        child: Row(
+          children: [
+            const SizedBox(width: 16),
+            Icon(icon, size: 20, color: textColor),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 14,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Future<bool> _handleBackPressed() async {
-    if (_channel != null) {
+  void _handleMenuAction(String action) {
+    print('[_handleMenuAction] action: $action, _channel: ${_channel == null ? "null" : "exists"}');
+    switch (action) {
+      case 'back':
+        _channel?.invokeMethod('goBack');
+        break;
+      case 'forward':
+        _channel?.invokeMethod('goForward');
+        break;
+      case 'refresh':
+        _channel?.invokeMethod('reload');
+        break;
+      case 'open_in_browser':
+        _openInBrowser();
+        break;
+      case 'share':
+        _shareUrl();
+        break;
+    }
+  }
+
+  void _openInBrowser() async {
+    print('[_openInBrowser] called');
+    final currentTab = _tabs.isNotEmpty
+        ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first)
+        : null;
+    final url = currentTab?.url ?? _currentUrl;
+    print('[_openInBrowser] url: $url');
+    if (url.isNotEmpty && _channel != null) {
       try {
-        final result = await _channel!.invokeMethod<bool>('goBack');
-        if (result == true) {
-          return false;
-        }
+        await _channel!.invokeMethod('openInBrowser', {'url': url});
+        print('[_openInBrowser] success');
       } catch (e) {
-        print('Error calling goBack: $e');
+        print('[_openInBrowser] error: $e');
       }
     }
-    return true;
+  }
+
+  void _shareUrl() async {
+    print('[_shareUrl] called');
+    final currentTab = _tabs.isNotEmpty
+        ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first)
+        : null;
+    final url = currentTab?.url ?? _currentUrl;
+    print('[_shareUrl] url: $url');
+    if (url.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: url));
+      final message = BridgeController().i18nService.t('url_copied');
+      _showToast(message);
+    }
+  }
+
+  void _showToast(String message) {
+    final overlayEntry = OverlayEntry(
+      builder: (ctx) => Positioned(
+        bottom: MediaQuery.of(ctx).size.height * 0.15,
+        left: 0,
+        right: 0,
+        child: Center(
+          child: _AnimatedToastWidget(message: message),
+        ),
+      ),
+    );
+    Overlay.of(context).insert(overlayEntry);
+    Future.delayed(const Duration(seconds: 4), () {
+      overlayEntry.remove();
+    });
   }
 
   Widget _buildGeckoView() {
@@ -747,6 +1113,61 @@ class _WebViewContainerState extends State<WebViewContainer>
             BridgeController().setChannel(_channel);
             BridgeController().setExternalHandler(_handleMethodCall);
             print('BridgeController initialized');
+            
+            _channel!.setMethodCallHandler((call) async {
+              switch (call.method) {
+                case 'onPageStart':
+                  print('Page started: ${call.arguments}');
+                  break;
+                case 'onPageStop':
+                  print('Page stopped: ${call.arguments}');
+                  break;
+                case 'onTitleChange':
+                  final title = call.arguments['title'] as String? ?? '';
+                  if (mounted) {
+                    setState(() {
+                      _currentTitle = title;
+                      _currentTitleStatic = title;
+                    });
+                  }
+                  break;
+                case 'onTabStackChanged':
+                  print('Tab stack changed: ${call.arguments}');
+                  final tabsData = call.arguments['tabs'] as List<dynamic>? ?? [];
+                  final canGoBack = call.arguments['canGoBack'] as bool? ?? false;
+                  final canGoForward = call.arguments['canGoForward'] as bool? ?? false;
+                  if (mounted) {
+                    setState(() {
+                      _tabs = tabsData.map((tab) => TabInfo.fromMap(Map<String, dynamic>.from(tab))).toList();
+                      _tabsStatic = _tabs;
+                      _canGoBack = canGoBack;
+                      _canGoBackStatic = canGoBack;
+                      _canGoForward = canGoForward;
+                      _canGoForwardStatic = canGoForward;
+                      final currentTab = _tabs.isNotEmpty ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first) : null;
+                      print('[_onTabStackChanged] _canGoBack=$_canGoBack, _canGoForward=$_canGoForward, currentTab=${currentTab?.url}, isCurrent=${currentTab?.isCurrent}');
+                    });
+                  }
+                  break;
+                case 'onTabChanged':
+                  print('Tab changed: ${call.arguments}');
+                  _loadTabs();
+                  break;
+                case 'onTabOpened':
+                  print('Tab opened: ${call.arguments}');
+                  _loadTabs();
+                  break;
+                case 'onRequestExitApp':
+                  print('Request exit app');
+                  _handleExitAppRequest();
+                  break;
+              }
+            });
+            
+            Future.delayed(const Duration(milliseconds: 500), () {
+              _loadTabs();
+            });
+            
             params.onPlatformViewCreated(id);
           });
           controller.create();
@@ -760,13 +1181,169 @@ class _WebViewContainerState extends State<WebViewContainer>
     }
   }
 
-  Future<dynamic> _handleMethodCall(MethodCall call) async {
-    print('_handleMethodCall: ${call.method}');
-    switch (call.method) {
-      case 'onPageStart':
-        break;
-      case 'onPageStop':
-        break;
-    }
+  @override
+  Widget build(BuildContext context) {
+    final showHeader = _tabs.length > 1;
+    return Scaffold(
+      backgroundColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
+      body: SafeArea(
+        top: !showHeader, // 只有不显示 header 时才启用顶部安全区域
+        bottom: true,
+        child: Column(
+          children: [
+            // Chrome PWA 样式的 header
+            _buildPwaHeader(),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildGeckoView(),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 500),
+                    transitionBuilder: (Widget child, Animation<double> animation) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: child,
+                      );
+                    },
+                    child: _isLoading
+                        ? Container(
+                            key: const ValueKey('loading'),
+                            color: _brightness == Brightness.dark ? Colors.black : Colors.white,
+                            child: LoadingContent(
+                              brightness: _brightness,
+                              subtitle: _loadingSubtitle,
+                              loadingLog: _loadingLog,
+                            ),
+                          )
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExitToastWidget extends StatefulWidget {
+  final String message;
+  final double maxWidth;
+
+  const _ExitToastWidget({
+    required this.message,
+    required this.maxWidth,
+  });
+
+  @override
+  State<_ExitToastWidget> createState() => _ExitToastWidgetState();
+}
+
+class _ExitToastWidgetState extends State<_ExitToastWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.reverse();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Container(
+        constraints: BoxConstraints(maxWidth: widget.maxWidth),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          widget.message,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            decoration: TextDecoration.none,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedToastWidget extends StatefulWidget {
+  final String message;
+
+  const _AnimatedToastWidget({required this.message});
+
+  @override
+  State<_AnimatedToastWidget> createState() => _AnimatedToastWidgetState();
+}
+
+class _AnimatedToastWidgetState extends State<_AnimatedToastWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.reverse().then((_) => super.dispose());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          widget.message,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            decoration: TextDecoration.none,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
   }
 }

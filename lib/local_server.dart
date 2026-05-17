@@ -26,7 +26,9 @@ class LocalServer {
   static const int _maxRestartAttempts = 3;
   static const int _devPort = 13218;
   static const int _prodPort = 13219;
+  static const int _prodTmapPort = 13220;
   Completer<void>? _startCompleter;
+  static void Function(String url, String title)? onUrlChange;
 
   LocalServer() : _port = kDebugMode ? _devPort : _prodPort;
 
@@ -192,9 +194,16 @@ class LocalServer {
       final message = request.url.queryParameters['message'];
       if (message != null) {
         try {
-          final decodedMessage = Uri.decodeComponent(message);
-          print('Received bridge message: $decodedMessage');
-          BridgeController().handleWebMessage(decodedMessage);
+          print('Received bridge message: $message');
+          final Map<String, dynamic> json = jsonDecode(message) as Map<String, dynamic>;
+          if (json['type'] == 'url_change' && json['url'] != null) {
+            final url = json['url'] as String;
+            final title = json['title'] as String? ?? '';
+            print('URL changed to: $url, title: $title');
+            LocalServer.onUrlChange?.call(url, title);
+          } else {
+            BridgeController().handleWebMessage(message);
+          }
         } catch (e) {
           print('Failed to handle bridge message: $e');
         }

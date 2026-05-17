@@ -21,79 +21,247 @@ import org.mozilla.geckoview.GeckoRuntimeSettings
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 
-class GeckoViewPlatform(
+data class TabSession(
+    val session: GeckoSession,
+    val url: String,
+    val title: String = "",
+    val id: Long = System.currentTimeMillis(),
+    var canGoBack: Boolean = false,
+    var canGoForward: Boolean = false
+)
+
+class TabManager(
     private val context: Context,
-    messenger: BinaryMessenger,
-    id: Int,
-    creationParams: Map<String, Any>?
-) : PlatformView, MethodChannel.MethodCallHandler {
-
+    private val methodChannel: MethodChannel,
     private val geckoView: GeckoView
-    private val geckoSession: GeckoSession
-    private val methodChannel: MethodChannel
-    private var isLoading = true
-    private val handler = Handler(Looper.getMainLooper())
-
+) {
     companion object {
-        private var geckoRuntime: GeckoRuntime? = null
-        
-        fun getRuntime(context: Context): GeckoRuntime {
-            if (geckoRuntime == null) {
-                synchronized(this) {
-                    if (geckoRuntime == null) {
-                        try {
-                            val settings = GeckoRuntimeSettings.Builder()
-                                .javaScriptEnabled(true)
-                                .remoteDebuggingEnabled(true)
-                                .build()
-                            geckoRuntime = GeckoRuntime.create(context.applicationContext, settings)
-                            Log.d("GeckoViewPlatform", "GeckoRuntime created successfully")
-                        } catch (e: Exception) {
-                            Log.e("GeckoViewPlatform", "Failed to create GeckoRuntime: ${e.message}")
-                            throw e
-                        }
-                    }
-                }
+        private const val TAG = "TabManager"
+    }
+
+    val tabStack = mutableListOf<TabSession>()
+    var currentTabIndex = -1
+    var currentTabCanGoBack: Boolean = false
+    var currentTabCanGoForward: Boolean = false
+
+    val currentSession: GeckoSession?
+        get() = if (currentTabIndex >= 0 && currentTabIndex < tabStack.size) {
+            tabStack[currentTabIndex].session
+        } else null
+
+    val tabCount: Int
+        get() = tabStack.size
+
+    val canGoBack: Boolean
+        get() = tabStack.size > 1
+
+    val currentTab: TabSession?
+        get() = if (currentTabIndex >= 0 && currentTabIndex < tabStack.size) {
+            tabStack[currentTabIndex]
+        } else null
+
+    fun createNewTab(url: String): TabSession {
+        Log.d(TAG, "Creating new tab for URL: $url")
+        val session = GeckoSession()
+        session.open(GeckoViewPlatform.getRuntime(context))
+
+        val tabSession = TabSession(session, url, "")
+        tabStack.add(tabSession)
+        currentTabIndex = tabStack.size - 1
+        session.loadUri(url)
+        notifyTabStackChanged()
+
+        return tabSession
+    }
+
+    fun addTab(session: GeckoSession, url: String): TabSession {
+        Log.d(TAG, "Adding existing session as new tab: $url")
+        val tabSession = TabSession(session, url, "")
+        tabStack.add(tabSession)
+        currentTabIndex = tabStack.size - 1
+        // 切换到新 session
+        geckoView.setSession(session)
+        notifyTabStackChanged()
+        return tabSession
+    }
+
+    fun closeCurrentTab(): Boolean {
+        if (tabStack.size <= 1) {
+            Log.d(TAG, "Cannot close last tab")
+            return false
+        }
+        val tab = currentTab
+        if (tab != null) {
+            Log.d(TAG, "Closing tab: ${tab.title}")
+            tab.session.close()
+            tabStack.removeAt(currentTabIndex)
+            currentTabIndex = tabStack.size - 1
+            val prevSession = currentSession
+            if (prevSession != null) {
+                geckoView.setSession(prevSession)
             }
-            return geckoRuntime!!
+            notifyTabStackChanged()
+            return true
+        }
+        return false
+    }
+
+    fun closeTab(tabId: Long): Boolean {
+        val index = tabStack.indexOfFirst { it.id == tabId }
+        if (index >= 0) {
+            if (index == currentTabIndex && tabStack.size <= 1) {
+                return false
+            }
+            Log.d(TAG, "Closing tab by id: $tabId")
+            tabStack[index].session.close()
+            tabStack.removeAt(index)
+            if (index <= currentTabIndex) {
+                currentTabIndex = (currentTabIndex - 1).coerceAtLeast(0)
+            }
+            val currentSession = currentSession
+            if (currentSession != null) {
+                geckoView.setSession(currentSession)
+            }
+            notifyTabStackChanged()
+            return true
+        }
+        return false
+    }
+
+    fun goBackToPreviousTab(): Boolean {
+        if (canGoBack) {
+            Log.d(TAG, "Going back to previous tab")
+            closeCurrentTab()
+            return true
+        }
+        return false
+    }
+
+    fun getTabsInfo(): List<Map<String, Any>> {
+        return tabStack.mapIndexed { index, tab ->
+            mapOf(
+                "id" to tab.id,
+                "url" to tab.url,
+                "title" to tab.title,
+                "isCurrent" to (index == currentTabIndex)
+            )
         }
     }
 
-    init {
-        Log.d("GeckoViewPlatform", "Creating MethodChannel with id: $id")
-        methodChannel = MethodChannel(messenger, "gecko_view_$id")
-        methodChannel.setMethodCallHandler(this)
-        Log.d("GeckoViewPlatform", "MethodChannel created: gecko_view_$id")
-
-        val isDarkMode = creationParams?.get("isDarkMode") as? Boolean ?: true
-        val bgColor = if (isDarkMode) {
-            android.graphics.Color.BLACK
+    private fun updateTab(session: GeckoSession, url: String? = null, title: String? = null) {
+        val index = tabStack.indexOfFirst { it.session == session }
+        Log.d(TAG, "updateTab called: session=$session, url=$url, title=$title, found index=$index, tabStack size=${tabStack.size}")
+        if (index >= 0) {
+            val oldTab = tabStack[index]
+            tabStack[index] = oldTab.copy(
+                url = url ?: oldTab.url,
+                title = title ?: oldTab.title
+            )
+            Log.d(TAG, "Tab updated: new url=${tabStack[index].url}, new title=${tabStack[index].title}")
         } else {
-            android.graphics.Color.WHITE
+            Log.w(TAG, "Tab not found in tabStack for session: $session")
         }
+    }
 
-        geckoSession = GeckoSession()
-        
-        // 使用自定义的 GeckoViewWrapper 来增强焦点和输入法支持
-        geckoView = GeckoViewWrapper(context).apply {
-            setBackgroundColor(bgColor)
-            
-            // 设置触摸事件监听 - 只请求焦点，不强制唤起输入法
-            // 输入法唤起由 GeckoView 内部根据输入框点击自动处理
-            setOnTouchListener { v, event ->
-                if (event.action == android.view.MotionEvent.ACTION_UP) {
-                    v.postDelayed({
-                        if (!v.hasFocus()) {
-                            v.requestFocus()
-                        }
-                    }, 100) // 给系统 100ms 的缓冲时间来切换 View 状态
+    fun notifyTabChanged() {
+        try {
+            val tab = currentTab
+            if (tab != null) {
+                methodChannel.invokeMethod(
+                    "onTabChanged",
+                    mapOf(
+                        "id" to tab.id,
+                        "url" to tab.url,
+                        "title" to tab.title
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error notifying tab changed: ${e.message}")
+        }
+    }
+
+    fun notifyTabStackChanged() {
+        try {
+            val tabsInfo = tabStack.mapIndexed { index, tab ->
+                mapOf(
+                    "id" to tab.id,
+                    "url" to tab.url,
+                    "title" to tab.title,
+                    "isCurrent" to (index == currentTabIndex),
+                    "canGoBack" to tab.canGoBack,
+                    "canGoForward" to tab.canGoForward
+                )
+            }
+            Log.d(TAG, "notifyTabStackChanged: canGoBack=$currentTabCanGoBack, canGoForward=$currentTabCanGoForward, tabs=${tabsInfo.size}")
+            methodChannel.invokeMethod(
+                "onTabStackChanged",
+                mapOf(
+                    "tabs" to tabsInfo,
+                    "canGoBack" to currentTabCanGoBack,
+                    "canGoForward" to currentTabCanGoForward
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error notifying tab stack changed: ${e.message}")
+        }
+    }
+
+    fun requestExitApp(): Boolean {
+        try {
+            methodChannel.invokeMethod("onRequestExitApp", null)
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error invoking onRequestExitApp: ${e.message}")
+            return false
+        }
+    }
+
+    fun setupSession(session: GeckoSession, serverPort: Int) {
+        session.progressDelegate = object : GeckoSession.ProgressDelegate {
+            override fun onPageStart(s: GeckoSession, url: String) {
+                Log.d(TAG, "onPageStart for tab: $url")
+                try {
+                    methodChannel.invokeMethod("onPageStart", mapOf("url" to url))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error invoking onPageStart: ${e.message}")
                 }
-                false
+            }
+
+            override fun onPageStop(s: GeckoSession, success: Boolean) {
+                Log.d(TAG, "onPageStop for tab: $success")
+                try {
+                    methodChannel.invokeMethod("onPageStop", mapOf("success" to success))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error invoking onPageStop: ${e.message}")
+                }
+                if (success) {
+                    val handler = Handler(Looper.getMainLooper())
+                    handler.postDelayed({
+                        injectGeolocationMock(s)
+                        injectJSBridge(s, serverPort)
+                        geckoView.requestFocus()
+                    }, 300)
+                }
             }
         }
 
-        // 设置权限委托，处理网页的位置权限请求
-        geckoSession.permissionDelegate = object : GeckoSession.PermissionDelegate {
+        session.contentDelegate = object : GeckoSession.ContentDelegate {
+            override fun onTitleChange(s: GeckoSession, title: String?) {
+                Log.d(TAG, "Title changed for tab: $title")
+                updateTab(s, title = title ?: "")
+                try {
+                    methodChannel.invokeMethod(
+                        "onTitleChange",
+                        mapOf("title" to (title ?: ""))
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error invoking onTitleChange: ${e.message}")
+                }
+            }
+        }
+
+        session.permissionDelegate = object : GeckoSession.PermissionDelegate {
             override fun onContentPermissionRequest(
                 session: GeckoSession,
                 permission: GeckoSession.PermissionDelegate.ContentPermission
@@ -122,7 +290,7 @@ class GeckoViewPlatform(
                 val hasAllPermissions = permissions?.all { perm ->
                     ActivityCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
                 } ?: true
-                
+
                 if (hasAllPermissions) {
                     callback.grant()
                 } else {
@@ -131,44 +299,40 @@ class GeckoViewPlatform(
             }
         }
 
-        // 打开 session
-        geckoSession.open(getRuntime(context))
-        geckoView.setSession(geckoSession)
-
-        // 加载初始 URL - 使用本地服务器
-        val initialUrl = creationParams?.get("initialUrl") as? String ?: "http://localhost:8080/"
-        
-        // 设置页面加载完成后的回调
-        geckoSession.progressDelegate = object : GeckoSession.ProgressDelegate {
-            override fun onPageStart(session: GeckoSession, url: String) {
-                Log.d("GeckoViewPlatform", "onPageStart called: $url")
-                isLoading = true
-                try {
-                    methodChannel.invokeMethod("onPageStart", mapOf("url" to url))
-                    Log.d("GeckoViewPlatform", "invokeMethod onPageStart succeeded")
-                } catch (e: Exception) {
-                    Log.e("GeckoViewPlatform", "invokeMethod onPageStart failed: ${e.message}")
-                }
+        Log.d(TAG, "setupSession called for session: $session")
+        session.navigationDelegate = object : GeckoSession.NavigationDelegate {
+            override fun onNewSession(s: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
+                Log.d(TAG, "onNewSession called: $uri")
+                val newSession = GeckoSession()
+                setupSession(newSession, serverPort)
+                addTab(newSession, uri)
+                return GeckoResult.fromValue(newSession)
             }
 
-            override fun onPageStop(session: GeckoSession, success: Boolean) {
-                Log.d("GeckoViewPlatform", "onPageStop called: success=$success")
-                isLoading = false
-                // 先发送 onPageStop 消息，确保 Flutter 端能及时关闭 loading
-                methodChannel.invokeMethod("onPageStop", mapOf("success" to success))
-                if (success) {
-                    // 延迟注入 JavaScript，避免干扰页面加载状态
-                    handler.postDelayed({
-                        injectGeolocationMock()
-                        injectJSBridge()
-                        geckoView.requestFocus()
-                    }, 300)
+            override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+                Log.d(TAG, "onCanGoBack changed: $canGoBack for session")
+                currentTabCanGoBack = canGoBack
+                val index = tabStack.indexOfFirst { it.session == session }
+                if (index >= 0) {
+                    val oldTab = tabStack[index]
+                    tabStack[index] = oldTab.copy(canGoBack = canGoBack)
                 }
+                Log.d(TAG, "currentTabCanGoBack updated to: $currentTabCanGoBack")
+                notifyTabStackChanged()
+            }
+
+            override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
+                Log.d(TAG, "onCanGoForward changed: $canGoForward for session")
+                currentTabCanGoForward = canGoForward
+                val index = tabStack.indexOfFirst { it.session == session }
+                if (index >= 0) {
+                    val oldTab = tabStack[index]
+                    tabStack[index] = oldTab.copy(canGoForward = canGoForward)
+                }
+                notifyTabStackChanged()
             }
         }
-        
-        // 加载本地服务器
-        geckoSession.loadUri(initialUrl)
+        Log.d(TAG, "NavigationDelegate set for session: $session")
     }
 
     private fun hasLocationPermission(): Boolean {
@@ -186,16 +350,7 @@ class GeckoViewPlatform(
         return true
     }
 
-    override fun getView(): View {
-        return geckoView
-    }
-
-    override fun dispose() {
-        geckoSession.close()
-        methodChannel.setMethodCallHandler(null)
-    }
-
-    private fun injectGeolocationMock() {
+    private fun injectGeolocationMock(session: GeckoSession) {
         val mockScript = """
             (function() {
                 window._geolocationWatchId = null;
@@ -235,23 +390,169 @@ class GeckoViewPlatform(
                 }
             })();
         """.trimIndent()
-        geckoSession.loadUri("javascript:$mockScript")
+        session.loadUri("javascript:$mockScript")
     }
 
-    private fun injectJSBridge() {
+    private fun injectJSBridge(session: GeckoSession, serverPort: Int) {
         val bridgeScript = """
             window.isFlutterApp = true;
             if (!window.ReactNativeWebView) {
                 window.ReactNativeWebView = {
                     postMessage: function(message) {
                         var xhr = new XMLHttpRequest();
-                        xhr.open('GET', 'http://localhost:8080/__flutter_bridge__?message=' + encodeURIComponent(message), true);
+                        xhr.open('GET', 'http://localhost:$serverPort/__flutter_bridge__?message=' + encodeURIComponent(message), true);
                         xhr.send();
                     }
                 };
             }
+            (function() {
+                var lastUrl = window.location.href;
+                var lastTitle = document.title;
+                function notifyChange() {
+                    var currentUrl = window.location.href;
+                    var currentTitle = document.title;
+                    if (currentUrl !== lastUrl || currentTitle !== lastTitle) {
+                        lastUrl = currentUrl;
+                        lastTitle = currentTitle;
+                        try {
+                            window.ReactNativeWebView.postMessage(JSON.stringify({type: 'url_change', url: currentUrl, title: currentTitle}));
+                        } catch(e) {}
+                    }
+                }
+                setInterval(notifyChange, 100);
+            })();
         """.trimIndent()
-        geckoSession.loadUri("javascript:$bridgeScript")
+        session.loadUri("javascript:$bridgeScript")
+    }
+}
+
+class GeckoViewPlatform(
+    private val context: Context,
+    messenger: BinaryMessenger,
+    id: Int,
+    creationParams: Map<String, Any>?
+) : PlatformView, MethodChannel.MethodCallHandler {
+
+    private val TAG = "GeckoViewPlatform"
+    private val geckoView: GeckoView
+    private val methodChannel: MethodChannel
+    private val handler = Handler(Looper.getMainLooper())
+    private val serverPort: Int
+    private lateinit var tabManager: TabManager
+
+    companion object {
+        private var geckoRuntime: GeckoRuntime? = null
+        
+        fun getRuntime(context: Context): GeckoRuntime {
+            if (geckoRuntime == null) {
+                synchronized(this) {
+                    if (geckoRuntime == null) {
+                        try {
+                            val settings = GeckoRuntimeSettings.Builder()
+                                .javaScriptEnabled(true)
+                                .remoteDebuggingEnabled(true)
+                                .build()
+                            geckoRuntime = GeckoRuntime.create(context.applicationContext, settings)
+                            Log.d("GeckoViewPlatform", "GeckoRuntime created successfully")
+                        } catch (e: Exception) {
+                            Log.e("GeckoViewPlatform", "Failed to create GeckoRuntime: ${e.message}")
+                            throw e
+                        }
+                    }
+                }
+            }
+            return geckoRuntime!!
+        }
+    }
+
+    init {
+        Log.d("GeckoViewPlatform", "Creating MethodChannel with id: $id")
+        methodChannel = MethodChannel(messenger, "gecko_view_$id")
+        methodChannel.setMethodCallHandler(this)
+        Log.d("GeckoViewPlatform", "MethodChannel created: gecko_view_$id")
+
+        val isDarkMode = creationParams?.get("isDarkMode") as? Boolean ?: true
+        val bgColor = if (isDarkMode) {
+            android.graphics.Color.BLACK
+        } else {
+            android.graphics.Color.WHITE
+        }
+
+        serverPort = creationParams?.get("serverPort") as? Int ?: 8080
+
+        // 使用自定义的 GeckoViewWrapper 来增强焦点和输入法支持
+        geckoView = GeckoViewWrapper(context).apply {
+            setBackgroundColor(bgColor)
+
+            // 设置触摸事件监听 - 只请求焦点，不强制唤起输入法
+            // 输入法唤起由 GeckoView 内部根据输入框点击自动处理
+            setOnTouchListener { v, event ->
+                if (event.action == android.view.MotionEvent.ACTION_UP) {
+                    v.postDelayed({
+                        if (!v.hasFocus()) {
+                            v.requestFocus()
+                        }
+                    }, 100) // 给系统 100ms 的缓冲时间来切换 View 状态
+                }
+                false
+            }
+        }
+
+        // 初始化 tab manager（必须在使用 tabManager 之前）
+        tabManager = TabManager(context, methodChannel, geckoView)
+
+        // 创建初始会话并设置到 tab manager
+        val initialUrl = creationParams?.get("initialUrl") as? String ?: "http://localhost:8080/"
+        val session = GeckoSession()
+        session.open(getRuntime(context))
+        tabManager.setupSession(session, serverPort)
+        val tabSession = TabSession(session, initialUrl, "")
+        tabManager.tabStack.add(tabSession)
+        tabManager.currentTabIndex = 0
+        geckoView.setSession(session)
+        session.loadUri(initialUrl)
+        tabManager.notifyTabStackChanged()
+        
+        // 设置返回键监听（必须在 tabManager 初始化之后）
+        geckoView.setOnKeyListener { v, keyCode, event ->
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK && event.action == android.view.KeyEvent.ACTION_UP) {
+                Log.d("GeckoViewPlatform", "Back button pressed")
+                val currentTab = tabManager.currentTab
+                val currentSession = tabManager.currentSession
+                val canGoBack = tabManager.currentTabCanGoBack
+                
+                if (currentTab != null && currentSession != null) {
+                    if (canGoBack) {
+                        // 有历史记录，返回页面内历史
+                        Log.d("GeckoViewPlatform", "Going back in page history")
+                        currentSession.goBack()
+                    } else if (tabManager.tabCount > 1) {
+                        // 没有历史记录但有多个标签，关闭当前标签
+                        Log.d("GeckoViewPlatform", "No history, closing current tab")
+                        tabManager.closeCurrentTab()
+                    } else {
+                        // 只有一个标签且没有历史，请求退出App
+                        Log.d("GeckoViewPlatform", "No history and only one tab, requesting exit")
+                        tabManager.requestExitApp()
+                    }
+                }
+                true
+            } else {
+                false
+            }
+        }
+    }
+
+    override fun getView(): View {
+        return geckoView
+    }
+
+    override fun dispose() {
+        val currentSession = tabManager.currentSession
+        if (currentSession != null) {
+            currentSession.close()
+        }
+        methodChannel.setMethodCallHandler(null)
     }
 
     private var lastGeolocationCallback: String? = null
@@ -261,7 +562,10 @@ class GeckoViewPlatform(
             "loadUrl" -> {
                 val url = call.argument<String>("url")
                 if (url != null) {
-                    geckoSession.loadUri(url)
+                    val currentSession = tabManager.currentSession
+                    if (currentSession != null) {
+                        currentSession.loadUri(url)
+                    }
                     result.success(null)
                 } else {
                     result.error("INVALID_URL", "URL is null", null)
@@ -270,7 +574,10 @@ class GeckoViewPlatform(
             "evaluateJavascript" -> {
                 val script = call.argument<String>("script")
                 if (script != null) {
-                    geckoSession.loadUri("javascript:$script")
+                    val currentSession = tabManager.currentSession
+                    if (currentSession != null) {
+                        currentSession.loadUri("javascript:$script")
+                    }
                     result.success(null)
                 } else {
                     result.error("INVALID_SCRIPT", "Script is null", null)
@@ -279,7 +586,10 @@ class GeckoViewPlatform(
             "postMessage" -> {
                 val message = call.argument<String>("message")
                 if (message != null) {
-                    geckoSession.loadUri("javascript:if (window.onFlutterMessage) { window.onFlutterMessage($message); }")
+                    val currentSession = tabManager.currentSession
+                    if (currentSession != null) {
+                        currentSession.loadUri("javascript:if (window.onFlutterMessage) { window.onFlutterMessage($message); }")
+                    }
                     result.success(null)
                 } else {
                     result.error("INVALID_MESSAGE", "Message is null", null)
@@ -320,7 +630,10 @@ class GeckoViewPlatform(
                             }
                         })();
                     """.trimIndent()
-                    geckoSession.loadUri("javascript:$js")
+                    val currentSession = tabManager.currentSession
+                    if (currentSession != null) {
+                        currentSession.loadUri("javascript:$js")
+                    }
                     result.success(null)
                 } else {
                     result.error("INVALID_COORDS", "latitude or longitude is null", null)
@@ -340,8 +653,70 @@ class GeckoViewPlatform(
                         }
                     })();
                 """.trimIndent()
-                geckoSession.loadUri("javascript:$js")
+                val currentSession = tabManager.currentSession
+                if (currentSession != null) {
+                    currentSession.loadUri("javascript:$js")
+                }
                 result.success(null)
+            }
+            "closeCurrentTab" -> {
+                val resultValue = tabManager.closeCurrentTab()
+                result.success(resultValue)
+            }
+            "closeTab" -> {
+                val tabId = call.argument<Long>("tabId")
+                if (tabId != null) {
+                    val resultValue = tabManager.closeTab(tabId)
+                    result.success(resultValue)
+                } else {
+                    result.error("INVALID_TAB_ID", "Tab id is null", null)
+                }
+            }
+            "goBackToPreviousTab" -> {
+                val resultValue = tabManager.goBackToPreviousTab()
+                result.success(resultValue)
+            }
+            "getTabsInfo" -> {
+                result.success(tabManager.getTabsInfo())
+            }
+            "goBack" -> {
+                Log.d(TAG, "goBack called, currentSession: ${tabManager.currentSession}")
+                val currentSession = tabManager.currentSession
+                currentSession?.goBack()
+                result.success(null)
+            }
+            "goForward" -> {
+                Log.d(TAG, "goForward called, currentSession: ${tabManager.currentSession}")
+                val currentSession = tabManager.currentSession
+                currentSession?.goForward()
+                result.success(null)
+            }
+            "reload" -> {
+                Log.d(TAG, "reload called, currentSession: ${tabManager.currentSession}")
+                val currentSession = tabManager.currentSession
+                currentSession?.reload()
+                result.success(null)
+            }
+            "openInBrowser" -> {
+                val url = call.argument<String>("url")
+                if (url != null) {
+                    Log.d(TAG, "openInBrowser called with url: $url, context: ${context}")
+                    try {
+                        val uri = android.net.Uri.parse(url)
+                        Log.d(TAG, "Parsed URI: $uri")
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+                        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        Log.d(TAG, "Starting activity with intent: $intent")
+                        context.startActivity(intent)
+                        result.success(null)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error opening in browser: ${e.message}", e)
+                        result.error("OPEN_BROWSER_ERROR", e.message, null)
+                    }
+                } else {
+                    Log.e(TAG, "openInBrowser called with null url")
+                    result.error("INVALID_URL", "URL is null", null)
+                }
             }
             else -> result.notImplemented()
         }

@@ -277,13 +277,13 @@ class BYDAutoVehicleService(private val context: Context) {
             }
         }
 
-        override fun onTotalMileageChanged(value: Int) {
-            sendCarLog("统计监听器回调 - 总里程变化: $value")
-            if (value >= 0) {
-                lastTotalMileage = value
-                sendCarData(buildCarData())
-            }
-        }
+        // override fun onTotalMileageChanged(value: Int) {
+        //     sendCarLog("统计监听器回调 - 总里程变化: $value")
+        //     if (value >= 0) {
+        //         lastTotalMileage = value
+        //         sendCarData(buildCarData())
+        //     }
+        // }
     }
 
     private val tyreListener = object : AbsBYDAutoTyreListener() {

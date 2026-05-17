@@ -43,6 +43,14 @@ class AppTranslations {
       // 应用异常
       'app_exception_title': '应用异常',
       'app_exception_content': '应用状态异常，无法自动恢复，请重启应用',
+      'press_back_again_to_exit': '再按一次退出程序',
+      // 标签页菜单
+      'back': '后退',
+      'forward': '前进',
+      'refresh': '刷新',
+      'open_in_browser': '在浏览器中打开',
+      'share': '分享',
+      'url_copied': '已复制URL',
     },
     'en-US': {
       'app_title': 'Trip Route Track',
@@ -88,6 +96,14 @@ class AppTranslations {
       // App exception
       'app_exception_title': 'App Exception',
       'app_exception_content': 'App state abnormal. Cannot recover automatically. Please restart the app.',
+      'press_back_again_to_exit': 'Press back again to exit',
+      // Tab menu
+      'back': 'Back',
+      'forward': 'Forward',
+      'refresh': 'Refresh',
+      'open_in_browser': 'Open in browser',
+      'share': 'Share',
+      'url_copied': 'URL copied',
     },
     'zh-TW': {
       'app_title': '行程路線軌跡',
@@ -133,6 +149,14 @@ class AppTranslations {
       // 應用異常
       'app_exception_title': '應用異常',
       'app_exception_content': '應用狀態異常，無法自動恢復，請重啟應用',
+      'press_back_again_to_exit': '再按一次退出程式',
+      // 標籤頁選單
+      'back': '後退',
+      'forward': '前進',
+      'refresh': '重新整理',
+      'open_in_browser': '在瀏覽器中開啟',
+      'share': '分享',
+      'url_copied': '已複製URL',
     },
   };
 
