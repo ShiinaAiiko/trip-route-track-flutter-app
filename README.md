@@ -14,12 +14,13 @@
 - ✅ 屏幕常亮控制
 - ✅ 状态栏动态变化（支持多种模式：system/light/dark/transparent/hide等）
 - ✅ 状态栏数据获取接口（getStatusBarData）
+- ✅ App 前后台切换状态检测与恢复机制（检测 GeckoView session 有效性）
 - ⚠️ 比亚迪车机数据集成（车速、电量、胎压等）- 开发中
 - ✅ 比亚迪车机日志系统（通过 `bydLog` 消息实时发送到前端）
+- ✅ 外接充电量数据获取（`externalChargingPower` 字段）
 - ✅ 本地静态文件服务器（开发环境 13218 / 生产环境 13219）
 - ✅ Flutter Bridge SDK（Flutter 与 WebView 双向通信）
 - ✅ 开发/生产环境差异化标题标识（Dev 前缀）
-- ✅ App 前后台切换状态检测与恢复机制
 - ⚠️ 前台服务（暂时禁用 - MIUI 兼容性问题）
 
 ## 技术栈
@@ -44,18 +45,29 @@
 10. **比亚迪车机日志系统**
 11. **本地服务器端口区分**（开发环境 13218 / 生产环境 13219）
 12. **状态栏数据获取接口**（getStatusBarData）
+13. **GeckoView Session 健康检测**（白屏问题修复）
+14. **外接充电量数据获取**（externalChargingPower）
 
 ### 开发中
-1. **比亚迪车机数据集成**
+1. **比亚迪车机 API 数据集成**
    - 已实现 API 调用框架
    - 已配置系统签名（platform.keystore）
    - **已新增完整日志系统**（通过 `bydLog` 消息发送到前端）
+   - 已在 carData 中添加 `externalChargingPower` 字段
    - 待在真实比亚迪车机上测试验证
 
-2. **前台服务与 MIUI 兼容性**
+2. **定位数据数量不一致问题**
+   - 现象：前端显示 3557 个定位点，后台通知显示 2843 个
+   - 原因正在排查中
+   - 初步分析：定位任务只有一条，enableLocation 和 enableBackgroundLocation 共用 stream
+
+3. **前台服务与 MIUI 兼容性**
    - `flutter_foreground_task` 插件与 MIUI 系统不兼容
    - 已暂时禁用前台服务
-   - 状态检测逻辑可以确保 App 返回时正确恢复状态
+
+4. **标签页回主页动画优化**
+   - 已使用 AnimatedSize 实现 header 高度过渡动画
+   - 动画有卡顿，待优化
 
 ## 当前问题
 
@@ -65,7 +77,12 @@
    - **已新增完整日志系统**，便于调试排查
    - 需在真实车机环境测试
 
-2. **前台服务 MIUI 崩溃**：
+2. **定位数据数量不一致**：
+   - 差距约 20%（3557 vs 2843）
+   - 可能原因：系统节流、消息丢失、前端未计入
+   - 正在排查中
+
+3. **前台服务 MIUI 崩溃**：
    - `flutter_foreground_task` 插件调用时触发 MIUI 系统日志权限检查
    - 症状：`Process is going to kill itself!`
    - 当前状态：前台服务已暂时禁用

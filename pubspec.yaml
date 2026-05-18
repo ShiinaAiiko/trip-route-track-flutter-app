@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.5+20
+version: 1.0.5+25
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -42,18 +42,20 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
+    - assets/out/_next/N5DWP0APMXqHclmqUBgoV/
     - assets/out/_next/data/
-    - assets/out/_next/data/zCE4H8pJCcn3obWX5-wVa/
-    - assets/out/_next/data/zCE4H8pJCcn3obWX5-wVa/en-US/
-    - assets/out/_next/data/zCE4H8pJCcn3obWX5-wVa/en-US/journeyMemories/
-    - assets/out/_next/data/zCE4H8pJCcn3obWX5-wVa/en-US/trip/
-    - assets/out/_next/data/zCE4H8pJCcn3obWX5-wVa/zh-CN/
-    - assets/out/_next/data/zCE4H8pJCcn3obWX5-wVa/zh-CN/journeyMemories/
-    - assets/out/_next/data/zCE4H8pJCcn3obWX5-wVa/zh-CN/trip/
-    - assets/out/_next/data/zCE4H8pJCcn3obWX5-wVa/zh-TW/
-    - assets/out/_next/data/zCE4H8pJCcn3obWX5-wVa/zh-TW/journeyMemories/
-    - assets/out/_next/data/zCE4H8pJCcn3obWX5-wVa/zh-TW/trip/
+    - assets/out/_next/data/N5DWP0APMXqHclmqUBgoV/
+    - assets/out/_next/data/N5DWP0APMXqHclmqUBgoV/en-US/
+    - assets/out/_next/data/N5DWP0APMXqHclmqUBgoV/en-US/journeyMemories/
+    - assets/out/_next/data/N5DWP0APMXqHclmqUBgoV/en-US/trip/
+    - assets/out/_next/data/N5DWP0APMXqHclmqUBgoV/zh-CN/
+    - assets/out/_next/data/N5DWP0APMXqHclmqUBgoV/zh-CN/journeyMemories/
+    - assets/out/_next/data/N5DWP0APMXqHclmqUBgoV/zh-CN/trip/
+    - assets/out/_next/data/N5DWP0APMXqHclmqUBgoV/zh-TW/
+    - assets/out/_next/data/N5DWP0APMXqHclmqUBgoV/zh-TW/journeyMemories/
+    - assets/out/_next/data/N5DWP0APMXqHclmqUBgoV/zh-TW/trip/
     - assets/out/_next/static/
+    - assets/out/_next/static/N5DWP0APMXqHclmqUBgoV/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/
@@ -62,8 +64,6 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
-    - assets/out/_next/static/zCE4H8pJCcn3obWX5-wVa/
-    - assets/out/_next/zCE4H8pJCcn3obWX5-wVa/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/

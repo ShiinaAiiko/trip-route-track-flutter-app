@@ -34,9 +34,24 @@ class TabInfo {
   });
 
   factory TabInfo.fromMap(Map<String, dynamic> map) {
+    String url = map['url'] as String;
+    // 检测是否为内部网站（本地服务端口）
+    final isInternalWebsite = url.contains('localhost:13218') ||
+        url.contains('localhost:13219') ||
+        url.contains('localhost:13220') ||
+        url.contains('127.0.0.1:13218') ||
+        url.contains('127.0.0.1:13219') ||
+        url.contains('127.0.0.1:13220');
+    // 若判定为内部网站，则将显示用域名统一修改为 trip.aiiko.club
+    if (isInternalWebsite) {
+      url = url.replaceAll(
+        RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
+        'https://trip.aiiko.club',
+      );
+    }
     return TabInfo(
       id: map['id'],
-      url: map['url'] as String,
+      url: url,
       title: map['title'] as String,
       isCurrent: map['isCurrent'] as bool? ?? false,
     );
@@ -300,6 +315,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   Timer? _sensorTimer;
   Timer? _loadTimeoutTimer;
   Timer? _exitAppTimer;
+  Timer? _tabStackChangedTimer;
   bool _exitAppRequested = false;
   
   late void Function(BridgeMessage) _closeLoadingHandler;
@@ -397,15 +413,35 @@ class _WebViewContainerState extends State<WebViewContainer>
       LocalServer.onUrlChange = (String url, String title) {
         print('[onUrlChange] url: $url, title: $title');
         if (mounted) {
+          String displayUrl = url;
+          String displayTitle = title;
+
+          // 检测是否为内部网站（本地服务端口）
+          final isInternalWebsite = url.contains('localhost:13218') ||
+              url.contains('localhost:13219') ||
+              url.contains('localhost:13220') ||
+              url.contains('127.0.0.1:13218') ||
+              url.contains('127.0.0.1:13219') ||
+              url.contains('127.0.0.1:13220');
+
+          // 若判定为内部网站，则将显示用域名统一修改为 trip.aiiko.club
+          if (isInternalWebsite) {
+            displayUrl = url.replaceAll(
+              RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
+              'https://trip.aiiko.club',
+            );
+            print('[onUrlChange] 内部网站检测成功，替换后的URL: $displayUrl');
+          }
+
           setState(() {
-            _currentUrl = url;
-            _currentUrlStatic = url;
-            _currentTitle = title;
-            _currentTitleStatic = title;
+            _currentUrl = displayUrl;
+            _currentUrlStatic = displayUrl;
+            _currentTitle = displayTitle;
+            _currentTitleStatic = displayTitle;
             if (_tabs.isNotEmpty) {
               final currentIndex = _tabs.indexWhere((t) => t.isCurrent);
               if (currentIndex >= 0) {
-                _tabs[currentIndex] = _tabs[currentIndex].copyWith(url: url, title: title);
+                _tabs[currentIndex] = _tabs[currentIndex].copyWith(url: displayUrl, title: displayTitle);
                 _tabsStatic = _tabs;
               }
             }
@@ -605,7 +641,7 @@ class _WebViewContainerState extends State<WebViewContainer>
     final serverHealthy = LocalServer.instance.checkServerHealth();
     print('[NYANYA-CHECK] Server health: $serverHealthy');
     
-    final kernelHealthy = checkKernelHealth();
+    final kernelHealthy = await checkKernelHealth();
     print('[NYANYA-CHECK] Kernel health: $kernelHealthy');
     
     if (!serverHealthy || !kernelHealthy) {
@@ -619,8 +655,19 @@ class _WebViewContainerState extends State<WebViewContainer>
   }
 
   /// 检测 GeckoView 内核是否健康
-  bool checkKernelHealth() {
+  Future<bool> checkKernelHealth() async {
     _kernelHealthyStatic = _channel != null;
+    if (!_kernelHealthyStatic) return false;
+    
+    try {
+      final result = await _channel!.invokeMethod<bool>('checkSessionsHealth');
+      _kernelHealthyStatic = result ?? false;
+      print('[NYANYA-KERNEL] checkSessionsHealth result: $_kernelHealthyStatic');
+    } catch (e) {
+      print('[NYANYA-KERNEL] checkSessionsHealth failed: $e');
+      _kernelHealthyStatic = false;
+    }
+    
     return _kernelHealthyStatic;
   }
 
@@ -762,10 +809,11 @@ class _WebViewContainerState extends State<WebViewContainer>
     _accelSubscription?.cancel();
     _sensorTimer?.cancel();
     _loadTimeoutTimer?.cancel();
+    _tabStackChangedTimer?.cancel();
     BridgeController().off('closeLoading', _closeLoadingHandler);
     super.dispose();
   }
-
+  
   // ================================
   // 标签页相关方法 - 放在这里确保在build之前声明
   // ================================
@@ -798,10 +846,8 @@ class _WebViewContainerState extends State<WebViewContainer>
   Future<void> _closeCurrentTab() async {
     if (_channel == null) return;
     try {
-      final success = await _channel!.invokeMethod<bool>('closeCurrentTab');
-      if (success == true && mounted) {
-        await _loadTabs();
-      }
+      await _channel!.invokeMethod<bool>('closeCurrentTab');
+      // 注意：原生端会触发 onTabStackChanged，不需要再次调用 _loadTabs()
     } catch (e) {
       print('Error closing current tab: $e');
     }
@@ -810,24 +856,37 @@ class _WebViewContainerState extends State<WebViewContainer>
   Future<void> _closeTab(dynamic tabId) async {
     if (_channel == null) return;
     try {
-      final success = await _channel!.invokeMethod<bool>('closeTab', {'tabId': tabId});
-      if (success == true && mounted) {
-        await _loadTabs();
-      }
+      await _channel!.invokeMethod<bool>('closeTab', {'tabId': tabId});
+      // 注意：原生端会触发 onTabStackChanged，不需要再次调用 _loadTabs()
     } catch (e) {
       print('Error closing tab: $e');
     }
   }
 
-  // 获取简化的 URL（去掉协议前缀）
+  // 获取简化的 URL（去掉协议前缀），内部网站替换域名为 trip.aiiko.club
   String _getDisplayUrl(String url) {
-    if (url.startsWith('https://')) {
-      return url.substring(8);
+    String processedUrl = url;
+    // 检测是否为内部网站（本地服务端口）
+    final isInternalWebsite = url.contains('localhost:13218') ||
+        url.contains('localhost:13219') ||
+        url.contains('localhost:13220') ||
+        url.contains('127.0.0.1:13218') ||
+        url.contains('127.0.0.1:13219') ||
+        url.contains('127.0.0.1:13220');
+    // 若判定为内部网站，则将显示用域名统一修改为 trip.aiiko.club
+    if (isInternalWebsite) {
+      processedUrl = url.replaceAll(
+        RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
+        'https://trip.aiiko.club',
+      );
     }
-    if (url.startsWith('http://')) {
-      return url.substring(7);
+    if (processedUrl.startsWith('https://')) {
+      return processedUrl.substring(8);
     }
-    return url;
+    if (processedUrl.startsWith('http://')) {
+      return processedUrl.substring(7);
+    }
+    return processedUrl;
   }
 
   // 构建 Chrome PWA 样式的 header
@@ -848,9 +907,9 @@ class _WebViewContainerState extends State<WebViewContainer>
         ? _getDisplayUrl(currentTab!.url) 
         : '';
     
-    // 只有标签数 > 1 时才显示 header
+    // 只有标签数 > 1 时才显示 header，否则返回空容器（高度为0）以便 AnimatedSize 动画
     if (_tabs.length <= 1) {
-      return const SizedBox.shrink();
+      return Container(height: 0);
     }
     
     return Container(
@@ -1133,21 +1192,25 @@ class _WebViewContainerState extends State<WebViewContainer>
                   break;
                 case 'onTabStackChanged':
                   print('Tab stack changed: ${call.arguments}');
-                  final tabsData = call.arguments['tabs'] as List<dynamic>? ?? [];
-                  final canGoBack = call.arguments['canGoBack'] as bool? ?? false;
-                  final canGoForward = call.arguments['canGoForward'] as bool? ?? false;
-                  if (mounted) {
-                    setState(() {
-                      _tabs = tabsData.map((tab) => TabInfo.fromMap(Map<String, dynamic>.from(tab))).toList();
-                      _tabsStatic = _tabs;
-                      _canGoBack = canGoBack;
-                      _canGoBackStatic = canGoBack;
-                      _canGoForward = canGoForward;
-                      _canGoForwardStatic = canGoForward;
-                      final currentTab = _tabs.isNotEmpty ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first) : null;
-                      print('[_onTabStackChanged] _canGoBack=$_canGoBack, _canGoForward=$_canGoForward, currentTab=${currentTab?.url}, isCurrent=${currentTab?.isCurrent}');
-                    });
-                  }
+                  // 防抖：避免短时间内多次更新导致闪烁
+                  _tabStackChangedTimer?.cancel();
+                  _tabStackChangedTimer = Timer(const Duration(milliseconds: 100), () {
+                    final tabsData = call.arguments['tabs'] as List<dynamic>? ?? [];
+                    final canGoBack = call.arguments['canGoBack'] as bool? ?? false;
+                    final canGoForward = call.arguments['canGoForward'] as bool? ?? false;
+                    if (mounted) {
+                      setState(() {
+                        _tabs = tabsData.map((tab) => TabInfo.fromMap(Map<String, dynamic>.from(tab))).toList();
+                        _tabsStatic = _tabs;
+                        _canGoBack = canGoBack;
+                        _canGoBackStatic = canGoBack;
+                        _canGoForward = canGoForward;
+                        _canGoForwardStatic = canGoForward;
+                        final currentTab = _tabs.isNotEmpty ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first) : null;
+                        print('[_onTabStackChanged] _canGoBack=$_canGoBack, _canGoForward=$_canGoForward, currentTab=${currentTab?.url}, isCurrent=${currentTab?.isCurrent}');
+                      });
+                    }
+                  });
                   break;
                 case 'onTabChanged':
                   print('Tab changed: ${call.arguments}');
@@ -1187,12 +1250,16 @@ class _WebViewContainerState extends State<WebViewContainer>
     return Scaffold(
       backgroundColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
       body: SafeArea(
-        top: !showHeader, // 只有不显示 header 时才启用顶部安全区域
+        top: !showHeader,  // header 已经处理了状态栏 padding
         bottom: true,
         child: Column(
           children: [
-            // Chrome PWA 样式的 header
-            _buildPwaHeader(),
+            // Chrome PWA 样式的 header，使用 AnimatedSize 实现平滑过渡动画
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.linear,
+              child: _buildPwaHeader(),
+            ),
             Expanded(
               child: Stack(
                 fit: StackFit.expand,

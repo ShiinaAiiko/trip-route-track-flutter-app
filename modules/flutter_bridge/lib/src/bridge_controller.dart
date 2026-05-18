@@ -305,7 +305,9 @@ class BridgeController {
       _enableBackgroundLocation = false;
       
       _stopBackgroundNotificationTimer();
+      // 取消通知（id=3 是 Flutter 端创建的，id=1 是原生端 BackgroundService 创建的）
       NotificationService().cancelNotification(3);
+      NotificationService().cancelNotification(1);
       await _backgroundService.stop();
       
       if (_enableLocation) {

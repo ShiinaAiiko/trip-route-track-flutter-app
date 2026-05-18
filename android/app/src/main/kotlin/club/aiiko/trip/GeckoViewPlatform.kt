@@ -33,7 +33,8 @@ data class TabSession(
 class TabManager(
     private val context: Context,
     private val methodChannel: MethodChannel,
-    private val geckoView: GeckoView
+    private val geckoView: GeckoView,
+    private var serverPort: Int = 8080
 ) {
     companion object {
         private const val TAG = "TabManager"
@@ -217,7 +218,10 @@ class TabManager(
         }
     }
 
-    fun setupSession(session: GeckoSession, serverPort: Int) {
+    fun setupSession(session: GeckoSession, port: Int) {
+        // 保存 serverPort 到成员变量
+        this.serverPort = port
+        
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(s: GeckoSession, url: String) {
                 Log.d(TAG, "onPageStart for tab: $url")
@@ -239,7 +243,7 @@ class TabManager(
                     val handler = Handler(Looper.getMainLooper())
                     handler.postDelayed({
                         injectGeolocationMock(s)
-                        injectJSBridge(s, serverPort)
+                        injectJSBridge(s)
                         geckoView.requestFocus()
                     }, 300)
                 }
@@ -393,14 +397,15 @@ class TabManager(
         session.loadUri("javascript:$mockScript")
     }
 
-    private fun injectJSBridge(session: GeckoSession, serverPort: Int) {
+    private fun injectJSBridge(session: GeckoSession) {
+        Log.d(TAG, "Injecting JS Bridge with serverPort: $serverPort")
         val bridgeScript = """
             window.isFlutterApp = true;
             if (!window.ReactNativeWebView) {
                 window.ReactNativeWebView = {
                     postMessage: function(message) {
                         var xhr = new XMLHttpRequest();
-                        xhr.open('GET', 'http://localhost:$serverPort/__flutter_bridge__?message=' + encodeURIComponent(message), true);
+                        xhr.open('GET', 'http://127.0.0.1:$serverPort/__flutter_bridge__?message=' + encodeURIComponent(message), true);
                         xhr.send();
                     }
                 };
@@ -408,18 +413,38 @@ class TabManager(
             (function() {
                 var lastUrl = window.location.href;
                 var lastTitle = document.title;
+                var lastSentUrl = '';
+                var sendCount = 0;
+                var maxSendCount = 3;
+                var checkInterval = null;
+
                 function notifyChange() {
                     var currentUrl = window.location.href;
                     var currentTitle = document.title;
+
                     if (currentUrl !== lastUrl || currentTitle !== lastTitle) {
                         lastUrl = currentUrl;
                         lastTitle = currentTitle;
-                        try {
-                            window.ReactNativeWebView.postMessage(JSON.stringify({type: 'url_change', url: currentUrl, title: currentTitle}));
-                        } catch(e) {}
+
+                        if (currentUrl !== lastSentUrl) {
+                            sendCount = 0;
+                            lastSentUrl = currentUrl;
+                        }
+
+                        if (sendCount < maxSendCount) {
+                            try {
+                                window.ReactNativeWebView.postMessage(JSON.stringify({type: 'url_change', url: currentUrl, title: currentTitle}));
+                                sendCount++;
+                            } catch(e) {}
+                        }
                     }
                 }
-                setInterval(notifyChange, 100);
+
+                checkInterval = setInterval(notifyChange, 500);
+
+                window.addEventListener('beforeunload', function() {
+                    if (checkInterval) clearInterval(checkInterval);
+                });
             })();
         """.trimIndent()
         session.loadUri("javascript:$bridgeScript")
@@ -499,7 +524,7 @@ class GeckoViewPlatform(
         }
 
         // 初始化 tab manager（必须在使用 tabManager 之前）
-        tabManager = TabManager(context, methodChannel, geckoView)
+        tabManager = TabManager(context, methodChannel, geckoView, serverPort)
 
         // 创建初始会话并设置到 tab manager
         val initialUrl = creationParams?.get("initialUrl") as? String ?: "http://localhost:8080/"
@@ -717,6 +742,19 @@ class GeckoViewPlatform(
                     Log.e(TAG, "openInBrowser called with null url")
                     result.error("INVALID_URL", "URL is null", null)
                 }
+            }
+            "checkSessionsHealth" -> {
+                Log.d(TAG, "checkSessionsHealth called, tabCount: ${tabManager.tabCount}")
+                val sessionsValid = tabManager.tabStack.all { tab ->
+                    try {
+                        tab.session.isOpen
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Session check failed: ${e.message}")
+                        false
+                    }
+                }
+                Log.d(TAG, "checkSessionsHealth result: $sessionsValid, tabCount: ${tabManager.tabCount}")
+                result.success(sessionsValid && tabManager.tabCount > 0)
             }
             else -> result.notImplemented()
         }

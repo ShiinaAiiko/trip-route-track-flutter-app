@@ -656,6 +656,29 @@ Flutter 返回：
    - 当前状态：**前台服务已暂时禁用**
    - 状态检测逻辑仍然正常工作，可以确保 App 返回时正确恢复状态
 
+4. **定位数据数量不一致问题**（⚠️ 开发中）：
+   - **现象**：前端开启定位和后台定位后，前端显示定位数量（3557）与后台通知显示的定位计数（2843）不一致
+   - **差距**：约 714 个，差距约 20%
+   - **可能原因**：
+     - Flutter Geolocator 在后台模式下被系统节流
+     - 某些位置更新因精度不够被丢弃
+     - `sendMessage` 到前端过程中有消息丢失
+     - 前端接收到消息但某些原因未计入
+   - **当前状态**：正在排查中
+   - **定位任务分析**：
+     - `enableLocation` 和 `enableBackgroundLocation` 共用同一个 `Geolocator.getPositionStream` stream
+     - 定位任务只有一条，不会重复创建
+
+5. **标签页回主页动画卡顿问题**（⚠️ 开发中）：
+   - **现象**：使用 `AnimatedSize` 实现 header 高度过渡动画时，动画不够丝滑，有卡顿
+   - **原因分析**：`AnimatedSize` 在 Column 中可能导致整个布局树重新计算，影响性能
+   - **当前状态**：已实现但效果不理想，待优化
+
+6. **外接充电量数据获取**（✅ 已实现）：
+   - 通过 `AbsBYDAutoInstrumentListener` 监听 `onExternalChargingPowerChanged` 事件
+   - 整合到 `carData` 中，字段名为 `externalChargingPower`
+   - 详见"比亚迪车辆数据功能"章节
+
 ---
 
 ## App 前后台切换状态检测与恢复机制
@@ -681,7 +704,7 @@ static bool _kernelHealthyStatic = false;
 
 **关键检测方法**：
 - `LocalServer.instance.checkServerHealth()` - 检测 LocalServer 服务健康状态
-- `checkKernelHealth()` - 检测 GeckoView 内核健康状态（通过 `_channel != null` 判断）
+- `checkKernelHealth()` - 检测 GeckoView 内核健康状态（调用原生 `checkSessionsHealth` 方法）
 
 ### 检测逻辑
 
@@ -690,13 +713,53 @@ Future<void> _checkAndRecoverState() async {
   // 1. 检测 LocalServer 服务状态
   final serverHealthy = LocalServer.instance.checkServerHealth();
 
-  // 2. 检测 GeckoView 内核状态
-  final kernelHealthy = checkKernelHealth();
+  // 2. 检测 GeckoView 内核状态（调用原生方法检测所有 session 是否有效）
+  final kernelHealthy = await checkKernelHealth();
 
   // 3. 任一不健康时触发恢复
   if (!serverHealthy || !kernelHealthy) {
     await _performRecovery();
   }
+}
+```
+
+### 原生端 checkSessionsHealth 方法
+
+**GeckoViewPlatform.kt** 中添加了 `checkSessionsHealth` 方法：
+
+```kotlin
+"checkSessionsHealth" -> {
+    Log.d(TAG, "checkSessionsHealth called, tabCount: ${tabManager.tabCount}")
+    val sessionsValid = tabManager.tabStack.all { tab ->
+        try {
+            tab.session.isOpen
+        } catch (e: Exception) {
+            Log.e(TAG, "Session check failed: ${e.message}")
+            false
+        }
+    }
+    Log.d(TAG, "checkSessionsHealth result: $sessionsValid, tabCount: ${tabManager.tabCount}")
+    result.success(sessionsValid && tabManager.tabCount > 0)
+}
+```
+
+### Flutter 端 checkKernelHealth 方法
+
+```dart
+Future<bool> checkKernelHealth() async {
+    _kernelHealthyStatic = _channel != null;
+    if (!_kernelHealthyStatic) return false;
+
+    try {
+        final result = await _channel!.invokeMethod<bool>('checkSessionsHealth');
+        _kernelHealthyStatic = result ?? false;
+        print('[NYANYA-KERNEL] checkSessionsHealth result: $_kernelHealthyStatic');
+    } catch (e) {
+        print('[NYANYA-KERNEL] checkSessionsHealth failed: $e');
+        _kernelHealthyStatic = false;
+    }
+
+    return _kernelHealthyStatic;
 }
 ```
 

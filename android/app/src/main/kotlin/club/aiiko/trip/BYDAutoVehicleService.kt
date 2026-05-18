@@ -3,6 +3,8 @@ package club.aiiko.trip
 import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.bydauto.BYDAutoConstants
+import android.hardware.bydauto.instrument.BYDAutoInstrumentDevice
+import android.hardware.bydauto.instrument.AbsBYDAutoInstrumentListener
 import android.hardware.bydauto.speed.BYDAutoSpeedDevice
 import android.hardware.bydauto.speed.AbsBYDAutoSpeedListener
 import android.hardware.bydauto.statistic.BYDAutoStatisticDevice
@@ -17,6 +19,7 @@ class BYDAutoVehicleService(private val context: Context) {
     private var speedDevice: BYDAutoSpeedDevice? = null
     private var statisticDevice: BYDAutoStatisticDevice? = null
     private var tyreDevice: BYDAutoTyreDevice? = null
+    private var instrumentDevice: BYDAutoInstrumentDevice? = null
 
     private var methodChannel: MethodChannel? = null
     private var isStarted = false
@@ -35,6 +38,7 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastEvMileage: Int = 0
     private var lastChargeStatus: Int = 0
     private var lastChargePower: Int = 0
+    private var lastExternalChargingPower: Double = 0.0
 
     // 无效数据常量
     private val INVALID_DATA = 65535
@@ -107,7 +111,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
         val hasAllPermissions = hasRequiredPermissions()
         if (!hasAllPermissions) {
-            sendCarLog("部分权限缺失，尝试继续启动服务（可能只能获取部分数据）")
+            sendCarLog("⚠️ 部分权限缺失，尝试使用反射调用获取数据")
         } else {
             sendCarLog("权限检查通过，开始初始化设备")
         }
@@ -120,7 +124,13 @@ class BYDAutoVehicleService(private val context: Context) {
             speedDevice = BYDAutoSpeedDevice.getInstance(context)
             sendCarLog("BYDAutoSpeedDevice.getInstance() 完成")
 
-            if (speedDevice != null) {
+            if (speedDevice == null) {
+                sendCarLog("❌ BYDAutoSpeedDevice.getInstance() 返回 null，可能是权限不足")
+            } else {
+                sendCarLog("speedDevice 实例类型: ${speedDevice?.javaClass?.name}")
+                if (speedDevice?.javaClass?.simpleName?.contains("Stub") == true) {
+                    sendCarLog("⚠️ BYDAutoSpeedDevice 是 Stub 实现")
+                }
                 try {
                     speedDevice?.registerListener(speedListener)
                     sendCarLog("车速监听器注册成功")
@@ -130,7 +140,7 @@ class BYDAutoVehicleService(private val context: Context) {
             }
         } catch (e: Exception) {
             sendCarLog("车速设备初始化异常: ${e.message}")
-            handleInitException("车速设备", e)
+            sendCarLog("异常堆栈: ${e.stackTraceToString()}")
         }
 
         // 初始化统计设备
@@ -139,7 +149,13 @@ class BYDAutoVehicleService(private val context: Context) {
             statisticDevice = BYDAutoStatisticDevice.getInstance(context)
             sendCarLog("BYDAutoStatisticDevice.getInstance() 完成")
 
-            if (statisticDevice != null) {
+            if (statisticDevice == null) {
+                sendCarLog("❌ BYDAutoStatisticDevice.getInstance() 返回 null")
+            } else {
+                sendCarLog("statisticDevice 实例类型: ${statisticDevice?.javaClass?.name}")
+                if (statisticDevice?.javaClass?.simpleName?.contains("Stub") == true) {
+                    sendCarLog("⚠️ BYDAutoStatisticDevice 是 Stub 实现")
+                }
                 try {
                     statisticDevice?.registerListener(statisticListener)
                     sendCarLog("统计监听器注册成功")
@@ -149,7 +165,7 @@ class BYDAutoVehicleService(private val context: Context) {
             }
         } catch (e: Exception) {
             sendCarLog("统计设备初始化异常: ${e.message}")
-            handleInitException("统计设备", e)
+            sendCarLog("异常堆栈: ${e.stackTraceToString()}")
         }
 
         // 初始化胎压设备
@@ -158,7 +174,13 @@ class BYDAutoVehicleService(private val context: Context) {
             tyreDevice = BYDAutoTyreDevice.getInstance(context)
             sendCarLog("BYDAutoTyreDevice.getInstance() 完成")
 
-            if (tyreDevice != null) {
+            if (tyreDevice == null) {
+                sendCarLog("❌ BYDAutoTyreDevice.getInstance() 返回 null")
+            } else {
+                sendCarLog("tyreDevice 实例类型: ${tyreDevice?.javaClass?.name}")
+                if (tyreDevice?.javaClass?.simpleName?.contains("Stub") == true) {
+                    sendCarLog("⚠️ BYDAutoTyreDevice 是 Stub 实现")
+                }
                 try {
                     tyreDevice?.registerListener(tyreListener)
                     sendCarLog("胎压监听器注册成功")
@@ -168,7 +190,32 @@ class BYDAutoVehicleService(private val context: Context) {
             }
         } catch (e: Exception) {
             sendCarLog("胎压设备初始化异常: ${e.message}")
-            handleInitException("胎压设备", e)
+            sendCarLog("异常堆栈: ${e.stackTraceToString()}")
+        }
+
+        // 初始化仪表设备
+        try {
+            sendCarLog("初始化仪表设备 BYDAutoInstrumentDevice...")
+            instrumentDevice = BYDAutoInstrumentDevice.getInstance(context)
+            sendCarLog("BYDAutoInstrumentDevice.getInstance() 完成")
+
+            if (instrumentDevice == null) {
+                sendCarLog("❌ BYDAutoInstrumentDevice.getInstance() 返回 null")
+            } else {
+                sendCarLog("instrumentDevice 实例类型: ${instrumentDevice?.javaClass?.name}")
+                if (instrumentDevice?.javaClass?.simpleName?.contains("Stub") == true) {
+                    sendCarLog("⚠️ BYDAutoInstrumentDevice 是 Stub 实现")
+                }
+                try {
+                    instrumentDevice?.registerListener(instrumentListener)
+                    sendCarLog("仪表监听器注册成功")
+                } catch (e: Exception) {
+                    sendCarLog("仪表监听器注册失败: ${e.message}")
+                }
+            }
+        } catch (e: Exception) {
+            sendCarLog("仪表设备初始化异常: ${e.message}")
+            sendCarLog("异常堆栈: ${e.stackTraceToString()}")
         }
 
         // 参考车况助手项目：手动读取初始数据
@@ -223,6 +270,19 @@ class BYDAutoVehicleService(private val context: Context) {
             }
         } catch (e: Exception) {
             sendCarLog("手动读取统计失败: ${e.message}")
+        }
+
+        // 读取仪表设备数据
+        try {
+            if (instrumentDevice != null) {
+                val externalChargingPower = instrumentDevice?.externalChargingPower ?: 0.0
+                sendCarLog("手动读取仪表 - 外接充电量: $externalChargingPower kW.h")
+                if (externalChargingPower >= 0.0 && externalChargingPower <= 10000.0) {
+                    lastExternalChargingPower = externalChargingPower
+                }
+            }
+        } catch (e: Exception) {
+            sendCarLog("手动读取仪表失败: ${e.message}")
         }
     }
 
@@ -322,17 +382,57 @@ class BYDAutoVehicleService(private val context: Context) {
         }
     }
 
+    private val instrumentListener = object : AbsBYDAutoInstrumentListener() {
+        override fun onExternalChargingPowerChanged(value: Double) {
+            sendCarLog("仪表监听器回调 - 外接充电量变化: $value")
+            if (value >= 0.0 && value <= 10000.0) {
+                lastExternalChargingPower = value
+                sendCarData(buildCarData())
+            }
+        }
+    }
+
     private fun updateSpeedData() {
         try {
             sendCarLog("updateSpeedData() - speedDevice: ${speedDevice != null}")
+
             if (speedDevice == null) {
-                sendCarLog("updateSpeedData() - speedDevice 为 null")
+                sendCarLog("updateSpeedData() - speedDevice 为 null，尝试重新初始化")
+                try {
+                    speedDevice = BYDAutoSpeedDevice.getInstance(context)
+                    if (speedDevice != null) {
+                        speedDevice?.registerListener(speedListener)
+                        sendCarLog("speedDevice 重新初始化成功")
+                    } else {
+                        sendCarLog("speedDevice 重新初始化失败，权限不足")
+                    }
+                } catch (e: Exception) {
+                    sendCarLog("重新初始化 speedDevice 异常: ${e.message}")
+                }
                 return
             }
 
-            val speed = speedDevice?.currentSpeed ?: 0.0
-            val accelerate = speedDevice?.accelerateDeepness ?: 0
-            val brake = speedDevice?.brakeDeepness ?: 0
+            var speed = 0.0
+            var accelerate = 0
+            var brake = 0
+
+            try {
+                // 先尝试直接调用
+                speed = speedDevice?.currentSpeed ?: 0.0
+                accelerate = speedDevice?.accelerateDeepness ?: 0
+                brake = speedDevice?.brakeDeepness ?: 0
+            } catch (securityEx: SecurityException) {
+                sendCarLog("直接调用失败(SecurityException)，尝试反射调用: ${securityEx.message}")
+                // 使用反射调用（使用数值常量，避免SDK版本差异）
+                speed = BydApiReflectHelper.getDouble(speedDevice, 1, 1033220112) // SPEED_ACCELERATE_VALUE
+                accelerate = BydApiReflectHelper.get(speedDevice, 1, 1033220112) // SPEED_ACCELERATE_VALUE
+                brake = BydApiReflectHelper.get(speedDevice, 1, 874512400) // SPEED_BRAKE_S
+            } catch (e: Exception) {
+                sendCarLog("直接调用失败，尝试反射调用: ${e.message}")
+                speed = BydApiReflectHelper.getDouble(speedDevice, 1, 1033220112) // SPEED_ACCELERATE_VALUE
+                accelerate = BydApiReflectHelper.get(speedDevice, 1, 1033220112) // SPEED_ACCELERATE_VALUE
+                brake = BydApiReflectHelper.get(speedDevice, 1, 874512400) // SPEED_BRAKE_S
+            }
 
             sendCarLog("updateSpeedData() - 原始数据: speed=$speed, accelerate=$accelerate, brake=$brake")
 
@@ -350,15 +450,37 @@ class BYDAutoVehicleService(private val context: Context) {
     private fun updateStatisticData() {
         try {
             sendCarLog("updateStatisticData() - statisticDevice: ${statisticDevice != null}")
+
             if (statisticDevice == null) {
                 sendCarLog("updateStatisticData() - statisticDevice 为 null")
                 return
             }
 
-            val elecPercent = statisticDevice?.elecPercentageValue ?: 0.0
-            val fuelPercent = statisticDevice?.fuelPercentageValue ?: 0
-            val totalMileage = statisticDevice?.totalMileageValue ?: 0
-            val evMileage = statisticDevice?.evMileageValue ?: 0
+            var elecPercent = 0.0
+            var fuelPercent = 0
+            var totalMileage = 0
+            var evMileage = 0
+
+            try {
+                // 先尝试直接调用
+                elecPercent = statisticDevice?.elecPercentageValue ?: 0.0
+                fuelPercent = statisticDevice?.fuelPercentageValue ?: 0
+                totalMileage = statisticDevice?.totalMileageValue ?: 0
+                evMileage = statisticDevice?.evMileageValue ?: 0
+            } catch (securityEx: SecurityException) {
+                sendCarLog("直接调用失败(SecurityException)，尝试反射调用: ${securityEx.message}")
+                // 使用反射调用（使用数值常量，避免SDK版本差异）
+                elecPercent = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777400) / 100.0 // STATISTIC_ELEC_PERCENTAGE
+                fuelPercent = BydApiReflectHelper.get(statisticDevice, 2, 1246777401) // STATISTIC_FUEL_PERCENTAGE
+                totalMileage = BydApiReflectHelper.get(statisticDevice, 2, 1246777402) // STATISTIC_TOTAL_MILEAGE
+                evMileage = BydApiReflectHelper.get(statisticDevice, 2, 1246777403) // STATISTIC_EV_MILEAGE
+            } catch (e: Exception) {
+                sendCarLog("直接调用失败，尝试反射调用: ${e.message}")
+                elecPercent = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777400) / 100.0 // STATISTIC_ELEC_PERCENTAGE
+                fuelPercent = BydApiReflectHelper.get(statisticDevice, 2, 1246777401) // STATISTIC_FUEL_PERCENTAGE
+                totalMileage = BydApiReflectHelper.get(statisticDevice, 2, 1246777402) // STATISTIC_TOTAL_MILEAGE
+                evMileage = BydApiReflectHelper.get(statisticDevice, 2, 1246777403) // STATISTIC_EV_MILEAGE
+            }
 
             sendCarLog("updateStatisticData() - 原始数据: elecPercent=$elecPercent%, fuelPercent=$fuelPercent%, totalMileage=$totalMileage, evMileage=$evMileage")
 
@@ -377,15 +499,37 @@ class BYDAutoVehicleService(private val context: Context) {
     private fun updateTyreData() {
         try {
             sendCarLog("updateTyreData() - tyreDevice: ${tyreDevice != null}")
+
             if (tyreDevice == null) {
                 sendCarLog("updateTyreData() - tyreDevice 为 null")
                 return
             }
 
-            val lf = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: 0
-            val rf = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: 0
-            val lr = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: 0
-            val rr = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: 0
+            var lf = 0
+            var rf = 0
+            var lr = 0
+            var rr = 0
+
+            try {
+                // 先尝试直接调用
+                lf = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: 0
+                rf = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: 0
+                lr = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: 0
+                rr = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: 0
+            } catch (securityEx: SecurityException) {
+                sendCarLog("直接调用失败(SecurityException)，尝试反射调用: ${securityEx.message}")
+                // 使用反射调用（使用数值常量，避免SDK版本差异）
+                lf = BydApiReflectHelper.get(tyreDevice, 3, -1728052956) // TYRE_PRESSURE_VALUE_LEFT_FRONT
+                rf = BydApiReflectHelper.get(tyreDevice, 3, -1728052952) // TYRE_PRESSURE_VALUE_RIGHT_FRONT
+                lr = BydApiReflectHelper.get(tyreDevice, 3, -1728052948) // TYRE_PRESSURE_VALUE_LEFT_REAR
+                rr = BydApiReflectHelper.get(tyreDevice, 3, -1728052944) // TYRE_PRESSURE_VALUE_RIGHT_REAR
+            } catch (e: Exception) {
+                sendCarLog("直接调用失败，尝试反射调用: ${e.message}")
+                lf = BydApiReflectHelper.get(tyreDevice, 3, -1728052956) // TYRE_PRESSURE_VALUE_LEFT_FRONT
+                rf = BydApiReflectHelper.get(tyreDevice, 3, -1728052952) // TYRE_PRESSURE_VALUE_RIGHT_FRONT
+                lr = BydApiReflectHelper.get(tyreDevice, 3, -1728052948) // TYRE_PRESSURE_VALUE_LEFT_REAR
+                rr = BydApiReflectHelper.get(tyreDevice, 3, -1728052944) // TYRE_PRESSURE_VALUE_RIGHT_REAR
+            }
 
             sendCarLog("updateTyreData() - 原始数据: 左前=$lf, 右前=$rf, 左后=$lr, 右后=$rr")
 
@@ -430,6 +574,13 @@ class BYDAutoVehicleService(private val context: Context) {
             sendCarLog("注销胎压监听器失败: ${e.message}")
         }
 
+        try {
+            instrumentDevice?.unregisterListener(instrumentListener)
+            sendCarLog("仪表监听器已注销")
+        } catch (e: Exception) {
+            sendCarLog("注销仪表监听器失败: ${e.message}")
+        }
+
         sendCarLog("BYDAutoVehicleService 停止完成")
     }
 
@@ -450,6 +601,7 @@ class BYDAutoVehicleService(private val context: Context) {
             ),
             "chargeStatus" to lastChargeStatus,
             "chargePower" to lastChargePower,
+            "externalChargingPower" to lastExternalChargingPower,
             "timestamp" to System.currentTimeMillis()
         )
     }
