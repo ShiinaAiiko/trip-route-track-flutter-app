@@ -9,6 +9,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 // import 'package:flutter_foreground_task/flutter_foreground_task.dart'; // 暂时禁用
 import 'local_server.dart';
 import 'components/components.dart';
@@ -18,6 +19,8 @@ import 'package:i18n/i18n.dart';
 
 String? _initialUrl;
 String _appTitle = '';
+
+
 
 // 标签页数据类
 class TabInfo {
@@ -227,15 +230,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return ShadApp(
       debugShowCheckedModeBanner: false,
       title: _appTitle,
-      theme: ThemeData(
+      theme: ShadThemeData(
         brightness: _brightness,
-        scaffoldBackgroundColor:
-            _brightness == Brightness.dark ? Colors.black : Colors.white,
+        colorScheme: _brightness == Brightness.dark
+            ? const ShadZincColorScheme.dark()
+            : const ShadZincColorScheme.light(),
       ),
-      home: const WebViewContainer(),
+      home: const ShadToaster(
+        child: WebViewContainer(),
+      ),
     );
   }
 }
@@ -324,6 +330,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
     _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     _loadingSubtitle = BridgeController().i18nService.t('loading_subtitle');
     _bridgeHandlerListener();
@@ -487,46 +494,21 @@ class _WebViewContainerState extends State<WebViewContainer>
 
   void _handleExitAppRequest() {
     if (_exitAppRequested) {
-      // 用户在3秒内再次按了返回键，真正退出App
       print('Exiting app now');
       _exitAppTimer?.cancel();
-      _exitOverlayEntry?.remove();
-      _exitOverlayEntry = null;
+      _exitAppTimer = null;
       SystemNavigator.pop();
     } else {
-      // 第一次按，显示提示
       _exitAppRequested = true;
       final exitMessage = BridgeController().i18nService.t('press_back_again_to_exit');
-      final screenWidth = MediaQuery.of(context).size.width;
-      final screenHeight = MediaQuery.of(context).size.height;
+      _showToast(exitMessage);
 
-      _exitOverlayEntry?.remove();
-      _exitOverlayEntry = OverlayEntry(
-        builder: (context) => Positioned(
-          bottom: screenHeight * 0.15,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: _ExitToastWidget(
-              message: exitMessage,
-              maxWidth: screenWidth * 0.666,
-            ),
-          ),
-        ),
-      );
-      Overlay.of(context).insert(_exitOverlayEntry!);
-
-      // 3秒后重置标志并移除提示
       _exitAppTimer?.cancel();
       _exitAppTimer = Timer(const Duration(seconds: 3), () {
         _exitAppRequested = false;
-        _exitOverlayEntry?.remove();
-        _exitOverlayEntry = null;
       });
     }
   }
-
-  OverlayEntry? _exitOverlayEntry;
 
   void _bridgeHandlerListener() {
     _closeLoadingHandler = (message) {
@@ -1121,20 +1103,15 @@ class _WebViewContainerState extends State<WebViewContainer>
   }
 
   void _showToast(String message) {
-    final overlayEntry = OverlayEntry(
-      builder: (ctx) => Positioned(
-        bottom: MediaQuery.of(ctx).size.height * 0.15,
-        left: 0,
-        right: 0,
-        child: Center(
-          child: _AnimatedToastWidget(message: message),
-        ),
+    final screenWidth = MediaQuery.of(context).size.width;
+    ShadToaster.of(context).show(
+      ShadToast(
+        title: Text(message),
+        alignment: Alignment.bottomCenter,
+        offset: const Offset(0, 50),
+        duration: const Duration(seconds: 2),
       ),
     );
-    Overlay.of(context).insert(overlayEntry);
-    Future.delayed(const Duration(seconds: 4), () {
-      overlayEntry.remove();
-    });
   }
 
   Widget _buildGeckoView() {
@@ -1285,6 +1262,7 @@ class _WebViewContainerState extends State<WebViewContainer>
                           )
                         : null,
                   ),
+
                 ],
               ),
             ),
@@ -1295,122 +1273,4 @@ class _WebViewContainerState extends State<WebViewContainer>
   }
 }
 
-class _ExitToastWidget extends StatefulWidget {
-  final String message;
-  final double maxWidth;
 
-  const _ExitToastWidget({
-    required this.message,
-    required this.maxWidth,
-  });
-
-  @override
-  State<_ExitToastWidget> createState() => _ExitToastWidgetState();
-}
-
-class _ExitToastWidgetState extends State<_ExitToastWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.reverse();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: Container(
-        constraints: BoxConstraints(maxWidth: widget.maxWidth),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.8),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          widget.message,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            decoration: TextDecoration.none,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-
-class _AnimatedToastWidget extends StatefulWidget {
-  final String message;
-
-  const _AnimatedToastWidget({required this.message});
-
-  @override
-  State<_AnimatedToastWidget> createState() => _AnimatedToastWidgetState();
-}
-
-class _AnimatedToastWidgetState extends State<_AnimatedToastWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.reverse().then((_) => super.dispose());
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.8),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(
-          widget.message,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-            decoration: TextDecoration.none,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}

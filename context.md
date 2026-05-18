@@ -1,6 +1,25 @@
 ## 指令
-1、You are only allowed to modify files within the current directory. Never touch or mention any parent or sibling directories. 你只允许修改当前目录下的文件。切勿触及或提及任何父级或同级目录。
-2、每次改了代码都要告知我改了啥，为何这么改
+1. You are only allowed to modify files within the current directory. Never touch or mention any parent or sibling directories. 你只允许修改当前目录下的文件。切勿触及或提及任何父级或同级目录。
+2. 每次改了代码都要告知我改了啥，为何这么改
+3. 每次修改完代码，请保证编译通过，不能有错误；禁止使用release.sh里的生产部署来测试
+4. **所有 UI 文案都必须使用 i18n 国际化系统**：
+   - 翻译文件位置：`modules/i18n/lib/translations.dart`
+   - 使用方式：`BridgeController().i18nService.t('key_name')`
+   - 新增文案时，必须同时添加 `zh-CN`、`en-US`、`zh-TW` 三个语言版本
+5. **UI 组件尽量使用 Shadcn UI**：
+   - 优先使用 Shadcn UI 提供的组件
+   - 当前使用的 Shadcn UI 版本：`0.5.7`
+   - 例如：使用 `ShadToast` 替代 Material SnackBar，使用 `ShadButton` 替代 Material Button
+
+**Shadcn UI Toast 组件注意事项**：
+   - `ShadToast` 在移动端会强制设置 `minWidth: double.infinity`，导致弹框占满整个屏幕宽度
+   - 即使设置 `constraints` 或 `width` 参数也无法限制最大宽度
+   - `ShadToast` **内置了淡入淡出动画**，无需额外配置
+   - 如果需要控制宽度，只能使用自定义组件
+
+**当前 Toast 使用情况**：
+   - 退出提示：使用 `ShadToast`，显示"再按一次退出程序"，3秒后自动消失
+   - 分享提示：使用 `ShadToast`，显示"已复制URL"，2秒后自动消失
 
 ---
 

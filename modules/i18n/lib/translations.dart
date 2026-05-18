@@ -51,6 +51,8 @@ class AppTranslations {
       'open_in_browser': '在浏览器中打开',
       'share': '分享',
       'url_copied': '已复制URL',
+      'exit': '退出',
+      'tap_to_confirm_exit': '点击确认退出',
     },
     'en-US': {
       'app_title': 'Trip Route Track',
@@ -104,6 +106,8 @@ class AppTranslations {
       'open_in_browser': 'Open in browser',
       'share': 'Share',
       'url_copied': 'URL copied',
+      'exit': 'Exit',
+      'tap_to_confirm_exit': 'Tap to confirm exit',
     },
     'zh-TW': {
       'app_title': '行程路線軌跡',
@@ -157,6 +161,8 @@ class AppTranslations {
       'open_in_browser': '在瀏覽器中開啟',
       'share': '分享',
       'url_copied': '已複製URL',
+      'exit': '退出',
+      'tap_to_confirm_exit': '點擊確認退出',
     },
   };
 

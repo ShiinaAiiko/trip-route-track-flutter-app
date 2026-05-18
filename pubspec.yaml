@@ -29,6 +29,7 @@ dependencies:
     path: modules/flutter_bridge
   i18n:
     path: modules/i18n
+  shadcn_ui: ^0.5.0
 
 dev_dependencies:
   flutter_test:
