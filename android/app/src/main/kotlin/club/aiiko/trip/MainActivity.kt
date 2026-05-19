@@ -5,8 +5,10 @@ import android.content.pm.PackageManager
 import android.content.ComponentName
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -17,13 +19,16 @@ class MainActivity : FlutterActivity() {
     private val BYD_CHANNEL = "byd_vehicle"
     private val LANGUAGE_CHANNEL = "app_language"
     private val NOTIFICATION_CLICK_CHANNEL = "notification_click"
+    private val FLUTTER_BRIDGE_CHANNEL = "flutter_bridge"
 
     private val REQUEST_CODE_BYDAUTO_PERMISSIONS = 1001
+    private val INSTALL_PERMISSION_REQUEST_CODE = 1002
 
     private var bydVehicleService: BYDAutoVehicleService? = null
     private var bydMethodChannel: MethodChannel? = null
     private var isBydServiceAvailable = false
     private var pendingStartCarData = false
+    private var pendingApkPath: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -82,8 +87,29 @@ class MainActivity : FlutterActivity() {
                     openApp()
                     result.success(null)
                 }
+                "installApk" -> {
+                    val path = call.argument<String>("path")
+                    sendCarLog("收到 installApk 调用, path: $path")
+                    installApk(path)
+                    result.success(null)
+                }
                 else -> {
                     sendCarLog("未实现的方法调用: ${call.method}")
+                    result.notImplemented()
+                }
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FLUTTER_BRIDGE_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "installApk" -> {
+                    val path = call.argument<String>("path")
+                    sendCarLog("收到 installApk 调用 (flutter_bridge), path: $path")
+                    installApk(path)
+                    result.success(null)
+                }
+                else -> {
+                    sendCarLog("未实现的方法调用 (flutter_bridge): ${call.method}")
                     result.notImplemented()
                 }
             }
@@ -189,6 +215,76 @@ class MainActivity : FlutterActivity() {
         val intent = Intent(this, MainActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         startActivity(intent)
+    }
+
+    private fun installApk(path: String?) {
+        if (path.isNullOrEmpty()) {
+            sendCarLog("installApk: path is empty")
+            return
+        }
+
+        pendingApkPath = path
+        sendCarLog("installApk: preparing to install from: $path")
+
+        // 检查是否有安装权限（Android 8.0+）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                sendCarLog("installApk: requesting install permission")
+                // 跳转到设置页面请求权限
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:$packageName")
+                ).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivityForResult(intent, INSTALL_PERMISSION_REQUEST_CODE)
+                return
+            }
+        }
+
+        // 有权限，直接安装
+        performInstall(path)
+    }
+
+    private fun performInstall(path: String) {
+        try {
+            val file = java.io.File(path)
+            if (!file.exists()) {
+                sendCarLog("installApk: file not found: $path")
+                return
+            }
+            sendCarLog("installApk: file exists, starting install")
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    this@MainActivity,
+                    "${packageName}.fileprovider",
+                    file
+                )
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(intent)
+            sendCarLog("installApk: install intent sent")
+        } catch (e: Exception) {
+            sendCarLog("installApk failed: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == INSTALL_PERMISSION_REQUEST_CODE) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && packageManager.canRequestPackageInstalls()) {
+                sendCarLog("installApk: permission granted")
+                pendingApkPath?.let {
+                    performInstall(it)
+                }
+            } else {
+                sendCarLog("installApk: permission denied")
+            }
+        }
     }
 
     private fun sendEmptyCarData() {

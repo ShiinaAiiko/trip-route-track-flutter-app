@@ -12,10 +12,13 @@ import 'services/background_service.dart';
 import 'services/language_service.dart';
 import 'services/notification_service.dart';
 import 'services/vehicle_service.dart';
+import 'services/update_service.dart';
 
 typedef MessageHandler = void Function(BridgeMessage message);
 typedef FlutterMethodCallHandler = void Function(MethodCall call);
 typedef StatusBarChangeHandler = void Function(String type);
+typedef UpdateCheckCallback = void Function(VersionInfo? versionInfo, String currentVersion, bool showCheckingNotification);
+typedef UpdateCheckingCallback = void Function();
 
 class BridgeController {
   static final BridgeController _instance = BridgeController._internal();
@@ -27,6 +30,9 @@ class BridgeController {
   final LanguageService _languageService = LanguageService();
   final VehicleService _vehicleService = VehicleService();
   final I18nService _i18nService = I18nService();
+  final UpdateService _updateService = UpdateService();
+
+  String? _pendingUpdateVersion;
 
   MethodChannel? _channel;
   StreamSubscription<Position>? _positionSubscription;
@@ -34,6 +40,8 @@ class BridgeController {
   FlutterMethodCallHandler? _externalHandler;
   StatusBarChangeHandler? _statusBarChangeHandler;
   StreamSubscription<Map<String, dynamic>>? _carDataSubscription;
+  UpdateCheckCallback? _updateCheckCallback;
+  UpdateCheckingCallback? _updateCheckingCallback;
 
   bool _enableLocation = false;
   bool _enableBackgroundLocation = false;
@@ -51,11 +59,13 @@ class BridgeController {
   LanguageService get languageService => _languageService;
   VehicleService get vehicleService => _vehicleService;
   I18nService get i18nService => _i18nService;
+  UpdateService get updateService => _updateService;
 
   Future<void> init() async {
     await _i18nService.init();
     await _languageService.init();
     await _vehicleService.init();
+    await _updateService.init();
     _setupCarDataListener();
   }
 
@@ -85,6 +95,14 @@ class BridgeController {
 
   void setStatusBarChangeHandler(StatusBarChangeHandler handler) {
     _statusBarChangeHandler = handler;
+  }
+
+  void setUpdateCheckCallback(UpdateCheckCallback callback) {
+    _updateCheckCallback = callback;
+  }
+
+  void setUpdateCheckingCallback(UpdateCheckingCallback callback) {
+    _updateCheckingCallback = callback;
   }
 
   void handleWebMessage(String messageString) {
@@ -484,6 +502,63 @@ Future<void> _handleLoadMessage() async {
     sendMessage('getStatusBarData', statusBarData);
   }
 
+  Future<void> _handleCheckNewVersion({bool showCheckingNotification = true}) async {
+    print('Starting checkNewVersion... (showCheckingNotification: $showCheckingNotification)');
+    if (showCheckingNotification) {
+      _updateCheckingCallback?.call();
+    }
+    final versionInfo = await _updateService.checkNewVersion();
+    print('versionInfo: $versionInfo');
+
+    if (versionInfo != null) {
+      _pendingUpdateVersion = versionInfo.version;
+      print('Sending updateAvailable message');
+
+      sendMessage('updateAvailable', {
+        'version': versionInfo.version,
+        'downloadUrl': versionInfo.downloadUrl,
+      });
+      
+      _updateCheckCallback?.call(versionInfo, _updateService.currentVersion ?? 'unknown', showCheckingNotification);
+    } else {
+      print('Sending updateNotAvailable message');
+      sendMessage('updateNotAvailable', {
+        'currentVersion': _updateService.currentVersion ?? 'unknown',
+      });
+      
+      _updateCheckCallback?.call(null, _updateService.currentVersion ?? 'unknown', showCheckingNotification);
+    }
+  }
+
+  void startUpdate(String downloadUrl, String version) {
+    _updateService.downloadAndInstall(
+      downloadUrl: downloadUrl,
+      version: version,
+      i18nService: _i18nService,
+      onProgress: (received, total) {
+        sendMessage('updateProgress', {
+          'received': received,
+          'total': total,
+          'progress': total > 0 ? ((received / total) * 100).round() : 0,
+        });
+      },
+      onComplete: () {
+        sendMessage('updateComplete', {
+          'version': version,
+        });
+      },
+      onError: (error) {
+        sendMessage('updateError', {
+          'error': error,
+        });
+      },
+    );
+  }
+
+  Future<void> skipUpdate(String version) async {
+    sendMessage('skipVersion', version);
+  }
+
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'onWebMessage':
@@ -552,6 +627,13 @@ Future<void> _handleLoadMessage() async {
           break;
         case 'getThemeColor':
           _handleGetThemeColor();
+          _dispatchMessage(message);
+          break;
+        case 'checkNewVersion':
+          final showCheckingNotification = message.payload is Map
+              ? (message.payload as Map)['showCheckingNotification'] as bool? ?? true
+              : true;
+          _handleCheckNewVersion(showCheckingNotification: showCheckingNotification);
           _dispatchMessage(message);
           break;
         default:

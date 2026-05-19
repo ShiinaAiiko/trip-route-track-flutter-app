@@ -648,6 +648,94 @@ Flutter 返回：
 **关键代码位置**：
 - `modules/flutter_bridge/lib/src/bridge_controller.dart` (`_handleGetStatusBarData()` 方法)
 
+### App 自动更新系统
+
+**功能概述**：实现了完整的自动更新功能，包括版本检查、下载、安装流程
+
+**核心组件**：
+
+1. **UpdateService** (`modules/flutter_bridge/lib/src/services/update_service.dart`)：
+   - `checkNewVersion()` - 检查最新版本（从 GitHub releases 页面解析）
+   - `downloadAndInstall()` - 下载 APK 并触发安装
+   - `_cleanupOldApks()` - 清理旧的 APK 文件
+
+2. **更新检查触发** (`modules/flutter_bridge/lib/src/bridge_controller.dart`)：
+   - `_handleCheckNewVersion()` - 处理前端发来的检查更新消息
+   - 支持 `showCheckingNotification` 参数控制是否显示检查中对话框
+
+**消息格式**：
+
+前端发送：
+```json
+{
+  "type": "checkNewVersion",
+  "payload": {
+    "showCheckingNotification": true
+  }
+}
+```
+
+- `showCheckingNotification: true` - 主动检查（用户点击），显示检查中对话框和结果对话框
+- `showCheckingNotification: false` - 静默检查（后台自动），仅当发现新版本时显示对话框
+
+Flutter 返回：
+```json
+{
+  "type": "updateAvailable",
+  "payload": {
+    "version": "1.0.6",
+    "downloadUrl": "https://github.com/..."
+  }
+}
+// 或
+{
+  "type": "updateNotAvailable",
+  "payload": {
+    "currentVersion": "1.0.5"
+  }
+}
+```
+
+**对话框逻辑**：
+
+| showCheckingNotification | 检查中对话框 | 已是最新版对话框 | 发现新版本对话框 |
+|-------------------------|-------------|----------------|----------------|
+| true                    | ✅ 显示      | ✅ 显示          | ✅ 显示          |
+| false                   | ❌ 不显示    | ❌ 不显示        | ✅ 显示          |
+
+**国际化文案**：
+
+- `update_checking` / `update_checking_title` - 检查中对话框
+- `update_available` - 发现新版本标题（如：发现新版本 {version}）
+- `update_available_content` - 发现新版本内容（如：您的应用需要更新以获取最新功能和优化）
+- `update_now` - 立即更新按钮
+- `update_skip` - 跳过此版本按钮
+- `update_no_new_version_title` / `update_no_new_version_content` - 已是最新版本对话框
+
+**APK 文件管理**：
+
+- **启动时清理**：应用启动时自动清理下载目录下的旧 APK 文件
+- **下载前清理**：每次下载新版本前清理旧的 APK 文件
+- **安装后不删除**：由于 Android 系统限制无法检测安装结果，启动时会清理旧的安装包
+
+**下载进度通知**：
+
+- 通知 ID：1001
+- 进度通知显示当前下载百分比
+- 下载完成通知可点击触发安装（仅在 100% 时生效）
+- 点击非 100% 通知无任何效果
+
+**关键代码位置**：
+- `modules/flutter_bridge/lib/src/services/update_service.dart`
+- `modules/flutter_bridge/lib/src/bridge_controller.dart` (`_handleCheckNewVersion()`)
+- `modules/flutter_bridge/lib/src/services/notification_service.dart`
+- `modules/i18n/lib/translations.dart` (更新相关文案)
+
+**⚠️ 待测试验证**：
+- 自动更新系统的完整流程需要在真实设备上测试
+- APK 下载和安装功能需要验证
+- 通知点击安装功能需要验证
+
 ## 待解决问题
 
 1. **比亚迪车机 API 数据获取问题**：

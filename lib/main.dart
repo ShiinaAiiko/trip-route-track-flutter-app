@@ -529,6 +529,101 @@ class _WebViewContainerState extends State<WebViewContainer>
       _loadTimeoutTimer?.cancel();
     };
     BridgeController().on('closeLoading', _closeLoadingHandler);
+    
+    BridgeController().setUpdateCheckingCallback(() {
+      _showCheckingUpdateDialog();
+    });
+    
+    BridgeController().setUpdateCheckCallback((versionInfo, currentVersion, showCheckingNotification) {
+      if (showCheckingNotification) {
+        _closeCheckingUpdateDialog();
+      }
+      if (versionInfo != null) {
+        _showUpdateAvailableDialog(versionInfo.version, versionInfo.downloadUrl);
+      } else {
+        if (showCheckingNotification) {
+          _showNoUpdateDialog(currentVersion);
+        }
+      }
+    });
+  }
+
+  bool _isCheckingUpdateDialogOpen = false;
+
+  void _showCheckingUpdateDialog() {
+    if (_isCheckingUpdateDialogOpen) return;
+    _isCheckingUpdateDialogOpen = true;
+    final i18n = BridgeController().i18nService;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(i18n.t('update_checking_title')),
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 16),
+            Text(i18n.t('update_checking')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _closeCheckingUpdateDialog() {
+    if (_isCheckingUpdateDialogOpen) {
+      Navigator.of(context, rootNavigator: true).pop();
+      _isCheckingUpdateDialogOpen = false;
+    }
+  }
+
+  void _showUpdateAvailableDialog(String version, String downloadUrl) {
+    final i18n = BridgeController().i18nService;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(i18n.t('update_available', {'version': version})),
+        content: Text(i18n.t('update_available_content')),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              BridgeController().skipUpdate(version);
+            },
+            child: Text(i18n.t('update_skip')),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              BridgeController().startUpdate(downloadUrl, version);
+            },
+            child: Text(i18n.t('update_now')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showNoUpdateDialog(String currentVersion) {
+    final i18n = BridgeController().i18nService;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(i18n.t('update_no_new_version_title')),
+        content: Text(i18n.t('update_no_new_version_content', {'version': currentVersion})),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(i18n.t('confirm')),
+          ),
+        ],
+      ),
+    );
   }
 
   void _statusBarHandlerListener() {

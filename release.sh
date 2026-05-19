@@ -3,16 +3,19 @@ name="trip-route-track"
 runName="$name-flutter-app"
 port=23204
 branch="main"
-version="v1.0.5"
+version="v1.0.6"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
-allowMethods=("build:new install adb dev run stop protos start build buildDev setVersion")
+allowMethods=("addVersion build:new install adb dev run stop protos start build buildDev setVersion")
 
 dev() {
 	# adb logcat | grep "GeckoViewPlatform\|gps1"
 	# adb logcat | grep "message.type\|gps12"
 	# 更新 assets 目录配置
+
+	setVersion
+
 	echo "-> 更新 pubspec.yaml 的 assets 配置..."
 	"$DIR/update_flutter_assets.sh"
 
