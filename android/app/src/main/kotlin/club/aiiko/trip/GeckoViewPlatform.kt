@@ -408,6 +408,8 @@ class TabManager(
         Log.d(TAG, "Injecting JS Bridge with serverPort: $serverPort")
         val bridgeScript = """
             window.isFlutterApp = true;
+            window.flutterServerPort = $serverPort;
+            window.flutterServerHost = 'http://127.0.0.1:$serverPort';
             if (!window.ReactNativeWebView) {
                 window.ReactNativeWebView = {
                     postMessage: function(message) {
@@ -474,27 +476,49 @@ class GeckoViewPlatform(
 
     companion object {
         private var geckoRuntime: GeckoRuntime? = null
-        
+        private var isRuntimeShutdown: Boolean = false
+
         fun getRuntime(context: Context): GeckoRuntime {
-            if (geckoRuntime == null) {
-                synchronized(this) {
-                    if (geckoRuntime == null) {
-                        try {
-                            val settings = GeckoRuntimeSettings.Builder()
-                                .javaScriptEnabled(true)
-                                .remoteDebuggingEnabled(true)
-                                .configFilePath(null)
-                                .build()
-                            geckoRuntime = GeckoRuntime.create(context.applicationContext, settings)
-                            Log.d("GeckoViewPlatform", "GeckoRuntime created successfully")
-                        } catch (e: Exception) {
-                            Log.e("GeckoViewPlatform", "Failed to create GeckoRuntime: ${e.message}")
-                            throw e
-                        }
+            if (geckoRuntime != null && !isRuntimeShutdown) {
+                return geckoRuntime!!
+            }
+            synchronized(this) {
+                if (geckoRuntime != null && !isRuntimeShutdown) {
+                    return geckoRuntime!!
+                }
+                try {
+                    isRuntimeShutdown = false
+                    val settings = GeckoRuntimeSettings.Builder()
+                        .javaScriptEnabled(true)
+                        .remoteDebuggingEnabled(true)
+                        .configFilePath(null)
+                        .build()
+                    geckoRuntime = GeckoRuntime.create(context.applicationContext, settings)
+                    Log.d("GeckoViewPlatform", "GeckoRuntime created successfully")
+                } catch (e: Exception) {
+                    if (e.message?.contains("Only one GeckoRuntime instance is allowed") == true) {
+                        Log.w("GeckoViewPlatform", "GeckoRuntime already exists, reusing existing instance")
+                        isRuntimeShutdown = false
+                        return geckoRuntime!!
                     }
+                    Log.e("GeckoViewPlatform", "Failed to create GeckoRuntime: ${e.message}")
+                    throw e
                 }
             }
             return geckoRuntime!!
+        }
+
+        fun shutdownRuntime() {
+            synchronized(this) {
+                try {
+                    geckoRuntime?.shutdown()
+                } catch (e: Exception) {
+                    Log.w("GeckoViewPlatform", "Error shutting down GeckoRuntime: ${e.message}")
+                }
+                geckoRuntime = null
+                isRuntimeShutdown = true
+                Log.d("GeckoViewPlatform", "GeckoRuntime shutdown and cleaned up")
+            }
         }
     }
 
@@ -766,6 +790,33 @@ class GeckoViewPlatform(
                 }
                 Log.d(TAG, "checkSessionsHealth result: $sessionsValid, tabCount: ${tabManager.tabCount}")
                 result.success(sessionsValid && tabManager.tabCount > 0)
+            }
+            "shutdownGeckoRuntime" -> {
+                Log.d(TAG, "shutdownGeckoRuntime called, preparing to shutdown GeckoRuntime")
+                shutdownRuntime()
+                result.success(null)
+            }
+            "checkGeckoViewReady" -> {
+                Log.d(TAG, "checkGeckoViewReady called")
+                try {
+                    // 检查几个关键点以验证 GeckoView 是否准备好
+                    val runtimeExists = geckoRuntime != null && !isRuntimeShutdown
+                    val sessionExists = tabManager.currentSession != null
+                    val isSessionOpen = try {
+                        tabManager.currentSession?.isOpen ?: false
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error checking if session is open", e)
+                        false
+                    }
+                    val viewAttached = geckoView.isAttachedToWindow
+                    
+                    val isReady = runtimeExists && sessionExists && isSessionOpen
+                    Log.d(TAG, "GeckoView check: runtime=$runtimeExists, session=$sessionExists, open=$isSessionOpen, attached=$viewAttached, ready=$isReady")
+                    result.success(isReady)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error checking GeckoView readiness", e)
+                    result.success(false)
+                }
             }
             else -> result.notImplemented()
         }

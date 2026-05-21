@@ -2,6 +2,10 @@
 
 这是一个使用 Flutter 开发的行程路线轨迹记录应用，主要功能是加载本地静态网页，提供 GPS 定位、车辆数据获取、热更新等功能。
 
+## 当前版本
+
+**v1.0.9** (2026-05-21)
+
 ## 主要功能
 
 - ✅ 使用 GeckoView 加载本地静态网页（Next.js 构建）
@@ -14,7 +18,10 @@
 - ✅ 屏幕常亮控制
 - ✅ 状态栏动态变化（支持多种模式：system/light/dark/transparent/hide等）
 - ✅ 状态栏数据获取接口（getStatusBarData）
-- ✅ App 前后台切换状态检测与恢复机制（检测 GeckoView session 有效性）
+- ✅ App 前后台切换状态检测与恢复机制
+- ✅ **内部网站 URL 统一替换** - localhost 显示替换为 trip.aiiko.club
+- ✅ **GeckoRuntime 重启增强** - 不健康时提前清理旧实例
+- ✅ **checkGeckoViewReady** - GeckoView 就绪状态检测
 - ⚠️ 比亚迪车机数据集成（车速、电量、胎压等）- 开发中
 - ✅ 比亚迪车机日志系统（通过 `bydLog` 消息实时发送到前端）
 - ✅ 外接充电量数据获取（`externalChargingPower` 字段）
@@ -39,6 +46,14 @@
 
 ## 项目进度
 
+### v1.0.9 (2026-05-21)
+- ✅ **内部网站 URL 统一替换** - localhost 显示替换为 trip.aiiko.club
+- ✅ **GeckoRuntime 重启增强** - 不健康时提前清理旧实例
+- ✅ **checkGeckoViewReady** - GeckoView 就绪状态检测
+- ✅ GeckoRuntime 单例创建优化 - 防止 `Only one GeckoRuntime instance is allowed` 异常
+- ✅ i18n 翻译更新 - Vibe Coding 文案
+- ✅ 自动更新服务优化 - 移除下载前清理旧 APK 逻辑
+
 ### 已完成
 1. GeckoView 集成和静态网页加载
 2. GPS 定位和后台定位服务
@@ -47,54 +62,40 @@
 5. Flutter Bridge SDK 通信机制
 6. 本地静态文件服务器
 7. 开发/生产环境差异化构建配置
-8. **App 前后台切换状态检测与恢复机制**
-9. **状态栏动态变化**
-10. **比亚迪车机日志系统**
-11. **本地服务器端口区分**（开发环境 13218 / 生产环境 13219）
-12. **状态栏数据获取接口**（getStatusBarData）
-13. **GeckoView Session 健康检测**（白屏问题修复）
-14. **外接充电量数据获取**（externalChargingPower）
-15. **App 自动更新系统**（版本检查、下载、安装）
+8. App 前后台切换状态检测与恢复机制
+9. 状态栏动态变化
+10. 比亚迪车机日志系统
+11. 本地服务器端口区分（开发环境 13218 / 生产环境 13219）
+12. 状态栏数据获取接口（getStatusBarData）
+13. GeckoView Session 健康检测（白屏问题修复）
+14. 外接充电量数据获取（externalChargingPower）
+15. App 自动更新系统（版本检查、下载、安装）
 
 ### 开发中
-1. **比亚迪车机 API 数据集成**
+1. 比亚迪车机 API 数据集成
    - 已实现 API 调用框架
    - 已配置系统签名（platform.keystore）
-   - **已新增完整日志系统**（通过 `bydLog` 消息发送到前端）
+   - 已新增完整日志系统（通过 `bydLog` 消息发送到前端）
    - 已在 carData 中添加 `externalChargingPower` 字段
    - 待在真实比亚迪车机上测试验证
 
-2. **定位数据数量不一致问题**
+2. 定位数据数量不一致问题
    - 现象：前端显示 3557 个定位点，后台通知显示 2843 个
    - 原因正在排查中
-   - 初步分析：定位任务只有一条，enableLocation 和 enableBackgroundLocation 共用 stream
 
-3. **前台服务与 MIUI 兼容性**
+3. 前台服务与 MIUI 兼容性
    - `flutter_foreground_task` 插件与 MIUI 系统不兼容
    - 已暂时禁用前台服务
-
-4. **标签页回主页动画优化**
-   - 已使用 AnimatedSize 实现 header 高度过渡动画
-   - 动画有卡顿，待优化
-
-5. **App 自动更新系统**
-   - 已实现版本检查、下载、安装流程
-   - 支持主动检查（显示对话框）和静默检查（后台自动）两种模式
-   - APK 文件自动清理机制
-   - ⚠️ 待真实设备测试验证
 
 ## 当前问题
 
 1. **比亚迪车机 API 数据获取**：
    - 权限检查通过但无法获取车辆数据
-   - 可能原因：签名不匹配、包名未在白名单、API 调用方式问题
-   - **已新增完整日志系统**，便于调试排查
-   - 需在真实车机环境测试
+   - 需要在真实车机环境测试验证
 
 2. **定位数据数量不一致**：
    - 差距约 20%（3557 vs 2843）
    - 可能原因：系统节流、消息丢失、前端未计入
-   - 正在排查中
 
 3. **前台服务 MIUI 崩溃**：
    - `flutter_foreground_task` 插件调用时触发 MIUI 系统日志权限检查
@@ -111,6 +112,16 @@
 # 生产环境构建
 ./release.sh build         # 构建生产版 APK
 ```
+
+## 版本历史
+
+| 版本 | 日期 | 主要更新 |
+|------|------|----------|
+| v1.0.9 | 2026-05-21 | 内部网站 URL 替换、GeckoRuntime 重启增强、checkGeckoViewReady |
+| v1.0.7 | - | App 自动更新系统、Shadcn UI Toast 组件 |
+| v1.0.6 | - | GeckoView Session 健康检测、白屏问题修复 |
+| v1.0.5 | - | 状态栏动态变化、比亚迪车机日志系统 |
+| v1.0.4 | - | 本地服务器端口区分、状态栏数据获取接口 |
 
 ## 应用标题标识
 

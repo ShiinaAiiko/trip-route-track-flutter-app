@@ -1101,3 +1101,142 @@ Future<bool> checkKernelHealth() async {
 | flutter_foreground_task 插件 | ⚠️ 暂时禁用（MIUI 不兼容） |
 | 状态检测逻辑 | ✅ 正常工作 |
 | stopWithTask 属性 | 已设置为 false |
+
+---
+
+## v1.0.9 更新内容
+
+### 内部网站 URL 统一替换功能
+
+**功能概述**：当检测到用户访问内部网站（localhost:13218/13219/13220）时，将显示用 URL 统一替换为 `trip.aiiko.club`，提升用户体验。
+
+**实现细节**：
+
+1. **URL 检测逻辑**：
+   - 检测 `localhost:13218`、`localhost:13219`、`localhost:13220`
+   - 检测 `127.0.0.1:13218`、`127.0.0.1:13219`、`127.0.0.1:13220`
+
+2. **URL 替换规则**：
+   - 原：`http://localhost:13218/zh-CN/trip`
+   - 显：`https://trip.aiiko.club/zh-CN/trip`
+
+3. **回调机制**：
+   - `LocalServer.onUrlChange` 回调在 URL 变化时被触发
+   - 替换后的 URL 和标题会同步到 Tab 状态
+
+**关键代码位置**：
+- `lib/main.dart` - `onUrlChange` 回调处理
+
+### GeckoRuntime 重启增强
+
+**问题**：当 GeckoView 内核不健康时，直接重启可能仍使用旧的 Runtime 实例，导致恢复失败。
+
+**解决方案**：
+
+1. **新增 `shutdownGeckoRuntime` 方法**：
+   - 在 Flutter 端通过 MethodChannel 调用原生方法
+   - 原生端调用 `GeckoRuntime.shutdown()` 并清理实例
+
+2. **恢复流程优化**：
+   ```dart
+   // 步骤0: 如果 GeckoView 内核不健康，先清理旧的 GeckoRuntime
+   final kernelHealthy = await checkKernelHealth();
+   if (!kernelHealthy) {
+     await _channel?.invokeMethod('shutdownGeckoRuntime');
+     await Future.delayed(const Duration(milliseconds: 100));
+   }
+   // 然后继续正常恢复流程...
+   ```
+
+**关键代码位置**：
+- `android/app/src/main/kotlin/club/aiiko/trip/GeckoViewPlatform.kt` - `shutdownRuntime()` 函数
+- `lib/main.dart` - `_performRecovery()` 中的提前清理逻辑
+
+### checkGeckoViewReady 方法
+
+**功能**：检测 GeckoView 是否已准备好接受操作，用于更精确的状态判断。
+
+**检测项**：
+| 检测项 | 说明 |
+|--------|------|
+| runtimeExists | GeckoRuntime 实例存在且未关闭 |
+| sessionExists | 当前 Session 存在 |
+| isSessionOpen | Session 处于打开状态 |
+| viewAttached | GeckoView 已附加到窗口 |
+
+**返回值**：只有所有检测项都为 `true` 时，才认为 GeckoView 已准备好。
+
+**关键代码位置**：
+- `android/app/src/main/kotlin/club/aiiko/trip/GeckoViewPlatform.kt` - `checkGeckoViewReady` 方法
+
+### GeckoRuntime 单例创建优化
+
+**问题**：`Only one GeckoRuntime instance is allowed` 异常可能导致 App 崩溃。
+
+**解决方案**：
+
+1. **双重检查锁模式**：
+   - 第一次检查：快速判断是否已存在可用实例
+   - 同步块内第二次检查：确保线程安全
+
+2. **异常捕获**：
+   - 捕获 `Only one GeckoRuntime instance is allowed` 异常
+   - 认为是正常情况，复用已有实例
+
+```kotlin
+if (geckoRuntime != null && !isRuntimeShutdown) {
+    return geckoRuntime!!
+}
+synchronized(this) {
+    if (geckoRuntime != null && !isRuntimeShutdown) {
+        return geckoRuntime!!
+    }
+    try {
+        // 创建新的 GeckoRuntime...
+    } catch (e: Exception) {
+        if (e.message?.contains("Only one GeckoRuntime instance is allowed") == true) {
+            isRuntimeShutdown = false
+            return geckoRuntime!!
+        }
+        throw e
+    }
+}
+```
+
+### 版本信息
+
+| 项目 | 值 |
+|------|------|
+| App 版本 | v1.0.9 (1.0.9+98) |
+| 发布日期 | 2026-05-21 |
+| release.sh 版本 | v1.0.9 |
+
+### i18n 翻译更新
+
+**变更内容**：
+| Key | zh-CN | en-US | zh-TW |
+|-----|-------|-------|-------|
+| loading_subtitle | 由 Vibe Coding 构建 | Built with Vibe Coding | 由 Vibe Coding 建構 |
+| update_skip | 下次再说 | - | 下次再說 |
+
+### 自动更新服务优化
+
+**变更**：移除下载前清理旧 APK 文件的逻辑
+
+**原因**：避免在下载过程中删除正在使用的 APK 文件导致问题
+
+---
+
+## 当前未解决的问题
+
+1. **比亚迪车机 API 数据获取**：
+   - 权限检查通过但无法获取车辆数据
+   - 需要在真实车机环境测试验证
+
+2. **定位数据数量不一致**：
+   - 前端显示与后台通知显示数量存在差距（约 20%）
+   - 可能原因：系统节流、消息丢失、前端未计入
+
+3. **前台服务 MIUI 兼容性**：
+   - `flutter_foreground_task` 插件与 MIUI 系统不兼容
+   - 已暂时禁用前台服务

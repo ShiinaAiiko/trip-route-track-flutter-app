@@ -2,7 +2,7 @@ class AppTranslations {
   static const Map<String, Map<String, String>> translations = {
     'zh-CN': {
       'app_title': '行程路线轨迹',
-      'loading_subtitle': '行程路线轨迹 App 由 AI 构建',
+      'loading_subtitle': '行程路线轨迹 App 由 Vibe Coding 构建',
       // 加载状态文案
       'loading_gecko': '加载 GeckoView 内核中...',
       'loading_gecko_success': '✓ GeckoView 内核加载成功',
@@ -88,7 +88,7 @@ class AppTranslations {
     },
     'en-US': {
       'app_title': 'Trip Route Track',
-      'loading_subtitle': 'Trip Route Track App built with AI',
+      'loading_subtitle': 'Trip Route Track App Built with Vibe Coding',
       // Loading status messages
       'loading_gecko': 'Loading GeckoView engine...',
       'loading_gecko_success': '✓ GeckoView engine loaded',
@@ -175,7 +175,7 @@ class AppTranslations {
     },
     'zh-TW': {
       'app_title': '行程路線軌跡',
-      'loading_subtitle': '行程路線軌跡 App 由 AI 建構',
+      'loading_subtitle': '行程路線軌跡 App 由 Vibe Coding 建構',
       // 載入狀態文案
       'loading_gecko': '載入 GeckoView 核心中...',
       'loading_gecko_success': '✓ GeckoView 核心載入成功',
@@ -233,7 +233,7 @@ class AppTranslations {
       'update_available': '發現新版本 {version}',
       'update_available_content': '您的應用需要更新以獲取最新功能和優化',
       'update_now': '立即更新',
-      'update_skip': '跳過此版本',
+      'update_skip': '下次再說',
       'update_downloading': '正在下載...',
       'update_download_progress': '下載進度：{progress}%',
       'update_download_failed': '下載失敗，請重試',

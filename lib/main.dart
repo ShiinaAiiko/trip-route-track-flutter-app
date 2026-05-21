@@ -300,6 +300,8 @@ class _WebViewContainerState extends State<WebViewContainer>
   static DateTime? _lastRecoveryTimeStatic; // 记录上次恢复的时间
   static bool _isRecoveringStatic = false; // 标记是否正在恢复中
   static bool _kernelHealthyStatic = false; // 标记内核是否健康
+  static int _retryCountStatic = 0; // 记录重试次数
+  static const int _maxRetriesStatic = 3; // 最大重试次数
   static bool _safeAreaTopStatic = true; // 标记顶部是否启用SafeArea
   static bool _safeAreaBottomStatic = true; // 标记底部是否启用SafeArea
   static List<TabInfo> _tabsStatic = []; // 标签页列表
@@ -325,6 +327,10 @@ class _WebViewContainerState extends State<WebViewContainer>
   bool _isInBackground = _isInBackgroundStatic;
   DateTime? _lastRecoveryTime = _lastRecoveryTimeStatic;
   bool _safeAreaTop = _safeAreaTopStatic;
+  
+  // 重试机制追踪
+  int _retryCount = _retryCountStatic;
+  static const int _maxRetries = _maxRetriesStatic;
   
   // 标签页状态
   List<TabInfo> _tabs = _tabsStatic;
@@ -397,9 +403,91 @@ class _WebViewContainerState extends State<WebViewContainer>
     }
   }
 
+  /// 验证 GeckoView 是否准备就绪
+  Future<bool> _checkGeckoViewReady() async {
+    if (_channel == null) {
+      print('[NYANYA-GECKO] Channel not available yet');
+      return false;
+    }
+    try {
+      final result = await _channel?.invokeMethod<bool>('checkGeckoViewReady');
+      print('[NYANYA-GECKO] checkGeckoViewReady result: $result');
+      return result ?? false;
+    } catch (e) {
+      print('[NYANYA-GECKO] checkGeckoViewReady failed: $e');
+      return false;
+    }
+  }
+  
+  /// 验证本地服务是否准备就绪
+  bool _checkServerReady() {
+    final result = LocalServer.instance.checkServerHealth();
+    print('[NYANYA-SERVER] checkServerHealth result: $result');
+    return result;
+  }
+  
+  /// 重置重试计数
+  void _resetRetryCount() {
+    _retryCount = 0;
+    _retryCountStatic = 0;
+  }
+  
+  /// 处理加载失败，决定是否重试
+  Future<void> _handleLoadFailure(String translationKey, LoadingStep errorStep) async {
+    final i18n = BridgeController().i18nService;
+    setState(() {
+      _loadingStep = errorStep;
+      _loadingStepStatic = _loadingStep;
+      _loadingLog.add(i18n.t(translationKey));
+      _loadingLogStatic.add(i18n.t(translationKey));
+    });
+    
+    // 检查是否可以重试
+    if (_retryCount < _maxRetries) {
+      _retryCount++;
+      _retryCountStatic = _retryCount;
+      
+      // 添加重试提示信息
+      final retryMessage = '重试 $_retryCount/$_maxRetries...';
+      _addLoadingLog(retryMessage);
+      
+      print('[NYANYA-RETRY] Scheduling retry $_retryCount/$_maxRetries');
+      
+      // 等待一小段时间后重试
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _startLoadingSequence();
+    } else {
+      // 达到最大重试次数，放弃并关闭加载界面
+      print('[NYANYA-RETRY] Max retries reached, giving up');
+      
+      // 等待2秒后关闭加载界面
+      Timer(const Duration(seconds: 2), () {
+        if (mounted && _isLoading) {
+          setState(() {
+            _isLoading = false;
+            _isLoadingStatic = _isLoading;
+          });
+        }
+      });
+    }
+  }
+  
   /// 详细加载流程
   Future<void> _startLoadingSequence() async {
     final i18n = BridgeController().i18nService;
+    
+    // 如果是重试，先清理资源
+    if (_retryCount > 0) {
+      print('[NYANYA-RETRY] Attempt $_retryCount/$_maxRetries');
+      try {
+        await _channel?.invokeMethod('shutdownGeckoRuntime');
+        await LocalServer.instance.restart();
+      } catch (e) {
+        print('[NYANYA-RETRY] Failed to cleanup before retry: $e');
+      }
+      // 等待一小段时间让资源清理完成
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
     
     // 1. 加载 GeckoView 内核
     setState(() {
@@ -410,8 +498,21 @@ class _WebViewContainerState extends State<WebViewContainer>
     });
     print('Loading GeckoView engine...');
     
-    // 等待一小段时间让 GeckoView 初始化（实际由平台层完成）
-    await Future.delayed(const Duration(milliseconds: 500));
+    // 等待 GeckoView 初始化，然后验证
+    bool geckoReady = false;
+    int geckoCheckAttempts = 0;
+    while (!geckoReady && geckoCheckAttempts < 5) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      geckoReady = await _checkGeckoViewReady();
+      geckoCheckAttempts++;
+      print('[NYANYA-GECKO] Check attempt $geckoCheckAttempts: $geckoReady');
+    }
+    
+    if (!geckoReady) {
+      print('[NYANYA-GECKO] Failed to load GeckoView after all checks');
+      await _handleLoadFailure('loading_gecko_failed', LoadingStep.geckoFailed);
+      return;
+    }
     
     setState(() {
       _loadingStep = LoadingStep.geckoSuccess;
@@ -419,7 +520,7 @@ class _WebViewContainerState extends State<WebViewContainer>
       _loadingLog.add(i18n.t('loading_gecko_success'));
       _loadingLogStatic.add(i18n.t('loading_gecko_success'));
     });
-    print('GeckoView engine loaded');
+    print('GeckoView engine loaded successfully');
     
     // 2. 启动本地静态服务
     setState(() {
@@ -430,63 +531,73 @@ class _WebViewContainerState extends State<WebViewContainer>
     });
     print('Starting local server...');
     
+    bool serverSuccess = false;
     try {
-      await LocalServer.instance.start();
-      LocalServer.onUrlChange = (String url, String title) {
-        print('[onUrlChange] url: $url, title: $title');
-        if (mounted) {
-          String displayUrl = url;
-          String displayTitle = title;
-
-          // 检测是否为内部网站（本地服务端口）
-          final isInternalWebsite = url.contains('localhost:13218') ||
-              url.contains('localhost:13219') ||
-              url.contains('localhost:13220') ||
-              url.contains('127.0.0.1:13218') ||
-              url.contains('127.0.0.1:13219') ||
-              url.contains('127.0.0.1:13220');
-
-          // 若判定为内部网站，则将显示用域名统一修改为 trip.aiiko.club
-          if (isInternalWebsite) {
-            displayUrl = url.replaceAll(
-              RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
-              'https://trip.aiiko.club',
-            );
-            print('[onUrlChange] 内部网站检测成功，替换后的URL: $displayUrl');
-          }
-
-          setState(() {
-            _currentUrl = displayUrl;
-            _currentUrlStatic = displayUrl;
-            _currentTitle = displayTitle;
-            _currentTitleStatic = displayTitle;
-            if (_tabs.isNotEmpty) {
-              final currentIndex = _tabs.indexWhere((t) => t.isCurrent);
-              if (currentIndex >= 0) {
-                _tabs[currentIndex] = _tabs[currentIndex].copyWith(url: displayUrl, title: displayTitle);
-                _tabsStatic = _tabs;
-              }
-            }
-          });
-        }
-      };
-      setState(() {
-        _loadingStep = LoadingStep.serverSuccess;
-        _loadingStepStatic = _loadingStep;
-        _loadingLog.add(i18n.t('loading_server_success'));
-        _loadingLogStatic.add(i18n.t('loading_server_success'));
-      });
-      print('Local server started successfully');
+      if (_retryCount > 0) {
+        await LocalServer.instance.restart();
+      } else {
+        await LocalServer.instance.start();
+      }
+      serverSuccess = _checkServerReady();
     } catch (e) {
-      setState(() {
-        _loadingStep = LoadingStep.serverFailed;
-        _loadingStepStatic = _loadingStep;
-        _loadingLog.add(i18n.t('loading_server_failed'));
-        _loadingLogStatic.add(i18n.t('loading_server_failed'));
-      });
       print('Local server failed to start: $e');
+      serverSuccess = false;
+    }
+    
+    if (!serverSuccess) {
+      print('[NYANYA-SERVER] Failed to start or verify local server');
+      await _handleLoadFailure('loading_server_failed', LoadingStep.serverFailed);
       return;
     }
+    
+    LocalServer.onUrlChange = (String url, String title) {
+      print('[onUrlChange] url: $url, title: $title');
+      if (mounted) {
+        String displayUrl = url;
+        String displayTitle = title;
+
+        // 检测是否为内部网站（本地服务端口）
+        final isInternalWebsite = url.contains('localhost:13218') ||
+            url.contains('localhost:13219') ||
+            url.contains('localhost:13220') ||
+            url.contains('127.0.0.1:13218') ||
+            url.contains('127.0.0.1:13219') ||
+            url.contains('127.0.0.1:13220');
+
+        // 若判定为内部网站，则将显示用域名统一修改为 trip.aiiko.club
+        if (isInternalWebsite) {
+          displayUrl = url.replaceAll(
+            RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
+            'https://trip.aiiko.club',
+          );
+          print('[onUrlChange] 内部网站检测成功，替换后的URL: $displayUrl');
+        }
+
+        setState(() {
+          _currentUrl = displayUrl;
+          _currentUrlStatic = displayUrl;
+          _currentTitle = displayTitle;
+          _currentTitleStatic = displayTitle;
+          if (_tabs.isNotEmpty) {
+            final currentIndex = _tabs.indexWhere((t) => t.isCurrent);
+            if (currentIndex >= 0) {
+              _tabs[currentIndex] = _tabs[currentIndex].copyWith(url: displayUrl, title: displayTitle);
+              _tabsStatic = _tabs;
+            }
+          }
+        });
+      }
+    };
+    setState(() {
+      _loadingStep = LoadingStep.serverSuccess;
+      _loadingStepStatic = _loadingStep;
+      _loadingLog.add(i18n.t('loading_server_success'));
+      _loadingLogStatic.add(i18n.t('loading_server_success'));
+    });
+    print('Local server started successfully');
+    
+    // 加载成功，重置重试计数
+    _resetRetryCount();
     
     // 3. 等待网站响应
     setState(() {
@@ -890,14 +1001,14 @@ class _WebViewContainerState extends State<WebViewContainer>
     print('[NYANYA-RECOVERY] _performRecovery() called');
     _lastRecoveryTime = DateTime.now();
     _lastRecoveryTimeStatic = _lastRecoveryTime;
-    
+
     setState(() {
       _isLoading = true;
       _isLoadingStatic = _isLoading;
       _loadingLog.clear();
       _loadingLogStatic.clear();
     });
-    
+
     // 重新设置超时计时器（防止前端不调用closeLoading导致loading一直显示）
     _loadTimeoutTimer?.cancel();
     _loadTimeoutTimer = Timer(const Duration(seconds: 15), () {
@@ -909,9 +1020,23 @@ class _WebViewContainerState extends State<WebViewContainer>
         });
       }
     });
-    
+
+    // 步骤0: 如果 GeckoView 内核不健康，先清理旧的 GeckoRuntime
+    final kernelHealthy = await checkKernelHealth();
+    if (!kernelHealthy) {
+      print('[NYANYA-RECOVERY] Kernel unhealthy, shutting down old GeckoRuntime first');
+      try {
+        await _channel?.invokeMethod('shutdownGeckoRuntime');
+        print('[NYANYA-RECOVERY] GeckoRuntime shutdown successfully');
+      } catch (e) {
+        print('[NYANYA-RECOVERY] GeckoRuntime shutdown failed: $e');
+      }
+      // 等待一小段时间确保资源被清理
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+
     final i18n = BridgeController().i18nService;
-    
+
     try {
       // 步骤1: 重启本地服务
       setState(() {
@@ -920,17 +1045,17 @@ class _WebViewContainerState extends State<WebViewContainer>
       });
       await LocalServer.instance.restart();
       print('Server restarted successfully');
-      
+
       setState(() {
         _loadingLog.add(i18n.t('loading_server_success'));
         _loadingLogStatic.add(i18n.t('loading_server_success'));
         _loadingLog.add(i18n.t('loading_web'));
         _loadingLogStatic.add(i18n.t('loading_web'));
       });
-      
+
       // 等待服务启动
       await Future.delayed(const Duration(milliseconds: 300));
-      
+
       // 步骤2: 重新加载页面
       _reloadWebView();
       
