@@ -169,20 +169,35 @@ void main() async {
   final i18nService = BridgeController().i18nService;
   _appTitle = i18nService.t('app_title');
   
-  // 先访问 LocalServer.instance 确保单例初始化（端口已确定）
-  final localServerUrl = LocalServer.instance.url;
-  _initialUrl = BridgeController().languageService.getLocalizedUrl(localServerUrl);
+  // 获取自定义 host（如果有）
+  final customHost = await BridgeController().getCustomHost();
+  String? baseUrl;
+  
+  if (customHost != null && customHost.isNotEmpty) {
+    // 使用自定义 host
+    baseUrl = customHost;
+    print('Using custom host: $baseUrl');
+  } else {
+    // 先访问 LocalServer.instance 确保单例初始化（端口已确定）
+    final localServerUrl = LocalServer.instance.url;
+    baseUrl = localServerUrl;
+    print('Using local server: $baseUrl');
+  }
+  
+  _initialUrl = BridgeController().languageService.getLocalizedUrl(baseUrl);
   
   // 初始化前台服务（提升应用在后台的存活概率）- 需要 i18n
   // await _initForegroundTask(i18nService); // 暂时禁用
   
-  // 启动本地服务（带重试机制）
-  try {
-    await LocalServer.instance.start();
-    print('Local server started successfully on $localServerUrl');
-  } catch (e) {
-    print('Failed to start local server after retries: $e');
-    await _showNotification(i18nService.t('service_start_failed_title'), i18nService.t('service_start_failed_content'));
+  // 启动本地服务（带重试机制），只有在使用本地服务时才需要
+  if (customHost == null || customHost.isEmpty) {
+    try {
+      await LocalServer.instance.start();
+      print('Local server started successfully on $baseUrl');
+    } catch (e) {
+      print('Failed to start local server after retries: $e');
+      await _showNotification(i18nService.t('service_start_failed_title'), i18nService.t('service_start_failed_content'));
+    }
   }
   
   final brightness =
@@ -546,9 +561,131 @@ class _WebViewContainerState extends State<WebViewContainer>
         }
       }
     });
+
+    BridgeController().setLocalWebResourcesUpdateProgressCallback((progress, stage, receivedBytes, totalBytes) {
+      _updateLocalWebResourcesProgress(progress, stage, receivedBytes, totalBytes);
+    });
+
+    BridgeController().setLocalWebResourcesUpdateCompleteCallback((success, error) {
+      _closeLocalWebResourcesUpdateDialog();
+    });
   }
 
   bool _isCheckingUpdateDialogOpen = false;
+
+  bool _isLocalWebResourcesUpdateDialogOpen = false;
+  final ValueNotifier<int> _localWebResourcesUpdateProgress = ValueNotifier(0);
+  final ValueNotifier<String> _localWebResourcesUpdateStage = ValueNotifier('downloading');
+  final ValueNotifier<int> _localWebResourcesReceivedBytes = ValueNotifier(0);
+  final ValueNotifier<int> _localWebResourcesTotalBytes = ValueNotifier(0);
+
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return '0 B';
+    const suffixes = ['B', 'KB', 'MB', 'GB'];
+    var i = 0;
+    double size = bytes.toDouble();
+    while (size >= 1024 && i < suffixes.length - 1) {
+      size /= 1024;
+      i++;
+    }
+    return '${size.toStringAsFixed(i == 0 ? 0 : 2)} ${suffixes[i]}';
+  }
+
+  void _showLocalWebResourcesUpdateDialog() {
+    if (_isLocalWebResourcesUpdateDialogOpen) return;
+    _isLocalWebResourcesUpdateDialogOpen = true;
+    _localWebResourcesUpdateProgress.value = 0;
+    _localWebResourcesUpdateStage.value = 'downloading';
+    _localWebResourcesReceivedBytes.value = 0;
+    _localWebResourcesTotalBytes.value = 0;
+    final i18n = BridgeController().i18nService;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(i18n.t('hot_update_title')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ValueListenableBuilder<String>(
+                valueListenable: _localWebResourcesUpdateStage,
+                builder: (context, stage, child) {
+                  return Text(stage == 'downloading' 
+                      ? i18n.t('hot_update_downloading')
+                      : i18n.t('hot_update_extracting'));
+                },
+              ),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<int>(
+                valueListenable: _localWebResourcesUpdateProgress,
+                builder: (context, progress, child) {
+                  return LinearProgressIndicator(value: progress / 100);
+                },
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  ValueListenableBuilder<int>(
+                    valueListenable: _localWebResourcesUpdateProgress,
+                    builder: (context, progress, child) {
+                      return Text(i18n.t('hot_update_download_progress', {'progress': '$progress'}));
+                    },
+                  ),
+                  ValueListenableBuilder<String>(
+                    valueListenable: _localWebResourcesUpdateStage,
+                    builder: (context, stage, child) {
+                      if (stage != 'downloading') {
+                        return const SizedBox.shrink();
+                      }
+                      return ValueListenableBuilder<int>(
+                        valueListenable: _localWebResourcesReceivedBytes,
+                        builder: (context, received, child) {
+                          return ValueListenableBuilder<int>(
+                            valueListenable: _localWebResourcesTotalBytes,
+                            builder: (context, total, child) {
+                              if (total <= 0) {
+                                return const SizedBox.shrink();
+                              }
+                              return Text(
+                                '${_formatBytes(received)} / ${_formatBytes(total)}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _updateLocalWebResourcesProgress(int progress, String stage, int receivedBytes, int totalBytes) {
+    print('[Main] Update progress: $progress% (stage: $stage, $receivedBytes/$totalBytes)');
+    if (!_isLocalWebResourcesUpdateDialogOpen) {
+      _showLocalWebResourcesUpdateDialog();
+    }
+    _localWebResourcesUpdateProgress.value = progress;
+    _localWebResourcesUpdateStage.value = stage;
+    _localWebResourcesReceivedBytes.value = receivedBytes;
+    _localWebResourcesTotalBytes.value = totalBytes;
+  }
+
+  void _closeLocalWebResourcesUpdateDialog() {
+    if (_isLocalWebResourcesUpdateDialogOpen) {
+      Navigator.of(context, rootNavigator: true).pop();
+      _isLocalWebResourcesUpdateDialogOpen = false;
+    }
+  }
 
   void _showCheckingUpdateDialog() {
     if (_isCheckingUpdateDialogOpen) return;

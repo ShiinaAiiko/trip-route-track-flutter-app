@@ -73,6 +73,18 @@ class AppTranslations {
       'update_no_new_version_title': '已是最新版本',
       'update_no_new_version_content': '当前版本 {version} 已是最新版本',
       'confirm': '确定',
+      // 静态资源热更新
+      'hot_update_title': '正在更新',
+      'hot_update_downloading': '正在下载资源包...',
+      'hot_update_download_progress': '下载进度：{progress}%',
+      'hot_update_extracting': '正在解压资源包...',
+      'hot_update_success': '更新成功，正在重启应用...',
+      'hot_update_failed': '更新失败：{error}',
+      'hot_update_channel_name': '资源更新',
+      'hot_update_channel_description': '静态资源热更新进度',
+      // 通知
+      'custom_notification_channel_name': '自定义通知',
+      'custom_notification_channel_description': '前端发送的自定义通知',
     },
     'en-US': {
       'app_title': 'Trip Route Track',
@@ -148,6 +160,18 @@ class AppTranslations {
       'update_no_new_version_title': 'Already up to date',
       'update_no_new_version_content': 'Current version {version} is already the latest',
       'confirm': 'OK',
+      // Static resource hot update
+      'hot_update_title': 'Updating',
+      'hot_update_downloading': 'Downloading resource package...',
+      'hot_update_download_progress': 'Progress: {progress}%',
+      'hot_update_extracting': 'Extracting resource package...',
+      'hot_update_success': 'Update successful, restarting app...',
+      'hot_update_failed': 'Update failed: {error}',
+      'hot_update_channel_name': 'Resource Update',
+      'hot_update_channel_description': 'Static resource hot update progress',
+      // Notifications
+      'custom_notification_channel_name': 'Custom Notifications',
+      'custom_notification_channel_description': 'Custom notifications sent from frontend',
     },
     'zh-TW': {
       'app_title': '行程路線軌跡',
@@ -223,6 +247,18 @@ class AppTranslations {
       'update_no_new_version_title': '已是最新版本',
       'update_no_new_version_content': '當前版本 {version} 已是最新版本',
       'confirm': '確定',
+      // 靜態資源熱更新
+      'hot_update_title': '正在更新',
+      'hot_update_downloading': '正在下載資源包...',
+      'hot_update_download_progress': '下載進度：{progress}%',
+      'hot_update_extracting': '正在解壓資源包...',
+      'hot_update_success': '更新成功，正在重啟應用...',
+      'hot_update_failed': '更新失敗：{error}',
+      'hot_update_channel_name': '資源更新',
+      'hot_update_channel_description': '靜態資源熱更新進度',
+      // 通知
+      'custom_notification_channel_name': '自訂通知',
+      'custom_notification_channel_description': '前端發送的自訂通知',
     },
   };
 

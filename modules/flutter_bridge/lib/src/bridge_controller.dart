@@ -1,11 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:i18n/i18n.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:archive/archive.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'bridge_message.dart';
 import 'services/keep_awake_service.dart';
 import 'services/background_service.dart';
@@ -19,6 +26,9 @@ typedef FlutterMethodCallHandler = void Function(MethodCall call);
 typedef StatusBarChangeHandler = void Function(String type);
 typedef UpdateCheckCallback = void Function(VersionInfo? versionInfo, String currentVersion, bool showCheckingNotification);
 typedef UpdateCheckingCallback = void Function();
+typedef LocalWebResourcesUpdateProgressCallback = void Function(int progress, String stage, int receivedBytes, int totalBytes);
+typedef LocalWebResourcesUpdateCompleteCallback = void Function(bool success, String? error);
+typedef SwitchResourcesCallback = void Function(String host);
 
 class BridgeController {
   static final BridgeController _instance = BridgeController._internal();
@@ -42,6 +52,9 @@ class BridgeController {
   StreamSubscription<Map<String, dynamic>>? _carDataSubscription;
   UpdateCheckCallback? _updateCheckCallback;
   UpdateCheckingCallback? _updateCheckingCallback;
+  LocalWebResourcesUpdateProgressCallback? _localWebResourcesUpdateProgressCallback;
+  LocalWebResourcesUpdateCompleteCallback? _localWebResourcesUpdateCompleteCallback;
+  SwitchResourcesCallback? _switchResourcesCallback;
 
   bool _enableLocation = false;
   bool _enableBackgroundLocation = false;
@@ -105,6 +118,18 @@ class BridgeController {
     _updateCheckingCallback = callback;
   }
 
+  void setLocalWebResourcesUpdateProgressCallback(LocalWebResourcesUpdateProgressCallback callback) {
+    _localWebResourcesUpdateProgressCallback = callback;
+  }
+
+  void setLocalWebResourcesUpdateCompleteCallback(LocalWebResourcesUpdateCompleteCallback? callback) {
+    _localWebResourcesUpdateCompleteCallback = callback;
+  }
+
+  void setSwitchResourcesCallback(SwitchResourcesCallback? callback) {
+    _switchResourcesCallback = callback;
+  }
+
   void handleWebMessage(String messageString) {
     _handleWebMessage(messageString);
   }
@@ -118,10 +143,14 @@ class BridgeController {
     }
   }
 
-  Future<void> sendMessage(String type, dynamic payload) async {
+  Future<void> sendMessage(String type, dynamic payload, {String? bridgeId}) async {
     if (_channel == null) return;
 
-    final message = BridgeMessage(type: type, payload: payload);
+    final message = BridgeMessage(
+      type: type,
+      payload: payload,
+      bridgeId: bridgeId,
+    );
     final jsonString = jsonEncode(message.toJson());
 
     await _channel?.invokeMethod('postMessage', {
@@ -466,12 +495,12 @@ Future<void> _handleLoadMessage() async {
     _statusBarChangeHandler?.call(type);
   }
 
-  void _handleGetThemeColor() {
+  void _handleGetThemeColor({String? bridgeId}) {
     final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-    sendMessage('getThemeColor', brightness == Brightness.dark ? 'dark' : 'light');
+    sendMessage('getThemeColor', brightness == Brightness.dark ? 'dark' : 'light', bridgeId: bridgeId);
   }
 
-  void _handleGetStatusBarData() {
+  void _handleGetStatusBarData({String? bridgeId}) {
     final mediaQuery = MediaQueryData.fromWindow(WidgetsBinding.instance.window);
     final statusBarHeight = mediaQuery.padding.top;
     final bottomPadding = mediaQuery.padding.bottom;
@@ -499,7 +528,7 @@ Future<void> _handleLoadMessage() async {
       'safeAreaTop': statusBarHeight,
       'safeAreaBottom': bottomPadding,
     };
-    sendMessage('getStatusBarData', statusBarData);
+    sendMessage('getStatusBarData', statusBarData, bridgeId: bridgeId);
   }
 
   Future<void> _handleCheckNewVersion({bool showCheckingNotification = true}) async {
@@ -559,6 +588,211 @@ Future<void> _handleLoadMessage() async {
     sendMessage('skipVersion', version);
   }
 
+  static const String _prefsKeyCustomHost = 'custom_host';
+  String? _customHost;
+
+  Future<void> _handleSwitchResources(String host, {String? bridgeId}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _customHost = host;
+      await prefs.setString(_prefsKeyCustomHost, host);
+      _switchResourcesCallback?.call(host);
+      sendMessage('switchResources', {'success': true, 'host': host}, bridgeId: bridgeId);
+    } catch (e) {
+      sendMessage('switchResources', {'success': false, 'error': e.toString()}, bridgeId: bridgeId);
+    }
+  }
+
+  Future<String?> getCustomHost() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_prefsKeyCustomHost);
+  }
+
+  Future<void> _handleUpdateLocalWebResources(String downloadUrl, {String? bridgeId}) async {
+    try {
+      print('[Bridge] Starting download: $downloadUrl');
+      _localWebResourcesUpdateProgressCallback?.call(0, 'downloading', 0, 0);
+      sendMessage('updateLocalWebResourcesDownloading', {'progress': 0}, bridgeId: bridgeId);
+
+      final client = http.Client();
+      final response = await client.send(http.Request('GET', Uri.parse(downloadUrl)));
+      final total = response.contentLength ?? 0;
+      var received = 0;
+      final bytes = <int>[];
+      
+      print('[Bridge] Total content length: $total bytes');
+
+      await for (var chunk in response.stream) {
+        bytes.addAll(chunk);
+        received += chunk.length;
+        final progress = total > 0 ? ((received / total) * 100).round() : 0;
+        print('[Bridge] Download progress: $progress% ($received/$total)');
+        _localWebResourcesUpdateProgressCallback?.call(progress, 'downloading', received, total);
+        sendMessage('updateLocalWebResourcesDownloading', {'progress': progress}, bridgeId: bridgeId);
+      }
+
+      client.close();
+      
+      print('[Bridge] Download complete');
+      _localWebResourcesUpdateProgressCallback?.call(100, 'downloading', total, total);
+      sendMessage('updateLocalWebResourcesDownloading', {'progress': 100}, bridgeId: bridgeId);
+
+      _localWebResourcesUpdateProgressCallback?.call(0, 'extracting', 0, 0);
+      sendMessage('updateLocalWebResourcesExtracting', {'progress': 0}, bridgeId: bridgeId);
+
+      final dir = await getApplicationDocumentsDirectory();
+      final tempDir = Directory('${dir.path}/temp_update');
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+      await tempDir.create(recursive: true);
+
+      final archive = TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
+      final totalFiles = archive.files.where((f) => f.isFile).length;
+      var extractedFiles = 0;
+
+      for (final file in archive) {
+        if (file.isFile) {
+          String fileName = file.name;
+          if (fileName.startsWith('./')) {
+            fileName = fileName.substring(2);
+          }
+          final filePath = '${tempDir.path}/$fileName';
+          final outFile = File(filePath);
+          await outFile.create(recursive: true);
+          await outFile.writeAsBytes(file.content as List<int>);
+          extractedFiles++;
+          final progress = ((extractedFiles / totalFiles) * 100).round();
+          _localWebResourcesUpdateProgressCallback?.call(progress, 'extracting', 0, 0);
+          sendMessage('updateLocalWebResourcesExtracting', {'progress': progress}, bridgeId: bridgeId);
+        }
+      }
+
+      _localWebResourcesUpdateProgressCallback?.call(100, 'extracting', 0, 0);
+      sendMessage('updateLocalWebResourcesExtracting', {'progress': 100}, bridgeId: bridgeId);
+
+      final staticDir = Directory('${dir.path}/static_resources');
+      if (await staticDir.exists()) {
+        await staticDir.delete(recursive: true);
+      }
+      await tempDir.rename(staticDir.path);
+
+      _localWebResourcesUpdateCompleteCallback?.call(true, null);
+      sendMessage('updateLocalWebResourcesCompleted', {'success': true}, bridgeId: bridgeId);
+    } catch (e) {
+      _localWebResourcesUpdateCompleteCallback?.call(false, e.toString());
+      sendMessage('updateLocalWebResourcesCompleted', {'success': false, 'error': e.toString()}, bridgeId: bridgeId);
+    }
+  }
+
+  Future<Directory?> getStaticResourcesDir() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final staticDir = Directory('${dir.path}/static_resources');
+    if (await staticDir.exists()) {
+      return staticDir;
+    }
+    return null;
+  }
+
+  Future<void> _handleRestartApp() async {
+    const MethodChannel channel = MethodChannel('flutter_bridge');
+    await channel.invokeMethod('restartApp');
+  }
+
+  Future<void> _handleQuitApp() async {
+    const MethodChannel channel = MethodChannel('flutter_bridge');
+    await channel.invokeMethod('quitApp');
+  }
+
+  Future<void> _handleSendNotification(Map<String, dynamic> payload, {String? bridgeId}) async {
+    try {
+      final id = payload['id'] is int ? payload['id'] : (payload['id'] is String ? int.tryParse(payload['id']) : null) ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final title = payload['title']?.toString() ?? '';
+      final body = payload['body']?.toString() ?? '';
+      final ongoing = payload['ongoing'] as bool? ?? false;
+      final closable = payload['closable'] as bool? ?? true;
+      final autoCloseTimeout = payload['autoCloseTimeout'] as int?;
+      final channelId = payload['channelId']?.toString() ?? 'trip_route_channel';
+      final channelName = payload['channelName']?.toString() ?? 'Trip Route';
+      final channelDescription = payload['channelDescription']?.toString() ?? 'Trip Route Track Notifications';
+      final priority = _parsePriority(payload['priority']);
+      final sound = payload['sound'];
+      final vibrate = payload['vibrate'] as bool? ?? true;
+      final badge = payload['badge'] as int?;
+      final clickActionType = payload['clickActionType']?.toString();
+      final clickActionUrl = payload['clickActionUrl']?.toString();
+      final extra = payload['extra'] as Map<String, dynamic>?;
+
+      final AndroidNotificationDetails androidNotificationDetails = AndroidNotificationDetails(
+        channelId,
+        channelName,
+        channelDescription: channelDescription,
+        importance: priority,
+        priority: Priority.defaultPriority,
+        ticker: 'ticker',
+        ongoing: ongoing,
+        autoCancel: !ongoing && closable,
+        channelShowBadge: true,
+        onlyAlertOnce: true,
+        vibrationPattern: vibrate ? null : Int64List(0),
+        number: badge,
+      );
+
+      await NotificationService().showNotification(
+        title: title,
+        body: body,
+        id: id,
+        ongoing: ongoing,
+        androidDetails: androidNotificationDetails,
+      );
+
+      if (autoCloseTimeout != null && autoCloseTimeout > 0 && !ongoing) {
+        Future.delayed(Duration(milliseconds: autoCloseTimeout), () {
+          NotificationService().cancelNotification(id);
+        });
+      }
+
+      sendMessage('sendNotification', {'success': true, 'id': id}, bridgeId: bridgeId);
+    } catch (e) {
+      sendMessage('sendNotification', {'success': false, 'error': e.toString()}, bridgeId: bridgeId);
+    }
+  }
+
+  Importance _parsePriority(dynamic priority) {
+    switch (priority) {
+      case 'min':
+        return Importance.min;
+      case 'low':
+        return Importance.low;
+      case 'high':
+        return Importance.high;
+      case 'max':
+        return Importance.max;
+      default:
+        return Importance.defaultImportance;
+    }
+  }
+
+  Future<void> _handleCancelNotification(dynamic id, {String? bridgeId}) async {
+    try {
+      int? notificationId;
+      if (id is int) {
+        notificationId = id;
+      } else if (id is String) {
+        notificationId = int.tryParse(id);
+      }
+
+      if (notificationId != null) {
+        await NotificationService().cancelNotification(notificationId);
+        sendMessage('cancelNotification', {'success': true}, bridgeId: bridgeId);
+      } else {
+        sendMessage('cancelNotification', {'success': false, 'error': 'Invalid notification ID'}, bridgeId: bridgeId);
+      }
+    } catch (e) {
+      sendMessage('cancelNotification', {'success': false, 'error': e.toString()}, bridgeId: bridgeId);
+    }
+  }
+
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'onWebMessage':
@@ -573,6 +807,9 @@ Future<void> _handleLoadMessage() async {
       final Map<String, dynamic> json = jsonDecode(messageString) as Map<String, dynamic>;
       final message = BridgeMessage.fromJson(json);
       
+      // 提取 bridgeId
+      final bridgeId = message.bridgeId;
+      
       print('message.type ${message.type}');
       switch (message.type) {
         case 'load':
@@ -584,7 +821,8 @@ Future<void> _handleLoadMessage() async {
           _dispatchMessage(message);
           break;
         case 'keepScreenOn':
-          _handleKeepScreenOn(message.payload as bool);
+          final keepOn = message.payload as bool;
+          _handleKeepScreenOn(keepOn);
           _dispatchMessage(message);
           break;
         case 'enableBackgroundLocation':
@@ -593,20 +831,25 @@ Future<void> _handleLoadMessage() async {
           _dispatchMessage(message);
           break;
         case 'enableBackgroundTasks':
-          _backgroundService.setEnableBackgroundTasks(message.payload as bool);
-          if (message.payload as bool) {
+          final enable = message.payload as bool;
+          _backgroundService.setEnableBackgroundTasks(enable);
+          if (enable) {
             _backgroundStartTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
             _backgroundLocationCount = 0;
           }
           _dispatchMessage(message);
           break;
         case 'setLanguage':
-          _languageService.setLanguage(message.payload as String);
-          _i18nService.setLanguage(message.payload as String);
+          final lang = message.payload as String?;
+          if (lang != null) {
+            _languageService.setLanguage(lang);
+            _i18nService.setLanguage(lang);
+          }
           _dispatchMessage(message);
           break;
         case 'enableCarData':
-          if (message.payload == true) {
+          final enableCar = message.payload as bool;
+          if (enableCar) {
             _vehicleService.startCarDataUpdates();
           } else {
             _vehicleService.stopCarDataUpdates();
@@ -618,15 +861,18 @@ Future<void> _handleLoadMessage() async {
           _dispatchMessage(message);
           break;
         case 'setStatusBar':
-          _handleSetStatusBar(message.payload as String);
+          final statusType = message.payload as String?;
+          if (statusType != null) {
+            _handleSetStatusBar(statusType);
+          }
           _dispatchMessage(message);
           break;
         case 'getStatusBarData':
-          _handleGetStatusBarData();
+          _handleGetStatusBarData(bridgeId: bridgeId);
           _dispatchMessage(message);
           break;
         case 'getThemeColor':
-          _handleGetThemeColor();
+          _handleGetThemeColor(bridgeId: bridgeId);
           _dispatchMessage(message);
           break;
         case 'checkNewVersion':
@@ -634,6 +880,39 @@ Future<void> _handleLoadMessage() async {
               ? (message.payload as Map)['showCheckingNotification'] as bool? ?? true
               : true;
           _handleCheckNewVersion(showCheckingNotification: showCheckingNotification);
+          _dispatchMessage(message);
+          break;
+        case 'switchResources':
+          final host = message.payload as String?;
+          if (host != null) {
+            _handleSwitchResources(host, bridgeId: bridgeId);
+          }
+          _dispatchMessage(message);
+          break;
+        case 'updateLocalWebResources':
+          final url = message.payload as String?;
+          if (url != null) {
+            _handleUpdateLocalWebResources(url, bridgeId: bridgeId);
+          }
+          _dispatchMessage(message);
+          break;
+        case 'restartApp':
+          _handleRestartApp();
+          _dispatchMessage(message);
+          break;
+        case 'quitApp':
+          _handleQuitApp();
+          _dispatchMessage(message);
+          break;
+        case 'sendNotification':
+          if (message.payload is Map) {
+            _handleSendNotification(message.payload as Map<String, dynamic>, bridgeId: bridgeId);
+          }
+          _dispatchMessage(message);
+          break;
+        case 'cancelNotification':
+          final cancelId = message.payload;
+          _handleCancelNotification(cancelId, bridgeId: bridgeId);
           _dispatchMessage(message);
           break;
         default:

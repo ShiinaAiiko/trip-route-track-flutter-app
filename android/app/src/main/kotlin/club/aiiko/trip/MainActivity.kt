@@ -108,6 +108,16 @@ class MainActivity : FlutterActivity() {
                     installApk(path)
                     result.success(null)
                 }
+                "restartApp" -> {
+                    sendCarLog("收到 restartApp 调用 (flutter_bridge)")
+                    restartApp()
+                    result.success(null)
+                }
+                "quitApp" -> {
+                    sendCarLog("收到 quitApp 调用 (flutter_bridge)")
+                    quitApp()
+                    result.success(null)
+                }
                 else -> {
                     sendCarLog("未实现的方法调用 (flutter_bridge): ${call.method}")
                     result.notImplemented()
@@ -397,5 +407,23 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+    }
+
+    private fun restartApp() {
+        sendCarLog("restartApp 被调用")
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+        if (intent == null) {
+            sendCarLog("restartApp 失败: intent 为空")
+            return
+        }
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        startActivity(intent)
+        sendCarLog("restartApp 已启动新 Activity，准备退出")
+        System.exit(0)
+    }
+
+    private fun quitApp() {
+        sendCarLog("quitApp 被调用")
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 }

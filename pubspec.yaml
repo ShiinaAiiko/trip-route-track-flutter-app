@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.6+51
+version: 1.0.7+85
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -45,18 +45,20 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
+    - assets/out/_next/97EAWkS78zgIFWf2KAVBs/
     - assets/out/_next/data/
-    - assets/out/_next/data/vqeaJakWTtMLiEoPz069E/
-    - assets/out/_next/data/vqeaJakWTtMLiEoPz069E/en-US/
-    - assets/out/_next/data/vqeaJakWTtMLiEoPz069E/en-US/journeyMemories/
-    - assets/out/_next/data/vqeaJakWTtMLiEoPz069E/en-US/trip/
-    - assets/out/_next/data/vqeaJakWTtMLiEoPz069E/zh-CN/
-    - assets/out/_next/data/vqeaJakWTtMLiEoPz069E/zh-CN/journeyMemories/
-    - assets/out/_next/data/vqeaJakWTtMLiEoPz069E/zh-CN/trip/
-    - assets/out/_next/data/vqeaJakWTtMLiEoPz069E/zh-TW/
-    - assets/out/_next/data/vqeaJakWTtMLiEoPz069E/zh-TW/journeyMemories/
-    - assets/out/_next/data/vqeaJakWTtMLiEoPz069E/zh-TW/trip/
+    - assets/out/_next/data/97EAWkS78zgIFWf2KAVBs/
+    - assets/out/_next/data/97EAWkS78zgIFWf2KAVBs/en-US/
+    - assets/out/_next/data/97EAWkS78zgIFWf2KAVBs/en-US/journeyMemories/
+    - assets/out/_next/data/97EAWkS78zgIFWf2KAVBs/en-US/trip/
+    - assets/out/_next/data/97EAWkS78zgIFWf2KAVBs/zh-CN/
+    - assets/out/_next/data/97EAWkS78zgIFWf2KAVBs/zh-CN/journeyMemories/
+    - assets/out/_next/data/97EAWkS78zgIFWf2KAVBs/zh-CN/trip/
+    - assets/out/_next/data/97EAWkS78zgIFWf2KAVBs/zh-TW/
+    - assets/out/_next/data/97EAWkS78zgIFWf2KAVBs/zh-TW/journeyMemories/
+    - assets/out/_next/data/97EAWkS78zgIFWf2KAVBs/zh-TW/trip/
     - assets/out/_next/static/
+    - assets/out/_next/static/97EAWkS78zgIFWf2KAVBs/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/
@@ -65,8 +67,6 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
-    - assets/out/_next/static/vqeaJakWTtMLiEoPz069E/
-    - assets/out/_next/vqeaJakWTtMLiEoPz069E/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/

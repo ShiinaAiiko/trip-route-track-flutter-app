@@ -19,6 +19,7 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 
 data class TabSession(
@@ -63,7 +64,10 @@ class TabManager(
 
     fun createNewTab(url: String): TabSession {
         Log.d(TAG, "Creating new tab for URL: $url")
-        val session = GeckoSession()
+        val sessionSettings = GeckoSessionSettings.Builder()
+            .usePrivateMode(false)
+            .build()
+        val session = GeckoSession(sessionSettings)
         session.open(GeckoViewPlatform.getRuntime(context))
 
         val tabSession = TabSession(session, url, "")
@@ -307,7 +311,10 @@ class TabManager(
         session.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onNewSession(s: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
                 Log.d(TAG, "onNewSession called: $uri")
-                val newSession = GeckoSession()
+                val sessionSettings = GeckoSessionSettings.Builder()
+                    .usePrivateMode(false)
+                    .build()
+                val newSession = GeckoSession(sessionSettings)
                 setupSession(newSession, serverPort)
                 addTab(newSession, uri)
                 return GeckoResult.fromValue(newSession)
@@ -476,6 +483,7 @@ class GeckoViewPlatform(
                             val settings = GeckoRuntimeSettings.Builder()
                                 .javaScriptEnabled(true)
                                 .remoteDebuggingEnabled(true)
+                                .configFilePath(null)
                                 .build()
                             geckoRuntime = GeckoRuntime.create(context.applicationContext, settings)
                             Log.d("GeckoViewPlatform", "GeckoRuntime created successfully")
@@ -528,7 +536,10 @@ class GeckoViewPlatform(
 
         // 创建初始会话并设置到 tab manager
         val initialUrl = creationParams?.get("initialUrl") as? String ?: "http://localhost:8080/"
-        val session = GeckoSession()
+        val sessionSettings = GeckoSessionSettings.Builder()
+            .usePrivateMode(false)
+            .build()
+        val session = GeckoSession(sessionSettings)
         session.open(getRuntime(context))
         tabManager.setupSession(session, serverPort)
         val tabSession = TabSession(session, initialUrl, "")

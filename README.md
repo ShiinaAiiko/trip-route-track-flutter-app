@@ -1,6 +1,6 @@
 # 行程路线轨迹 Flutter App
 
-这是一个使用 Flutter 开发的行程路线轨迹记录应用，主要功能是加载本地静态网页，提供 GPS 定位、车辆数据获取等功能。
+这是一个使用 Flutter 开发的行程路线轨迹记录应用，主要功能是加载本地静态网页，提供 GPS 定位、车辆数据获取、热更新等功能。
 
 ## 主要功能
 
@@ -24,6 +24,11 @@
 - ✅ **Shadcn UI Toast 组件**（退出提示、分享成功提示）
 - ✅ App 自动更新系统（版本检查、下载、安装）
 - ⚠️ 前台服务（暂时禁用 - MIUI 兼容性问题）
+- ✅ **域名切换**（switchResources）- 支持本地/云端域名切换，持久化存储
+- ✅ **本地资源热更新**（updateLocalWebResources）- 下载 tgz 包，显示下载/解压进度
+- ✅ **App 重启/退出**（restartApp/quitApp）- 完整的 App 生命周期控制
+- ✅ **通知控制**（sendNotification/cancelNotification）- 灵活的通知管理
+- ✅ **混合内容访问支持** - HTTPS 页面可访问 localhost 的 HTTP 资源
 
 ## 技术栈
 

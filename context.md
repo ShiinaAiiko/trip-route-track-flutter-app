@@ -738,12 +738,61 @@ Flutter 返回：
 
 ## 待解决问题
 
+### ✅ 已解决问题
+
+1. **bridgeId 消息传递问题**（已解决）：
+   - **问题**：前端发送消息包含 `bridgeId`，Flutter 返回时未正确传递，导致前端无法匹配响应
+   - **原因**：GeckoView 执行 JS 时，JSON 字符串未用引号包裹，导致 JS 解析错误
+   - **修复**：
+     - JSON 字符串用单引号包裹
+     - 转义 JSON 字符串中的单引号
+   - **关键代码**：`GeckoViewPlatform.kt` 的 `postMessage` 方法
+
+2. **热更新进度 UI 更新问题**（已解决）：
+   - **问题**：进度在更新但对话框 UI 不刷新
+   - **原因**：`showDialog` 创建的对话框捕获初始状态，外部 setState 无法触发对话框内部重建
+   - **修复**：使用 `ValueNotifier` + `ValueListenableBuilder` 实现对话框内部状态更新
+
+3. **重启 App 闪退问题**（已解决）：
+   - **问题**：调用 `restartApp` 时 App 直接闪退
+   - **原因**：Alarm 方式重启不稳定
+   - **修复**：改为直接 `startActivity` + `System.exit(0)`
+
+4. **混合内容访问问题**（已解决）：
+   - **问题**：HTTPS 页面无法访问 localhost 的 HTTP 资源
+   - **修复**：在 GeckoView 设置 `javaScript.setAllowInsecureConnections(GeckoRuntimeSettings.ALLOW_ALL)`
+
+5. **外接充电量数据获取**（✅ 已实现）：
+   - 通过 `AbsBYDAutoInstrumentListener` 监听 `onExternalChargingPowerChanged` 事件
+   - 整合到 `carData` 中，字段名为 `externalChargingPower`
+   - 详见"比亚迪车辆数据功能"章节
+
+### ⚠️ 待测试验证
+
+1. **热更新功能完整流程**：
+   - 下载进度显示（包括字节数）
+   - 解压进度显示
+   - 资源替换后加载效果
+   - 前端决定是否重启 App
+
+2. **restartApp 和 quitApp 可靠性**：
+   - 重启是否能正确恢复状态
+   - quitApp 是否彻底关闭进程
+
+3. **switchResources 域名切换**：
+   - 持久化存储是否正常
+   - 下次启动是否正确加载上次选择的域名
+   - 云端域名访问时 JS Bridge 是否正常工作
+
+### 🚧 开发中/待排查
+
 1. **比亚迪车机 API 数据获取问题**：
    - 权限检查通过但无法获取车辆数据
    - 可能原因：
      - 签名不匹配（车机使用自定义签名而非标准平台签名）
      - 包名未在车机白名单中
      - API 调用方式不正确
+   - 已新增完整日志系统（通过 `bydLog` 消息），便于调试
    - 待在真实比亚迪车机上进行测试验证
 
 2. **输入法收起后底部黑色区域问题**：
@@ -754,12 +803,6 @@ Flutter 返回：
 3. **前台服务与 MIUI 兼容性问题**（⚠️ 开发中）：
    - `flutter_foreground_task` 插件与 MIUI 系统不兼容
    - 症状：调用 `FlutterForegroundTask.startService()` 时触发 MIUI 系统日志权限检查，导致 `Process is going to kill itself!` 崩溃
-   - 错误日志：
-     ```
-     W/FileUtils: Failed to chmod(/data/miuilog/stability/jetrace)
-     W/RuntimeInitImpl: dump java trace fail
-     I/Process: Process is going to kill itself!
-     ```
    - 当前状态：**前台服务已暂时禁用**
    - 状态检测逻辑仍然正常工作，可以确保 App 返回时正确恢复状态
 
@@ -781,10 +824,157 @@ Flutter 返回：
    - **原因分析**：`AnimatedSize` 在 Column 中可能导致整个布局树重新计算，影响性能
    - **当前状态**：已实现但效果不理想，待优化
 
-6. **外接充电量数据获取**（✅ 已实现）：
-   - 通过 `AbsBYDAutoInstrumentListener` 监听 `onExternalChargingPowerChanged` 事件
-   - 整合到 `carData` 中，字段名为 `externalChargingPower`
-   - 详见"比亚迪车辆数据功能"章节
+---
+
+## 前端 JS Bridge SDK 新增方法
+
+**功能概述**：实现了前端 SDK 新增的完整方法集，支持域名切换、本地资源热更新、App 重启等功能
+
+**新增方法**：
+
+| 方法名 | 功能说明 |
+|--------|----------|
+| `switchResources` | 切换主页域名（本地静态服务/云端），持久化存储用户选择 |
+| `updateLocalWebResources` | 下载并切换本地静态资源（热更新），显示下载和解压进度 |
+| `restartApp` | 重启 App |
+| `quitApp` | 关闭 App |
+| `sendNotification` | 发送通知 |
+| `cancelNotification` | 取消指定通知 |
+
+### switchResources - 域名切换
+
+**消息格式**：
+```json
+{
+  "type": "switchResources",
+  "payload": "https://trip.aiiko.club"
+}
+```
+
+**功能**：
+- 切换 WebView 加载的主页地址
+- 支持本地服务器地址（如 `http://localhost:13218`）和云端地址
+- 使用 `SharedPreferences` 持久化存储用户选择的域名
+- 下次启动时自动加载上次选择的域名
+
+**关键代码位置**：
+- `modules/flutter_bridge/lib/src/bridge_controller.dart` (`_handleSwitchResources()`)
+
+### updateLocalWebResources - 热更新
+
+**消息格式**：
+```json
+{
+  "type": "updateLocalWebResources",
+  "payload": "https://trip.aiiko.club/packages/static/trip-route-track-web-1.0.45-build.tgz"
+}
+```
+
+**热更新流程**：
+1. **下载阶段**：从指定 URL 下载 `.tgz` 压缩包
+2. **解压阶段**：解压下载的文件到临时目录
+3. **替换阶段**：删除旧的静态资源，将解压的文件重命名为新的资源目录
+4. **通知阶段**：发送完成消息，前端决定是否重启 App
+
+**进度消息类型**：
+```json
+// 下载中
+{"type": "updateLocalWebResourcesDownloading", "payload": {"progress": 50}}
+
+// 解压中
+{"type": "updateLocalWebResourcesExtracting", "payload": {"progress": 30}}
+
+// 完成
+{"type": "updateLocalWebResourcesCompleted", "payload": {"success": true}}
+```
+
+**UI 进度显示**：
+- 使用 `AlertDialog` 显示进度对话框
+- 使用 `ValueNotifier` + `ValueListenableBuilder` 实现进度实时更新
+- 下载阶段显示：下载进度百分比 + 已下载/总大小（格式化显示 B/KB/MB/GB）
+- 解压阶段显示：解压进度百分比
+
+**本地服务器适配**：
+- 优先从 `static_resources` 目录加载资源
+- 不存在时回退到 `assets/out/` 目录
+- 支持 URL 解码和路径匹配
+
+**关键代码位置**：
+- `modules/flutter_bridge/lib/src/bridge_controller.dart` (`_handleUpdateLocalWebResources()`)
+- `lib/main.dart` (进度对话框 UI)
+- `lib/local_server.dart` (资源加载优先级)
+
+**依赖新增**：
+- `archive: ^3.6.0` - 用于解压 `.tgz` 压缩包
+
+### restartApp 和 quitApp - App 控制
+
+**实现方式**：调用 Android 原生方法
+
+**MainActivity.kt 新增方法**：
+```kotlin
+private fun restartApp() {
+    val intent = Intent(this, MainActivity::class.java)
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    startActivity(intent)
+    System.exit(0)
+}
+
+private fun quitApp() {
+    Process.killProcess(Process.myPid())
+}
+```
+
+**问题修复**：
+- **原问题**：使用 Alarm 方式重启不稳定，容易失败
+- **修复**：改为直接 startActivity 然后 System.exit(0)，更可靠
+
+### sendNotification 和 cancelNotification - 通知控制
+
+**sendNotification 消息格式**：
+```json
+{
+  "type": "sendNotification",
+  "payload": {
+    "id": 123,
+    "title": "通知标题",
+    "body": "通知内容",
+    "ongoing": false,
+    "autoCloseTimeout": 4000
+  }
+}
+```
+
+**cancelNotification 消息格式**：
+```json
+{
+  "type": "cancelNotification",
+  "payload": 123
+}
+```
+
+### bridgeId 机制调整
+
+**问题**：前端 SDK 将消息中的 `__bridgeId` 改为 `bridgeId`，Flutter 端需要适配
+
+**修改内容**：
+- `BridgeMessage` 类：`__bridgeId` 字段改为 `bridgeId`
+- 所有消息收发逻辑使用 `bridgeId` 而非 `__bridgeId`
+- 保持向后兼容：如果消息中有 `__bridgeId` 也能正确解析（已验证不需要）
+
+**关键代码位置**：
+- `modules/flutter_bridge/lib/src/bridge_message.dart`
+
+### 混合内容访问问题
+
+**问题**：当切换到云端 HTTPS 域名时，页面需要访问 localhost 的 HTTP 资源（JS Bridge），浏览器会阻止混合内容请求
+
+**解决方案**：
+- 在 `GeckoViewPlatform.kt` 中设置 GeckoRuntime 允许混合内容
+```kotlin
+settings.javaScript.setAllowInsecureConnections(GeckoRuntimeSettings.ALLOW_ALL)
+```
+- 这样 HTTPS 页面可以正常访问 `http://localhost:13218/__flutter_bridge__`
 
 ---
 

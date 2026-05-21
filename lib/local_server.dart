@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter_bridge/src/bridge_controller.dart';
 
 enum ServerStatus {
@@ -20,6 +21,7 @@ class LocalServer {
   HttpServer? _server;
   final int _port;
   List<String> _allAssets = [];
+  Directory? _staticResourcesDir;
   ServerStatus _status = ServerStatus.stopped;
   String? _lastError;
   int _restartAttempts = 0;
@@ -144,6 +146,16 @@ class LocalServer {
 
   Future<void> _loadAllAssets() async {
     try {
+      // 检查是否有更新后的静态资源
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final staticDir = Directory('${appDocDir.path}/static_resources');
+      if (await staticDir.exists()) {
+        _staticResourcesDir = staticDir;
+        print('Found updated static resources in: ${staticDir.path}');
+        return; // 使用本地文件系统资源，不加载 assets
+      }
+      
+      // 没有更新，加载默认 assets
       print('Loading AssetManifest.json...');
       final manifestJson = await rootBundle.loadString('AssetManifest.json');
       final manifest = json.decode(manifestJson) as Map<String, dynamic>;
@@ -225,6 +237,30 @@ class LocalServer {
       if (!path.endsWith('.html') && !path.contains('.')) '$path.html',
       if (!path.endsWith('/index.html')) '$path/index.html',
     ];
+
+    // 首先检查是否使用更新后的静态资源
+    if (_staticResourcesDir != null) {
+      for (final tryPath in tryPaths) {
+        final file = File('${_staticResourcesDir!.path}/$tryPath');
+        if (await file.exists()) {
+          print('Found local file: ${file.path} (for request: $path)');
+          try {
+            final bytes = await file.readAsBytes();
+            final contentType = _getContentType(tryPath);
+            return Response.ok(
+              bytes,
+              headers: {
+                'Content-Type': contentType,
+                'Access-Control-Allow-Origin': '*',
+              },
+            );
+          } catch (e) {
+            print('Error loading local file ${file.path}: $e');
+            // 继续尝试其他路径或回退到 assets
+          }
+        }
+      }
+    }
 
     // 查找对应的 asset
     String? assetKey;
