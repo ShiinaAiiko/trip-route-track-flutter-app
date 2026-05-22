@@ -357,11 +357,11 @@ class MainActivity : FlutterActivity() {
         sendLog("background", "updateAppTitle 被调用, title: $title")
         try {
             if (title.isNullOrEmpty()) return
-            
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
                 val shortcutManager = getSystemService(ShortcutManager::class.java)
-                if (shortcutManager != null) {
-                    val shortcutInfo = ShortcutInfo.Builder(this, "app_launcher")
+                if (shortcutManager != null && shortcutManager.isRequestPinShortcutSupported) {
+                    val shortcutInfo = ShortcutInfo.Builder(this, "dynamic_app_launcher")
                         .setShortLabel(title)
                         .setLongLabel(title)
                         .setIntent(Intent(Intent.ACTION_MAIN).apply {
@@ -372,7 +372,7 @@ class MainActivity : FlutterActivity() {
                     shortcutManager.updateShortcuts(listOf(shortcutInfo))
                 }
             }
-            
+
             val componentName = ComponentName(this, MainActivity::class.java)
             packageManager.setComponentEnabledSetting(
                 componentName,
@@ -393,6 +393,8 @@ class MainActivity : FlutterActivity() {
 
     private fun sendCarLog(log: String) {
         try {
+            FileLogHelper.log("BYD", log)
+
             val logData = mapOf(
                 "type" to "carLog",
                 "message" to log
@@ -406,6 +408,8 @@ class MainActivity : FlutterActivity() {
 
     private fun sendLog(type: String, message: String) {
         try {
+            FileLogHelper.log(type.uppercase(), message)
+
             val logData = mapOf(
                 "type" to type,
                 "message" to message
@@ -419,6 +423,16 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        FileLogHelper.init(this)
+        FileLogHelper.log("MainActivity", "onCreate: App 正在启动")
+
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            FileLogHelper.logException("UncaughtException", "未捕获的异常发生在线程 ${thread.name}", throwable as? Exception)
+            FileLogHelper.log("UncaughtException", "退出应用...")
+            System.exit(1)
+        }
+
         window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN)
     }
 

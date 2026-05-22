@@ -3,11 +3,11 @@ name="trip-route-track"
 runName="$name-flutter-app"
 port=23204
 branch="main"
-version="v1.0.9"
+version="v1.0.10"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
-allowMethods=("addVersion build:new install adb dev run stop protos start build buildDev setVersion")
+allowMethods=("addVersion build:new build:old install adb dev run stop protos start build buildDev setVersion")
 
 # 加载环境变量
 loadEnv() {
@@ -109,6 +109,32 @@ addVersion() {
 	# --- 以下是测试代码，验证变量是否已经改变 ---
 	echo "内存中的变量已更新为: $version"
 }
+minusVersion() {
+	# 2. 计算新版本号
+	# 使用 awk 处理 v1.0.4 -> v1.0.3 的转换，并在末尾数字为 0 时进行拦截
+	new_version=$(echo $version | awk -F. '{
+    if ($NF <= 0) {
+      print "ERROR: 版本号末位已为 0，无法继续降级！" > "/dev/stderr";
+      exit 1;
+    }
+    $NF = $NF - 1;
+  } 1' OFS=.)
+
+	# 如果 awk 报错退出了（比如已经是 0 了），就终止接下来改写文件的逻辑
+	if [ $? -ne 0 ]; then
+		return 1
+	fi
+
+	# 3. 同步到当前进程的变量（让接下来的脚本逻辑拿到新值）
+	old_version=$version
+	version=$new_version
+
+	# 4. 永久写回文件 ($0 代表脚本自身)
+	sed -i "s/version=\"$old_version\"/version=\"$version\"/" "$0"
+
+	# --- 以下是测试代码，验证变量是否已经改变 ---
+	echo "内存中的变量已降级为: $version"
+}
 setVersion() {
 	echo "-> 设置 App 版本为 $version"
 
@@ -158,6 +184,13 @@ build:new() {
 	loadEnv
 	setGoogleClientId "prod"
 	addVersion
+	_build "prod"
+}
+build:old() {
+	echo "-> 开始打包生产环境 Android APK"
+	loadEnv
+	setGoogleClientId "prod"
+	minusVersion
 	_build "prod"
 }
 

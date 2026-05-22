@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.9+136
+version: 1.0.10+151
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -45,20 +45,20 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/IJMGdX_tHcVGULpAwqi9W/
+    - assets/out/_next/Cu3Eg6M_qLerXJr4jN7q7/
     - assets/out/_next/data/
-    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/
-    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/en-US/
-    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/en-US/journeyMemories/
-    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/en-US/trip/
-    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-CN/
-    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-CN/journeyMemories/
-    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-CN/trip/
-    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-TW/
-    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-TW/journeyMemories/
-    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-TW/trip/
+    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/
+    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/en-US/
+    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/en-US/journeyMemories/
+    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/en-US/trip/
+    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-CN/
+    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-CN/journeyMemories/
+    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-CN/trip/
+    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-TW/
+    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-TW/journeyMemories/
+    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/IJMGdX_tHcVGULpAwqi9W/
+    - assets/out/_next/static/Cu3Eg6M_qLerXJr4jN7q7/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/

@@ -15,6 +15,7 @@ import 'local_server.dart';
 import 'components/components.dart';
 import 'package:flutter_bridge/src/bridge_controller.dart';
 import 'package:flutter_bridge/src/bridge_message.dart';
+import 'package:flutter_bridge/src/services/file_log_service.dart';
 import 'package:i18n/i18n.dart';
 
 String? _initialUrl;
@@ -160,8 +161,9 @@ Future<void> _showNotification(String title, String body) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // 初始化通知服务
+
+  await FileLogService().init();
+
   await _initNotificationService();
   
   // 初始化 BridgeController (包含 i18n)
@@ -298,7 +300,6 @@ class _WebViewContainerState extends State<WebViewContainer>
   static DateTime? _lastBackgroundTimeStatic; // 记录进入后台的时间
   static bool _isInBackgroundStatic = false; // 标记是否在后台
   static DateTime? _lastRecoveryTimeStatic; // 记录上次恢复的时间
-  static bool _isRecoveringStatic = false; // 标记是否正在恢复中
   static bool _kernelHealthyStatic = false; // 标记内核是否健康
   static int _retryCountStatic = 0; // 记录重试次数
   static const int _maxRetriesStatic = 3; // 最大重试次数
@@ -356,12 +357,6 @@ class _WebViewContainerState extends State<WebViewContainer>
     _loadingSubtitle = BridgeController().i18nService.t('loading_subtitle');
     _bridgeHandlerListener();
     _statusBarHandlerListener();
-    
-    // 关键修复：如果正在恢复中，跳过加载序列（避免重复启动服务器）
-    if (_isRecoveringStatic) {
-      print('[NYANYA-INIT] recovery in progress, skipping');
-      return;
-    }
     
     // 关键修复：如果页面已经加载过，就不应该重新运行加载序列
     if (!_isPageLoaded) {
@@ -983,9 +978,7 @@ class _WebViewContainerState extends State<WebViewContainer>
     
     if (!serverHealthy || !kernelHealthy) {
       print('[NYANYA-RECOVERY] Starting recovery...');
-      _isRecoveringStatic = true;
       await _performRecovery();
-      _isRecoveringStatic = false;
     } else {
       print('[NYANYA-CHECK] Server and Kernel healthy, preserved');
     }
@@ -1021,7 +1014,6 @@ class _WebViewContainerState extends State<WebViewContainer>
       _loadingLogStatic.clear();
     });
 
-    // 重新设置超时计时器（防止前端不调用closeLoading导致loading一直显示）
     _loadTimeoutTimer?.cancel();
     _loadTimeoutTimer = Timer(const Duration(seconds: 15), () {
       if (mounted && _isLoading) {
@@ -1033,44 +1025,57 @@ class _WebViewContainerState extends State<WebViewContainer>
       }
     });
 
-    // 步骤0: 如果 GeckoView 内核不健康，先清理旧的 GeckoRuntime
-    final kernelHealthy = await checkKernelHealth();
-    if (!kernelHealthy) {
-      print('[NYANYA-RECOVERY] Kernel unhealthy, shutting down old GeckoRuntime first');
-      try {
-        await _channel?.invokeMethod('shutdownGeckoRuntime');
-        print('[NYANYA-RECOVERY] GeckoRuntime shutdown successfully');
-      } catch (e) {
-        print('[NYANYA-RECOVERY] GeckoRuntime shutdown failed: $e');
-      }
-      // 等待一小段时间确保资源被清理
-      await Future.delayed(const Duration(milliseconds: 100));
-    }
-
     final i18n = BridgeController().i18nService;
 
     try {
-      // 步骤1: 重启本地服务
-      setState(() {
-        _loadingLog.add(i18n.t('loading_server'));
-        _loadingLogStatic.add(i18n.t('loading_server'));
-      });
-      await LocalServer.instance.restart();
-      print('Server restarted successfully');
+      final kernelHealthy = await checkKernelHealth();
+      final serverHealthy = LocalServer.instance.checkServerHealth();
+
+      print('[NYANYA-RECOVERY] Kernel: $kernelHealthy, Server: $serverHealthy');
+
+      if (!kernelHealthy) {
+        print('[NYANYA-RECOVERY] Kernel unhealthy, restarting app instead of attempting recovery');
+        setState(() {
+          _loadingLog.add(i18n.t('loading_server_failed'));
+          _loadingLogStatic.add(i18n.t('loading_server_failed'));
+        });
+        await _showNotification(i18n.t('app_exception_title'), i18n.t('app_exception_content'));
+        Timer(const Duration(seconds: 1), () {
+          BridgeController().restartApp();
+        });
+        return;
+      }
+
+      if (!serverHealthy) {
+        print('[NYANYA-RECOVERY] Server unhealthy, restarting server only');
+        setState(() {
+          _loadingLog.add(i18n.t('loading_server'));
+          _loadingLogStatic.add(i18n.t('loading_server'));
+        });
+
+        print('[NYANYA-RECOVERY] Restarting local server...');
+        await LocalServer.instance.restart();
+        print('[NYANYA-RECOVERY] Server restarted successfully');
+
+        setState(() {
+          _loadingLog.add(i18n.t('loading_server_success'));
+          _loadingLogStatic.add(i18n.t('loading_server_success'));
+          _loadingLog.add(i18n.t('loading_web'));
+          _loadingLogStatic.add(i18n.t('loading_web'));
+        });
+
+        await Future.delayed(const Duration(milliseconds: 300));
+
+        print('[NYANYA-RECOVERY] Reloading webview...');
+        await _reloadWebView();
+        print('[NYANYA-RECOVERY] Recovery completed');
+      }
 
       setState(() {
-        _loadingLog.add(i18n.t('loading_server_success'));
-        _loadingLogStatic.add(i18n.t('loading_server_success'));
-        _loadingLog.add(i18n.t('loading_web'));
-        _loadingLogStatic.add(i18n.t('loading_web'));
+        _isLoading = false;
+        _isLoadingStatic = _isLoading;
       });
 
-      // 等待服务启动
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      // 步骤2: 重新加载页面
-      _reloadWebView();
-      
     } catch (e) {
       print('[NYANYA-RECOVERY] Failed to perform recovery: $e');
       setState(() {
@@ -1078,8 +1083,7 @@ class _WebViewContainerState extends State<WebViewContainer>
         _loadingLogStatic.add(i18n.t('loading_server_failed'));
       });
       await _showNotification(i18n.t('app_exception_title'), i18n.t('app_exception_content'));
-      
-      // 3秒后重启 App
+
       Timer(const Duration(seconds: 3), () {
         BridgeController().restartApp();
       });
@@ -1087,15 +1091,20 @@ class _WebViewContainerState extends State<WebViewContainer>
   }
 
   /// 重新加载 WebView
-  void _reloadWebView() {
+  Future<void> _reloadWebView() async {
     if (_channel != null) {
       try {
+        final isReady = await _channel!.invokeMethod<bool>('checkGeckoViewReady') ?? false;
+        if (!isReady) {
+          print('[NYANYA-RECOVERY] GeckoView not ready after shutdown, skipping reload');
+          return;
+        }
+
         final url = _initialUrl ?? LocalServer.instance.url;
-        _channel!.invokeMethod('loadUrl', {'url': url});
+        await _channel!.invokeMethod('loadUrl', {'url': url});
         print('Reloading webview with URL: $url');
       } catch (e) {
         print('Failed to reload webview: $e');
-        // 如果调用失败，可能是 GeckoView 已销毁，需要通过重建来恢复
         print('GeckoView may be destroyed, will be recreated on next frame');
       }
     }

@@ -108,12 +108,6 @@
    - 症状：`Process is going to kill itself!`
    - 当前状态：前台服务已暂时禁用
 
-4. **首次安装白屏问题**：
-   - 首次安装 APK 后启动，页面加载失败
-   - 日志显示：`PageStart: http://localhost:13218/zh-CN` → `PageStop: about:blank (false)`
-   - 伴随 JavaScript 错误：`messageManager is null`、`remoteTab is null`
-   - 问题原因调查中（2026-05-23）
-
 ## 构建命令
 
 ```bash
