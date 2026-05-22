@@ -452,6 +452,55 @@
 - `android/app/src/main/res/xml/shortcuts.xml`
 - `android/app/src/main/AndroidManifest.xml`
 
+---
+
+## 首次安装白屏问题调查（2026-05-23）
+
+**问题现象**：
+- 首次安装 APK 后启动
+- 加载动画显示"内核和本地服务正常启动"
+- 网页一直加载不出来
+- 超过加载动画最大时长后自动关闭，显示白屏
+
+**日志分析**：
+```
+PageStart: http://localhost:13218/zh-CN
+PageStop: about:blank (false)
+PageStart: about:blank
+```
+
+**JavaScript 错误**：
+```
+TypeError: can't access property "sendAsyncMessage", this.messageManager is null
+TypeError: can't access property "maybeCancelContentJSExecution", this._browser.frameLoader.remoteTab is null
+```
+
+**可能原因**：
+1. 页面加载失败后 GeckoView 内部状态异常
+2. LocalServer 资源路径匹配问题
+3. GeckoView 与本地服务通信异常
+
+**修复尝试（已回退）**：
+1. 添加 `onPageStop` 页面加载失败检测
+2. 添加 `_isRecovering` 防并发标志
+3. 添加 `_checkAndRecoverState(forceRecovery: true)` 调用
+4. 修改 LocalServer 处理前导斜杠问题
+
+**严重 Bug 发现**：
+- 上述修复导致无限重启循环
+- 原因：`onPageStop` 的 `url` 参数为空字符串时，`!url.contains('about:blank')` 仍返回 true
+- 导致每次页面加载完成（即使是 about:blank）都触发 recovery
+
+**经验教训**：
+- 不要在 `onPageStop` 中轻易触发 recovery
+- `about:blank` 页面加载成功时 `success=true`，不需要排除
+- 需要同时满足：success=false、url 非空、url 不是 about:blank
+- 必须有防并发机制 `_isRecovering`
+
+**待解决问题**：
+- 首次安装后白屏问题仍未解决
+- 需要进一步调查 LocalServer 资源加载和 GeckoView 初始化时序
+
 ### 通知点击和自动关闭功能
 
 **功能概述**：实现了完整的通知交互功能，包括点击通知打开 App 和自动关闭机制
