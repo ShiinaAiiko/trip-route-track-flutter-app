@@ -976,6 +976,101 @@ settings.javaScript.setAllowInsecureConnections(GeckoRuntimeSettings.ALLOW_ALL)
 ```
 - 这样 HTTPS 页面可以正常访问 `http://localhost:13218/__flutter_bridge__`
 
+### 第三方登录功能（Google Sign-In）
+
+**功能概述**：实现了完整的第三方登录功能，支持通过 JS Bridge 调用原生 Google 登录，登录成功后返回用户信息和 token
+
+**支持的登录类型**：
+- ✅ Google 登录（已实现）
+- ⚠️ QQ 登录（预留位置）
+- ⚠️ GitHub 登录（预留位置）
+
+**消息格式**：
+
+前端发送：
+```json
+{
+  "type": "thirdPartyLogin",
+  "payload": {
+    "loginType": "google"
+  },
+  "bridgeId": "xxx"
+}
+```
+
+Flutter 返回（成功）：
+```json
+{
+  "type": "thirdPartyLogin",
+  "payload": {
+    "success": true,
+    "data": {
+      "type": "google",
+      "idToken": "xxx",
+      "accessToken": "",
+      "user": {
+        "id": "115995855783961453134",
+        "name": "Aiiko Shiina",
+        "email": "shiina.aiiko@gmail.com",
+        "avatar": "https://lh3.googleusercontent.com/..."
+      }
+    }
+  },
+  "bridgeId": "xxx"
+}
+```
+
+Flutter 返回（失败）：
+```json
+{
+  "type": "thirdPartyLogin",
+  "payload": {
+    "success": false,
+    "error": "10: "
+  },
+  "bridgeId": "xxx"
+}
+```
+
+**核心实现**：
+
+1. **前端 JS Bridge** (`web/plugins/reactNativeWebJsBridge.ts`)：
+   - 定义 `ThirdPartyLoginType` 枚举（google/qq/github）
+   - 定义 `ThirdPartyLoginResult` 类型
+   - 添加 `thirdPartyLogin()` 方法
+
+2. **Flutter Bridge** (`modules/flutter_bridge/lib/src/bridge_controller.dart`)：
+   - 添加 `thirdPartyLogin` 消息处理 case
+   - 通过 MethodChannel 调用 Android 原生登录方法
+   - 将登录结果返回给前端
+
+3. **Android 原生** (`MainActivity.kt`)：
+   - 添加 Google Sign-In 依赖 (`play-services-auth:21.2.0`)
+   - 初始化 GoogleSignInClient
+   - 实现 `handleThirdPartyLogin()` 方法
+   - 处理登录回调 `onActivityResult()`
+
+**环境变量配置**（`.env`）：
+```bash
+# Google Sign-In Client IDs
+GOOGLE_CLIENT_ID_DEV=xxx.apps.googleusercontent.com  # Android 客户端 ID（开发）
+GOOGLE_CLIENT_ID_PROD=xxx.apps.googleusercontent.com  # Android 客户端 ID（生产）
+GOOGLE_WEB_CLIENT_ID=xxx.apps.googleusercontent.com   # Web 客户端 ID（用于获取 idToken）
+```
+
+**关键代码位置**：
+- `web/plugins/reactNativeWebJsBridge.ts` - 前端 JS Bridge SDK
+- `modules/flutter_bridge/lib/src/bridge_controller.dart` - Flutter 消息处理
+- `android/app/src/main/kotlin/club/aiiko/trip/MainActivity.kt` - Android 原生登录实现
+- `android/app/build.gradle` - 依赖配置和环境变量读取
+- `.env` - 环境变量配置
+
+**注意事项**：
+- 获取 `idToken` 需要使用 Web 客户端 ID，而非 Android 客户端 ID
+- 需要在 Google Cloud Console 中配置正确的 SHA-1 指纹和包名
+- 开发环境和生产环境使用不同的 Android 客户端 ID
+- QQ 和 GitHub 登录已预留位置，可根据需求添加对应的 SDK
+
 ---
 
 ## App 前后台切换状态检测与恢复机制

@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.9+98
+version: 1.0.9+136
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -45,19 +45,20 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
+    - assets/out/_next/IJMGdX_tHcVGULpAwqi9W/
     - assets/out/_next/data/
-    - assets/out/_next/data/rBqz8TFyBWlZ68ZH5XTXE/
-    - assets/out/_next/data/rBqz8TFyBWlZ68ZH5XTXE/en-US/
-    - assets/out/_next/data/rBqz8TFyBWlZ68ZH5XTXE/en-US/journeyMemories/
-    - assets/out/_next/data/rBqz8TFyBWlZ68ZH5XTXE/en-US/trip/
-    - assets/out/_next/data/rBqz8TFyBWlZ68ZH5XTXE/zh-CN/
-    - assets/out/_next/data/rBqz8TFyBWlZ68ZH5XTXE/zh-CN/journeyMemories/
-    - assets/out/_next/data/rBqz8TFyBWlZ68ZH5XTXE/zh-CN/trip/
-    - assets/out/_next/data/rBqz8TFyBWlZ68ZH5XTXE/zh-TW/
-    - assets/out/_next/data/rBqz8TFyBWlZ68ZH5XTXE/zh-TW/journeyMemories/
-    - assets/out/_next/data/rBqz8TFyBWlZ68ZH5XTXE/zh-TW/trip/
-    - assets/out/_next/rBqz8TFyBWlZ68ZH5XTXE/
+    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/
+    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/en-US/
+    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/en-US/journeyMemories/
+    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/en-US/trip/
+    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-CN/
+    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-CN/journeyMemories/
+    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-CN/trip/
+    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-TW/
+    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-TW/journeyMemories/
+    - assets/out/_next/data/IJMGdX_tHcVGULpAwqi9W/zh-TW/trip/
     - assets/out/_next/static/
+    - assets/out/_next/static/IJMGdX_tHcVGULpAwqi9W/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/
@@ -66,7 +67,6 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
-    - assets/out/_next/static/rBqz8TFyBWlZ68ZH5XTXE/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/

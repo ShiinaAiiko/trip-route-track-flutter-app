@@ -20,6 +20,7 @@ import 'services/language_service.dart';
 import 'services/notification_service.dart';
 import 'services/vehicle_service.dart';
 import 'services/update_service.dart';
+import 'services/log_service.dart';
 
 typedef MessageHandler = void Function(BridgeMessage message);
 typedef FlutterMethodCallHandler = void Function(MethodCall call);
@@ -41,6 +42,7 @@ class BridgeController {
   final VehicleService _vehicleService = VehicleService();
   final I18nService _i18nService = I18nService();
   final UpdateService _updateService = UpdateService();
+  final LogService _logService = LogService();
 
   String? _pendingUpdateVersion;
 
@@ -60,9 +62,13 @@ class BridgeController {
   bool _enableBackgroundLocation = false;
   int _backgroundLocationCount = 0;
   int _backgroundStartTime = 0;
+  
+  // 通知自动关闭定时器映射（key: notificationId, value: Timer）
+  final Map<int, Timer> _notificationTimers = {};
   double _currentSpeed = 0;
   double _currentAltitude = 0;
   Timer? _backgroundNotificationTimer;
+  int _notificationIdCounter = 1;
 
   bool get enableLocation => _enableLocation;
   bool get enableBackgroundLocation => _enableBackgroundLocation;
@@ -73,13 +79,49 @@ class BridgeController {
   VehicleService get vehicleService => _vehicleService;
   I18nService get i18nService => _i18nService;
   UpdateService get updateService => _updateService;
+  LogService get logService => _logService;
 
   Future<void> init() async {
+    await _checkAndResetResourcesOnUpdate();
     await _i18nService.init();
     await _languageService.init();
     await _vehicleService.init();
     await _updateService.init();
+    await _logService.init();
     _setupCarDataListener();
+  }
+
+  Future<void> _checkAndResetResourcesOnUpdate() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      
+      final prefs = await SharedPreferences.getInstance();
+      final lastVersion = prefs.getString(_prefsKeyLastVersion);
+      
+      if (lastVersion != currentVersion) {
+        print('[Bridge] App updated from version $lastVersion to $currentVersion');
+        
+        // 删除旧的静态资源目录
+        final dir = await getApplicationDocumentsDirectory();
+        final staticDir = Directory('${dir.path}/static_resources');
+        if (await staticDir.exists()) {
+          await staticDir.delete(recursive: true);
+          print('[Bridge] Deleted old static resources directory');
+        }
+        
+        // 清除自定义域名设置
+        _customHost = null;
+        await prefs.remove(_prefsKeyCustomHost);
+        print('[Bridge] Reset custom host to default');
+        
+        // 保存新版本号
+        await prefs.setString(_prefsKeyLastVersion, currentVersion);
+        print('[Bridge] Saved new version: $currentVersion');
+      }
+    } catch (e) {
+      print('[Bridge] Error checking version or resetting resources: $e');
+    }
   }
 
   void _setupCarDataListener() {
@@ -164,10 +206,12 @@ class BridgeController {
       if (status.isDenied) {
         final result = await Permission.locationWhenInUse.request();
         if (!result.isGranted) {
-          sendMessage('notification', {
+          sendMessage('gpsPermissionDenied', {
             'title': _i18nService.t('gps_permission_denied'),
             'message': '',
             'type': 'warning',
+            'notification': true,
+            'module': 'location',
           });
           return;
         }
@@ -175,29 +219,35 @@ class BridgeController {
 
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        sendMessage('notification', {
+        sendMessage('gpsServiceDisabled', {
           'title': _i18nService.t('gps_service_disabled'),
           'message': '',
           'type': 'warning',
+          'notification': true,
+          'module': 'location',
         });
         return;
       }
 
       _startLocationUpdatesInternal();
 
-      NotificationService().showNotificationWithAutoClose(
-        title: _i18nService.t('location_enabled'),
-        body: '',
-        id: 1,
-      );
+      sendMessage('locationEnabled', {
+        'title': _i18nService.t('location_enabled'),
+        'message': '',
+        'type': 'success',
+        'notification': true,
+        'module': 'location',
+      });
     } else {
       _stopLocationUpdates();
 
-      NotificationService().showNotificationWithAutoClose(
-        title: _i18nService.t('location_disabled'),
-        body: '',
-        id: 1,
-      );
+      sendMessage('locationDisabled', {
+        'title': _i18nService.t('location_disabled'),
+        'message': '',
+        'type': 'info',
+        'notification': true,
+        'module': 'location',
+      });
     }
   }
 
@@ -250,10 +300,12 @@ class BridgeController {
         });
       },
       onError: (error) {
-        sendMessage('notification', {
+        sendMessage('gpsError', {
           'title': _i18nService.t('gps_error'),
           'message': 'Location failed: $error',
           'type': 'error',
+          'notification': true,
+          'module': 'location',
         });
       },
     );
@@ -268,28 +320,34 @@ class BridgeController {
     _keepAwakeService.setKeepAwake(enable);
     
     if (enable) {
-      NotificationService().showNotificationWithAutoClose(
-        title: _i18nService.t('screen_kept_on'),
-        body: '',
-        id: 2,
-      );
+      sendMessage('screenKeptOn', {
+        'title': _i18nService.t('screen_kept_on'),
+        'message': '',
+        'type': 'success',
+        'notification': true,
+        'module': 'keepAwake',
+      });
     } else {
-      NotificationService().showNotificationWithAutoClose(
-        title: _i18nService.t('screen_kept_off'),
-        body: '',
-        id: 2,
-      );
+      sendMessage('screenKeptOff', {
+        'title': _i18nService.t('screen_kept_off'),
+        'message': '',
+        'type': 'info',
+        'notification': true,
+        'module': 'keepAwake',
+      });
     }
   }
 
   Future<void> _handleEnableBackgroundLocation(bool enable) async {
     if (enable) {
       if (!_enableLocation) {
-        NotificationService().showNotificationWithAutoClose(
-          title: _i18nService.t('background_location_enable_failed'),
-          body: _i18nService.t('foreground_location_first'),
-          id: 3,
-        );
+        sendMessage('backgroundLocationEnableFailed', {
+          'title': _i18nService.t('background_location_enable_failed'),
+          'message': _i18nService.t('foreground_location_first'),
+          'type': 'error',
+          'notification': true,
+          'module': 'backgroundLocation',
+        });
         _enableBackgroundLocation = false;
         return;
       }
@@ -298,11 +356,13 @@ class BridgeController {
       if (foregroundStatus.isDenied) {
         foregroundStatus = await Permission.locationWhenInUse.request();
         if (!foregroundStatus.isGranted) {
-          NotificationService().showNotification(
-            title: _i18nService.t('background_location_enable_failed'),
-            body: _i18nService.t('foreground_location_permission_denied'),
-            id: 3,
-          );
+          sendMessage('backgroundLocationEnableFailed', {
+            'title': _i18nService.t('background_location_enable_failed'),
+            'message': _i18nService.t('foreground_location_permission_denied'),
+            'type': 'error',
+            'notification': true,
+            'module': 'backgroundLocation',
+          });
           _enableBackgroundLocation = false;
           return;
         }
@@ -312,11 +372,13 @@ class BridgeController {
       if (backgroundStatus.isDenied) {
         backgroundStatus = await Permission.locationAlways.request();
         if (!backgroundStatus.isGranted) {
-          NotificationService().showNotification(
-            title: _i18nService.t('background_location_enable_failed'),
-            body: _i18nService.t('background_location_permission_denied'),
-            id: 3,
-          );
+          sendMessage('backgroundLocationEnableFailed', {
+            'title': _i18nService.t('background_location_enable_failed'),
+            'message': _i18nService.t('background_location_permission_denied'),
+            'type': 'error',
+            'notification': true,
+            'module': 'backgroundLocation',
+          });
           _enableBackgroundLocation = false;
           return;
         }
@@ -334,11 +396,13 @@ class BridgeController {
         await _backgroundService.start();
       } catch (e) {
         print('Failed to start background service: $e');
-        NotificationService().showNotification(
-          title: _i18nService.t('background_service_start_failed'),
-          body: '',
-          id: 5,
-        );
+        sendMessage('backgroundServiceStartFailed', {
+          'title': _i18nService.t('background_service_start_failed'),
+          'message': '',
+          'type': 'error',
+          'notification': true,
+          'module': 'backgroundLocation',
+        });
         _enableBackgroundLocation = false;
         return;
       }
@@ -353,19 +417,21 @@ class BridgeController {
       
       _stopBackgroundNotificationTimer();
       // 取消通知（id=3 是 Flutter 端创建的，id=1 是原生端 BackgroundService 创建的）
-      NotificationService().cancelNotification(3);
-      NotificationService().cancelNotification(1);
+      // NotificationService().cancelNotification(3);
+      // NotificationService().cancelNotification(1);
       await _backgroundService.stop();
       
       if (_enableLocation) {
         _startLocationUpdatesInternal();
       }
 
-      NotificationService().showNotificationWithAutoClose(
-        title: _i18nService.t('background_location_disabled'),
-        body: '',
-        id: 4,
-      );
+      sendMessage('backgroundLocationDisabled', {
+        'title': _i18nService.t('background_location_disabled'),
+        'message': '',
+        'type': 'info',
+        'notification': true,
+        'module': 'backgroundLocation',
+      });
     }
   }
 
@@ -589,6 +655,7 @@ Future<void> _handleLoadMessage() async {
   }
 
   static const String _prefsKeyCustomHost = 'custom_host';
+  static const String _prefsKeyLastVersion = 'last_app_version';
   String? _customHost;
 
   Future<void> _handleSwitchResources(String host, {String? bridgeId}) async {
@@ -699,6 +766,14 @@ Future<void> _handleLoadMessage() async {
     await channel.invokeMethod('restartApp');
   }
 
+  Future<void> restartApp() async {
+    await _handleRestartApp();
+  }
+
+  Future<void> quitApp() async {
+    await _handleQuitApp();
+  }
+
   Future<void> _handleQuitApp() async {
     const MethodChannel channel = MethodChannel('flutter_bridge');
     await channel.invokeMethod('quitApp');
@@ -706,7 +781,7 @@ Future<void> _handleLoadMessage() async {
 
   Future<void> _handleSendNotification(Map<String, dynamic> payload, {String? bridgeId}) async {
     try {
-      final id = payload['id'] is int ? payload['id'] : (payload['id'] is String ? int.tryParse(payload['id']) : null) ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final id = payload['id'] is int ? payload['id'] : (payload['id'] is String ? int.tryParse(payload['id']) : null) ?? _notificationIdCounter++;
       final title = payload['title']?.toString() ?? '';
       final body = payload['body']?.toString() ?? '';
       final ongoing = payload['ongoing'] as bool? ?? false;
@@ -722,6 +797,12 @@ Future<void> _handleLoadMessage() async {
       final clickActionType = payload['clickActionType']?.toString();
       final clickActionUrl = payload['clickActionUrl']?.toString();
       final extra = payload['extra'] as Map<String, dynamic>?;
+
+      // 如果同一个 id 的通知已存在且有自动关闭定时器，先取消定时器（续期）
+      if (_notificationTimers.containsKey(id)) {
+        _notificationTimers[id]!.cancel();
+        _notificationTimers.remove(id);
+      }
 
       final AndroidNotificationDetails androidNotificationDetails = AndroidNotificationDetails(
         channelId,
@@ -746,10 +827,13 @@ Future<void> _handleLoadMessage() async {
         androidDetails: androidNotificationDetails,
       );
 
+      // 设置新的自动关闭定时器
       if (autoCloseTimeout != null && autoCloseTimeout > 0 && !ongoing) {
-        Future.delayed(Duration(milliseconds: autoCloseTimeout), () {
+        final timer = Timer(Duration(milliseconds: autoCloseTimeout), () {
           NotificationService().cancelNotification(id);
+          _notificationTimers.remove(id);
         });
+        _notificationTimers[id] = timer;
       }
 
       sendMessage('sendNotification', {'success': true, 'id': id}, bridgeId: bridgeId);
@@ -915,6 +999,13 @@ Future<void> _handleLoadMessage() async {
           _handleCancelNotification(cancelId, bridgeId: bridgeId);
           _dispatchMessage(message);
           break;
+        case 'thirdPartyLogin':
+          final type = message.payload as String?;
+          if (type != null) {
+            _handleThirdPartyLogin(type, bridgeId: bridgeId);
+          }
+          _dispatchMessage(message);
+          break;
         default:
           _dispatchMessage(message);
       }
@@ -1003,6 +1094,88 @@ Future<void> _handleLoadMessage() async {
         'altitude': '${(altitudeM * 10).round() / 10}',
       }),
     );
+  }
+
+  // ================================
+  // 应用生命周期事件
+  // ================================
+  
+  /// App 刚启动打开事件
+  void sendAppStartEvent() {
+    sendMessage('appStart', {});
+  }
+  
+  /// 重新回到 App 事件（前台可见且可交互）
+  void sendAppResumeEvent() {
+    sendMessage('appResume', {});
+  }
+  
+  /// 离开 App 进入后台事件
+  void sendAppPauseEvent() {
+    sendMessage('appPause', {});
+  }
+  
+  /// App 进入非活动状态（比如收到电话、弹出对话框）
+  void sendAppInactiveEvent() {
+    sendMessage('appInactive', {});
+  }
+  
+  /// App 完全隐藏事件
+  void sendAppHiddenEvent() {
+    sendMessage('appHidden', {});
+  }
+  
+  /// 通用的应用生命周期状态变化事件
+  void sendAppLifecycleChangeEvent(String state) {
+    sendMessage('appLifecycleChange', {'state': state});
+  }
+  
+  // 第三方登录类型
+  static const String loginTypeGoogle = 'google';
+  static const String loginTypeQq = 'qq';
+  static const String loginTypeGithub = 'github';
+
+  // 第三方登录处理
+  Future<void> _handleThirdPartyLogin(String type, {String? bridgeId}) async {
+    print('[Bridge] Third party login requested: $type');
+    
+    try {
+      const MethodChannel channel = MethodChannel('flutter_bridge');
+      final result = await channel.invokeMethod('thirdPartyLogin', {'type': type});
+      
+      print('[Bridge] Third party login result: $result');
+      
+      final Map<String, dynamic> resultMap = Map<String, dynamic>.from(result as Map);
+      final bool success = resultMap['success'] as bool;
+      
+      if (success) {
+        sendMessage('thirdPartyLogin', {
+          'success': true,
+          'data': {
+            'type': type,
+            'idToken': resultMap['idToken'],
+            'accessToken': resultMap['accessToken'],
+            'user': {
+              'id': resultMap['userId'],
+              'name': resultMap['userName'],
+              'email': resultMap['userEmail'],
+              'avatar': resultMap['userAvatar'],
+            },
+          },
+        }, bridgeId: bridgeId);
+      } else {
+        sendMessage('thirdPartyLogin', {
+          'success': false,
+          'error': resultMap['error'] as String? ?? 'Login failed',
+        }, bridgeId: bridgeId);
+      }
+    } catch (e) {
+      print('[Bridge] Third party login error: $e');
+      sendMessage('thirdPartyLogin', {
+        'success': false,
+        'error': e.toString(),
+      }, bridgeId: bridgeId);
+    }
   }
 
   void dispose() {

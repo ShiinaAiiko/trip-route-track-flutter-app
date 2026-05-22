@@ -9,11 +9,33 @@ configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
 allowMethods=("addVersion build:new install adb dev run stop protos start build buildDev setVersion")
 
+# 加载环境变量
+loadEnv() {
+	if [ -f "$DIR/.env" ]; then
+		echo "-> 加载环境变量..."
+		export $(cat "$DIR/.env" | grep -v '#' | xargs)
+	fi
+}
+
+# 设置 Google Client ID 环境变量
+setGoogleClientId() {
+	local env_type="$1"
+	if [ "$env_type" == "dev" ]; then
+		export GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID_DEV"
+		echo "-> 使用开发环境 Google Client ID"
+	else
+		export GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID_PROD"
+		echo "-> 使用生产环境 Google Client ID"
+	fi
+}
+
 dev() {
 	# adb logcat | grep "GeckoViewPlatform\|gps1"
 	# adb logcat | grep "message.type\|gps12"
 	# 更新 assets 目录配置
 
+	loadEnv
+	setGoogleClientId "dev"
 	setVersion
 
 	echo "-> 更新 pubspec.yaml 的 assets 配置..."
@@ -126,18 +148,23 @@ setVersion() {
 
 build() {
 	echo "-> 开始打包生产环境 Android APK"
+	loadEnv
+	setGoogleClientId "prod"
 	_build "prod"
 }
 
 build:new() {
 	echo "-> 开始打包生产环境 Android APK"
-
+	loadEnv
+	setGoogleClientId "prod"
 	addVersion
 	_build "prod"
 }
 
 buildDev() {
 	echo "-> 开始打包开发环境 Android APK"
+	loadEnv
+	setGoogleClientId "dev"
 	_build "dev"
 }
 

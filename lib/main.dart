@@ -366,6 +366,8 @@ class _WebViewContainerState extends State<WebViewContainer>
     // 关键修复：如果页面已经加载过，就不应该重新运行加载序列
     if (!_isPageLoaded) {
       print('[NYANYA-INIT] first load, starting sequence');
+      // 发送 App 刚启动打开事件
+      BridgeController().sendAppStartEvent();
       // 开始详细加载流程
       _startLoadingSequence();
       
@@ -457,17 +459,11 @@ class _WebViewContainerState extends State<WebViewContainer>
       await Future.delayed(const Duration(milliseconds: 500));
       await _startLoadingSequence();
     } else {
-      // 达到最大重试次数，放弃并关闭加载界面
-      print('[NYANYA-RETRY] Max retries reached, giving up');
+      // 达到最大重试次数，重启 App
+      print('[NYANYA-RETRY] Max retries reached, restarting App');
       
-      // 等待2秒后关闭加载界面
       Timer(const Duration(seconds: 2), () {
-        if (mounted && _isLoading) {
-          setState(() {
-            _isLoading = false;
-            _isLoadingStatic = _isLoading;
-          });
-        }
+        BridgeController().restartApp();
       });
     }
   }
@@ -888,20 +884,36 @@ class _WebViewContainerState extends State<WebViewContainer>
     super.didChangeAppLifecycleState(state);
     print('[NYANYA-LIFECYCLE] state=$state');
     
+    // 发送通用的生命周期变化事件
+    BridgeController().sendAppLifecycleChangeEvent(state.name);
+    
     if (state == AppLifecycleState.paused) {
       _lastBackgroundTime = DateTime.now();
       _lastBackgroundTimeStatic = _lastBackgroundTime;
       _isInBackground = true;
       _isInBackgroundStatic = _isInBackground;
       
+      // 发送离开 App 进入后台事件
+      BridgeController().sendAppPauseEvent();
+      
       // TODO: 前台服务暂时禁用 (flutter_foreground_task 与 MIUI 不兼容)
       // _startForegroundTaskSafe();
     } else if (state == AppLifecycleState.resumed) {
       _isInBackground = false;
       _isInBackgroundStatic = _isInBackground;
+      
+      // 发送重新回到 App 事件
+      BridgeController().sendAppResumeEvent();
+      
       // TODO: 前台服务暂时禁用
       // _stopForegroundTaskSafe();
       _checkAndRecoverState();
+    } else if (state == AppLifecycleState.inactive) {
+      // App 进入非活动状态（比如收到电话、弹出对话框）
+      BridgeController().sendAppInactiveEvent();
+    } else if (state == AppLifecycleState.hidden) {
+      // App 完全隐藏
+      BridgeController().sendAppHiddenEvent();
     }
   }
 
@@ -1060,21 +1072,16 @@ class _WebViewContainerState extends State<WebViewContainer>
       _reloadWebView();
       
     } catch (e) {
-      print('Failed to perform recovery: $e');
+      print('[NYANYA-RECOVERY] Failed to perform recovery: $e');
       setState(() {
         _loadingLog.add(i18n.t('loading_server_failed'));
         _loadingLogStatic.add(i18n.t('loading_server_failed'));
       });
       await _showNotification(i18n.t('app_exception_title'), i18n.t('app_exception_content'));
       
-      // 3秒后关闭加载界面
+      // 3秒后重启 App
       Timer(const Duration(seconds: 3), () {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _isLoadingStatic = _isLoading;
-          });
-        }
+        BridgeController().restartApp();
       });
     }
   }

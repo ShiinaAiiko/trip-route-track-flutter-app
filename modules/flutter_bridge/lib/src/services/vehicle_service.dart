@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
-import '../bridge_controller.dart';
 
 class VehicleService {
   static final VehicleService _instance = VehicleService._internal();
@@ -31,15 +30,6 @@ class VehicleService {
         final data = _parseCarData(jsonString);
         onCarDataChanged?.call(data);
         _carDataController?.add(data);
-        break;
-      case 'onBydLog':
-        final logMessage = call.arguments as String;
-        print('[VehicleService] BYD Log received: $logMessage');
-        try {
-          BridgeController().sendMessage('bydLog', logMessage);
-        } catch (e) {
-          print('[VehicleService] Failed to send bydLog via BridgeController: $e');
-        }
         break;
     }
   }

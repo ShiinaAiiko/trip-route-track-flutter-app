@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-**v1.0.9** (2026-05-21)
+**v1.0.10** (2026-05-22)
 
 ## 主要功能
 
@@ -36,6 +36,7 @@
 - ✅ **App 重启/退出**（restartApp/quitApp）- 完整的 App 生命周期控制
 - ✅ **通知控制**（sendNotification/cancelNotification）- 灵活的通知管理
 - ✅ **混合内容访问支持** - HTTPS 页面可访问 localhost 的 HTTP 资源
+- ✅ **第三方登录功能** - Google Sign-In（已实现），QQ/GitHub（预留）
 
 ## 技术栈
 
@@ -45,6 +46,11 @@
 - 比亚迪车机开放 API
 
 ## 项目进度
+
+### v1.0.10 (2026-05-22)
+- ✅ **第三方登录功能** - Google Sign-In（已实现），QQ/GitHub（预留位置）
+- ✅ **环境变量配置** - 统一管理 Google Client ID、签名密码等敏感配置
+- ✅ **开发/生产环境区分** - 通过 release.sh 自动切换环境变量
 
 ### v1.0.9 (2026-05-21)
 - ✅ **内部网站 URL 统一替换** - localhost 显示替换为 trip.aiiko.club
@@ -117,6 +123,7 @@
 
 | 版本 | 日期 | 主要更新 |
 |------|------|----------|
+| v1.0.10 | 2026-05-22 | 第三方登录功能（Google Sign-In）、环境变量配置、开发/生产环境区分 |
 | v1.0.9 | 2026-05-21 | 内部网站 URL 替换、GeckoRuntime 重启增强、checkGeckoViewReady |
 | v1.0.7 | - | App 自动更新系统、Shadcn UI Toast 组件 |
 | v1.0.6 | - | GeckoView Session 健康检测、白屏问题修复 |
