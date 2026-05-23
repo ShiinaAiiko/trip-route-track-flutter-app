@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.10+151
+version: 1.0.10+169
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -45,20 +45,18 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/Cu3Eg6M_qLerXJr4jN7q7/
     - assets/out/_next/data/
-    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/
-    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/en-US/
-    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/en-US/journeyMemories/
-    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/en-US/trip/
-    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-CN/
-    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-CN/journeyMemories/
-    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-CN/trip/
-    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-TW/
-    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-TW/journeyMemories/
-    - assets/out/_next/data/Cu3Eg6M_qLerXJr4jN7q7/zh-TW/trip/
+    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/
+    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/en-US/
+    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/en-US/journeyMemories/
+    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/en-US/trip/
+    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-CN/
+    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-CN/journeyMemories/
+    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-CN/trip/
+    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-TW/
+    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-TW/journeyMemories/
+    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/Cu3Eg6M_qLerXJr4jN7q7/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/
@@ -67,6 +65,8 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
+    - assets/out/_next/static/ynAJiLr5eAyIYXCh6BMna/
+    - assets/out/_next/ynAJiLr5eAyIYXCh6BMna/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/

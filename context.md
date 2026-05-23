@@ -795,34 +795,6 @@ Flutter 返回：
    - 已新增完整日志系统（通过 `bydLog` 消息），便于调试
    - 待在真实比亚迪车机上进行测试验证
 
-2. **输入法收起后底部黑色区域问题**：
-   - 已在 `GeckoViewWrapper` 中添加键盘变化监听器
-   - 输入法收起时强制刷新布局
-   - 需实际测试验证效果
-
-3. **前台服务与 MIUI 兼容性问题**（⚠️ 开发中）：
-   - `flutter_foreground_task` 插件与 MIUI 系统不兼容
-   - 症状：调用 `FlutterForegroundTask.startService()` 时触发 MIUI 系统日志权限检查，导致 `Process is going to kill itself!` 崩溃
-   - 当前状态：**前台服务已暂时禁用**
-   - 状态检测逻辑仍然正常工作，可以确保 App 返回时正确恢复状态
-
-4. **定位数据数量不一致问题**（⚠️ 开发中）：
-   - **现象**：前端开启定位和后台定位后，前端显示定位数量（3557）与后台通知显示的定位计数（2843）不一致
-   - **差距**：约 714 个，差距约 20%
-   - **可能原因**：
-     - Flutter Geolocator 在后台模式下被系统节流
-     - 某些位置更新因精度不够被丢弃
-     - `sendMessage` 到前端过程中有消息丢失
-     - 前端接收到消息但某些原因未计入
-   - **当前状态**：正在排查中
-   - **定位任务分析**：
-     - `enableLocation` 和 `enableBackgroundLocation` 共用同一个 `Geolocator.getPositionStream` stream
-     - 定位任务只有一条，不会重复创建
-
-5. **标签页回主页动画卡顿问题**（⚠️ 开发中）：
-   - **现象**：使用 `AnimatedSize` 实现 header 高度过渡动画时，动画不够丝滑，有卡顿
-   - **原因分析**：`AnimatedSize` 在 Column 中可能导致整个布局树重新计算，影响性能
-   - **当前状态**：已实现但效果不理想，待优化
 
 ---
 

@@ -217,17 +217,53 @@ class BridgeController {
         }
       }
 
+      
+      // ============ 以下是原有的服务检测代码，已注释保留 ============
+      /*
+      // 添加调试日志
+      final locationPermission = await Permission.locationWhenInUse.status;
+      final backgroundPermission = await Permission.locationAlways.status;
+      print('[LOCATION1] Permission status: whenInUse=$locationPermission, always=$backgroundPermission');
+      
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      print('[LOCATION1] Service enabled: $serviceEnabled');
+      
       if (!serviceEnabled) {
-        sendMessage('gpsServiceDisabled', {
-          'title': _i18nService.t('gps_service_disabled'),
-          'message': '',
-          'type': 'warning',
-          'notification': true,
-          'module': 'location',
-        });
-        return;
+        print('[LOCATION1] Service disabled, trying to open settings');
+        // 尝试引导用户开启系统位置服务
+        final bool? settingsResult = await Geolocator.openLocationSettings();
+        print('[LOCATION1] Settings opened result: $settingsResult');
+        
+        // 再次检查服务是否已开启（带重试机制）
+        int retryCount = 0;
+        const maxRetries = 3;
+        while (!serviceEnabled && retryCount < maxRetries) {
+          await Future.delayed(const Duration(milliseconds: 500));
+          serviceEnabled = await Geolocator.isLocationServiceEnabled();
+          retryCount++;
+          print('[LOCATION1] Service enabled after retry $retryCount: $serviceEnabled');
+        }
+        
+        // 如果仍然检测不到服务开启，但用户已经打开过设置页面，尝试信任用户的操作
+        // 某些设备（如小米）的系统服务检测可能不准确
+        if (!serviceEnabled && settingsResult == true) {
+          print('[LOCATION1] Service detection failed but settings opened, trusting user action');
+          serviceEnabled = true; // 信任用户已经开启了服务
+        }
+        
+        if (!serviceEnabled) {
+          sendMessage('gpsServiceDisabled', {
+            'title': _i18nService.t('gps_service_disabled'),
+            'message': '',
+            'type': 'warning',
+            'notification': true,
+            'module': 'location',
+          });
+          return;
+        }
       }
+      */
+      // ============ 服务检测代码结束 ============
 
       _startLocationUpdatesInternal();
 
@@ -779,6 +815,10 @@ Future<void> _handleLoadMessage() async {
     await channel.invokeMethod('quitApp');
   }
 
+  Future<void> _handleOpenAppSettings() async {
+    await openAppSettings();
+  }
+
   Future<void> _handleSendNotification(Map<String, dynamic> payload, {String? bridgeId}) async {
     try {
       final id = payload['id'] is int ? payload['id'] : (payload['id'] is String ? int.tryParse(payload['id']) : null) ?? _notificationIdCounter++;
@@ -895,24 +935,26 @@ Future<void> _handleLoadMessage() async {
       final bridgeId = message.bridgeId;
       
       print('message.type ${message.type}');
+      // 标记是否需要分发消息（默认需要，除了特殊情况）
+      bool shouldDispatch = true;
+      
       switch (message.type) {
         case 'load':
           _handleLoadMessage();
+          // load 消息不需要分发，因为它已经通过 sendMessage 发送了 appConfig
+          shouldDispatch = false;
           break;
         case 'enableLocation':
           _enableLocation = message.payload as bool;
           _handleEnableLocation(_enableLocation);
-          _dispatchMessage(message);
           break;
         case 'keepScreenOn':
           final keepOn = message.payload as bool;
           _handleKeepScreenOn(keepOn);
-          _dispatchMessage(message);
           break;
         case 'enableBackgroundLocation':
           _enableBackgroundLocation = message.payload as bool;
           _handleEnableBackgroundLocation(_enableBackgroundLocation);
-          _dispatchMessage(message);
           break;
         case 'enableBackgroundTasks':
           final enable = message.payload as bool;
@@ -921,7 +963,6 @@ Future<void> _handleLoadMessage() async {
             _backgroundStartTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
             _backgroundLocationCount = 0;
           }
-          _dispatchMessage(message);
           break;
         case 'setLanguage':
           final lang = message.payload as String?;
@@ -929,7 +970,6 @@ Future<void> _handleLoadMessage() async {
             _languageService.setLanguage(lang);
             _i18nService.setLanguage(lang);
           }
-          _dispatchMessage(message);
           break;
         case 'enableCarData':
           final enableCar = message.payload as bool;
@@ -938,76 +978,70 @@ Future<void> _handleLoadMessage() async {
           } else {
             _vehicleService.stopCarDataUpdates();
           }
-          _dispatchMessage(message);
           break;
         case 'getCarData':
           _vehicleService.requestCarData();
-          _dispatchMessage(message);
           break;
         case 'setStatusBar':
           final statusType = message.payload as String?;
           if (statusType != null) {
             _handleSetStatusBar(statusType);
           }
-          _dispatchMessage(message);
           break;
         case 'getStatusBarData':
           _handleGetStatusBarData(bridgeId: bridgeId);
-          _dispatchMessage(message);
           break;
         case 'getThemeColor':
           _handleGetThemeColor(bridgeId: bridgeId);
-          _dispatchMessage(message);
           break;
         case 'checkNewVersion':
           final showCheckingNotification = message.payload is Map
               ? (message.payload as Map)['showCheckingNotification'] as bool? ?? true
               : true;
           _handleCheckNewVersion(showCheckingNotification: showCheckingNotification);
-          _dispatchMessage(message);
           break;
         case 'switchResources':
           final host = message.payload as String?;
           if (host != null) {
             _handleSwitchResources(host, bridgeId: bridgeId);
           }
-          _dispatchMessage(message);
           break;
         case 'updateLocalWebResources':
           final url = message.payload as String?;
           if (url != null) {
             _handleUpdateLocalWebResources(url, bridgeId: bridgeId);
           }
-          _dispatchMessage(message);
           break;
         case 'restartApp':
           _handleRestartApp();
-          _dispatchMessage(message);
           break;
         case 'quitApp':
           _handleQuitApp();
-          _dispatchMessage(message);
           break;
         case 'sendNotification':
           if (message.payload is Map) {
             _handleSendNotification(message.payload as Map<String, dynamic>, bridgeId: bridgeId);
           }
-          _dispatchMessage(message);
           break;
         case 'cancelNotification':
           final cancelId = message.payload;
           _handleCancelNotification(cancelId, bridgeId: bridgeId);
-          _dispatchMessage(message);
           break;
         case 'thirdPartyLogin':
           final type = message.payload as String?;
           if (type != null) {
             _handleThirdPartyLogin(type, bridgeId: bridgeId);
           }
-          _dispatchMessage(message);
           break;
-        default:
-          _dispatchMessage(message);
+        case 'openAppSettings':
+          _handleOpenAppSettings();
+          break;
+        // default 不需要特殊处理，shouldDispatch 保持 true
+      }
+      
+      // 统一分发消息（除了 load 消息）
+      if (shouldDispatch) {
+        _dispatchMessage(message);
       }
     } catch (e) {
       print('Failed to handle web message: $e');
