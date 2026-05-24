@@ -42,7 +42,9 @@ class EngineManager {
       final version = await _getSystemWebViewVersion();
       print('[EngineManager] System WebView version: $version');
       
-      if (version < _minSystemWebViewVersion) {
+      // 只有成功获取到版本号且版本低于85时才切换到Gecko
+      // 如果获取失败返回0，保持默认的system引擎
+      if (version > 0 && version < _minSystemWebViewVersion) {
         print('[EngineManager] System WebView version $version < $_minSystemWebViewVersion, switching to Gecko');
         _selectedEngine = WebViewEngine.gecko;
       }
@@ -69,21 +71,43 @@ class EngineManager {
   }
 
   Future<int> _getSystemWebViewVersion() async {
-    try {
-      final version = await _channel.invokeMethod<String>('getSystemWebViewVersion');
-      if (version != null) {
-        final match = RegExp(r'^(\d+)').firstMatch(version);
-        if (match != null) {
-          return int.parse(match.group(1)!);
+    // 添加重试机制，解决首次启动时 channel 未注册的问题
+    const maxRetries = 5;
+    const retryDelay = Duration(milliseconds: 200);
+    
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        final version = await _channel.invokeMethod<String>('getSystemWebViewVersion');
+        if (version != null) {
+          final match = RegExp(r'^(\d+)').firstMatch(version);
+          if (match != null) {
+            final versionInt = int.parse(match.group(1)!);
+            print('[EngineManager] Got WebView version: $versionInt (attempt $attempt)');
+            return versionInt;
+          }
         }
+      } on PlatformException catch (e) {
+        print('[EngineManager] PlatformException (attempt $attempt): ${e.message}');
+      } catch (e) {
+        print('[EngineManager] Error getting WebView version (attempt $attempt): $e');
       }
-    } on PlatformException catch (e) {
-      print('[EngineManager] PlatformException: ${e.message}');
+      
+      if (attempt < maxRetries) {
+        print('[EngineManager] Retrying to get WebView version... (attempt $attempt/$maxRetries)');
+        await Future.delayed(retryDelay);
+      }
     }
+    
+    print('[EngineManager] Failed to get WebView version after $maxRetries attempts');
     return 0;
   }
 
   String getEngineName(WebViewEngine engine) {
     return engine == WebViewEngine.gecko ? 'gecko' : 'system';
+  }
+  
+  /// 获取系统WebView版本号（公开方法）
+  Future<int> getWebViewVersion() async {
+    return await _getSystemWebViewVersion();
   }
 }

@@ -220,9 +220,33 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun getSystemWebViewVersion(): String {
+        // 尝试获取不同设备上的WebView版本
+        val webViewPackages = listOf(
+            "com.google.android.webview",      // Google WebView
+            "com.android.webview",             // AOSP WebView
+            "com.huawei.webview",              // 华为 WebView
+            "com.sec.android.app.sbrowser",    // 三星浏览器/WebView
+            "com.miui.webview"                 // 小米 WebView
+        )
+        
+        for (packageName in webViewPackages) {
+            try {
+                val packageInfo = packageManager.getPackageInfo(packageName, 0)
+                val version = packageInfo.versionName
+                if (version != null && version.isNotEmpty()) {
+                    return version
+                }
+            } catch (e: Exception) {
+                // 继续尝试下一个包名
+            }
+        }
+        
+        // 如果都获取不到，尝试使用WebView类的版本信息
         return try {
-            val packageInfo = packageManager.getPackageInfo("com.google.android.webview", 0)
-            packageInfo.versionName ?: "0"
+            val webViewClass = Class.forName("android.webkit.WebView")
+            val versionField = webViewClass.getDeclaredField("WEB_VIEW_VERSION")
+            versionField.isAccessible = true
+            versionField.get(null) as String
         } catch (e: Exception) {
             "0"
         }

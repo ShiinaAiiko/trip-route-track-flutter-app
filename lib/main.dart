@@ -314,6 +314,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   static String _currentTitleStatic = ''; // 当前页面标题
   static String _currentUrlStatic = ''; // 当前页面URL
   static WebViewEngine? _selectedEngineStatic; // 选中的引擎类型
+  static int? _webViewVersionStatic; // 系统WebView版本号
   // ================================
 
   double _pitch = 0.0;
@@ -323,6 +324,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   Brightness _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
   late String _loadingSubtitle;
   WebViewEngine? _selectedEngine;
+  int? _webViewVersion; // 系统WebView版本号
   
   // 详细加载状态追踪
   LoadingStep _loadingStep = _loadingStepStatic;
@@ -410,7 +412,10 @@ class _WebViewContainerState extends State<WebViewContainer>
     try {
       _selectedEngine = await EngineManager().getSelectedEngine();
       _selectedEngineStatic = _selectedEngine;
-      print('[NYANYA-ENGINE] Selected engine: ${_selectedEngine?.name ?? 'unknown'}');
+      // 获取WebView版本号用于显示
+      _webViewVersion = await EngineManager().getWebViewVersion();
+      _webViewVersionStatic = _webViewVersion;
+      print('[NYANYA-ENGINE] Selected engine: ${_selectedEngine?.name ?? 'unknown'}, WebView version: $_webViewVersion');
     } catch (e) {
       print('[NYANYA-ENGINE] Failed to get engine: $e');
       _selectedEngine = WebViewEngine.system;

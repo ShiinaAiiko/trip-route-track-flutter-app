@@ -1441,27 +1441,6 @@ if (savedEngine != null) {
 - `lib/components/loading_content.dart` - 显示组件
 - `lib/main.dart` - 日志添加逻辑
 
-### appConfig 消息增强
-
-**功能**：在 `appConfig` 消息中增加 `engine` 参数，返回当前使用的渲染引擎
-
-**消息格式**：
-```javascript
-{
-  "type": "appConfig",
-  "payload": {
-    "version": "1.0.5",
-    "buildNumber": "11372",
-    "fullVersion": "1.0.5+11372",
-    "system": "Flutter App",
-    "engine": "system"  // 或 "gecko"
-  }
-}
-```
-
-**关键代码位置**：
-- `modules/flutter_bridge/lib/src/bridge_controller.dart` (`_handleLoadMessage` 方法)
-
 ### i18n 翻译更新
 
 **变更内容**：
