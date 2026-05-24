@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.10+169
+version: 1.0.10+193
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -31,6 +31,8 @@ dependencies:
     path: modules/flutter_bridge
   i18n:
     path: modules/i18n
+  nyanya_webview:
+    path: modules/nyanya_webview
   shadcn_ui: ^0.5.0
 
 dev_dependencies:
@@ -46,16 +48,17 @@ flutter:
     - assets/out/
     - assets/out/_next/
     - assets/out/_next/data/
-    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/
-    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/en-US/
-    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/en-US/journeyMemories/
-    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/en-US/trip/
-    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-CN/
-    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-CN/journeyMemories/
-    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-CN/trip/
-    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-TW/
-    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-TW/journeyMemories/
-    - assets/out/_next/data/ynAJiLr5eAyIYXCh6BMna/zh-TW/trip/
+    - assets/out/_next/data/hkNWhv0atE6MxH-SxMs1L/
+    - assets/out/_next/data/hkNWhv0atE6MxH-SxMs1L/en-US/
+    - assets/out/_next/data/hkNWhv0atE6MxH-SxMs1L/en-US/journeyMemories/
+    - assets/out/_next/data/hkNWhv0atE6MxH-SxMs1L/en-US/trip/
+    - assets/out/_next/data/hkNWhv0atE6MxH-SxMs1L/zh-CN/
+    - assets/out/_next/data/hkNWhv0atE6MxH-SxMs1L/zh-CN/journeyMemories/
+    - assets/out/_next/data/hkNWhv0atE6MxH-SxMs1L/zh-CN/trip/
+    - assets/out/_next/data/hkNWhv0atE6MxH-SxMs1L/zh-TW/
+    - assets/out/_next/data/hkNWhv0atE6MxH-SxMs1L/zh-TW/journeyMemories/
+    - assets/out/_next/data/hkNWhv0atE6MxH-SxMs1L/zh-TW/trip/
+    - assets/out/_next/hkNWhv0atE6MxH-SxMs1L/
     - assets/out/_next/static/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
@@ -65,8 +68,7 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
-    - assets/out/_next/static/ynAJiLr5eAyIYXCh6BMna/
-    - assets/out/_next/ynAJiLr5eAyIYXCh6BMna/
+    - assets/out/_next/static/hkNWhv0atE6MxH-SxMs1L/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/

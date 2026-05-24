@@ -57,7 +57,8 @@
         android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:allowBackup="true">
+        android:allowBackup="true"
+        android:usesCleartextTraffic="true">
         <activity
             android:name="club.aiiko.trip.MainActivity"
             android:exported="true"

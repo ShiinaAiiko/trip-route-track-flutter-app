@@ -4,11 +4,14 @@
 
 ## 当前版本
 
-**v1.0.10** (2026-05-22)
+**v1.0.11** (2026-05-24)
 
 ## 主要功能
 
-- ✅ 使用 GeckoView 加载本地静态网页（Next.js 构建）
+- ✅ **多内核 WebView 架构** - 支持 GeckoView 和系统 WebView 自由切换
+- ✅ 使用 GeckoView / 系统 WebView 加载本地静态网页（Next.js 构建）
+- ✅ 引擎自动选择 - 默认使用 System WebView，系统 WebView 版本 < 85 时自动切换到 GeckoView
+- ✅ 用户自定义引擎持久化 - 前端通过 `switchEngine` 消息切换，保存设置
 - ✅ GPS 定位功能（支持后台定位）
 - ✅ 全局 i18n 国际化系统（多语言支持：zh-CN、en-US、zh-TW）
 - ✅ 桌面 App 标题跟随语言设置动态更新
@@ -46,6 +49,14 @@
 - 比亚迪车机开放 API
 
 ## 项目进度
+
+### v1.0.11 (2026-05-24)
+- ✅ **多内核 WebView 架构** - 将 GeckoView 代码拆分为独立 `nyanya_webview` 模块
+- ✅ **系统 WebView 内核** - 实现完整系统 WebView 支持
+- ✅ **引擎自动选择** - EngineManager 实现，默认 system，版本 < 85 切换 gecko
+- ✅ **用户引擎持久化** - switchEngine 消息 + SharedPreferences 保存
+- ✅ **加载日志类型化** - LoadingLog 模型，支持多语言显示
+- ✅ **appConfig 增强** - 增加 engine 参数返回当前渲染引擎
 
 ### v1.0.10 (2026-05-22)
 - ✅ **第三方登录功能** - Google Sign-In（已实现），QQ/GitHub（预留位置）
@@ -123,6 +134,7 @@
 
 | 版本 | 日期 | 主要更新 |
 |------|------|----------|
+| v1.0.11 | 2026-05-24 | 多内核 WebView 架构、系统 WebView 支持、引擎自动选择 |
 | v1.0.10 | 2026-05-22 | 第三方登录功能（Google Sign-In）、环境变量配置、开发/生产环境区分 |
 | v1.0.9 | 2026-05-21 | 内部网站 URL 替换、GeckoRuntime 重启增强、checkGeckoViewReady |
 | v1.0.7 | - | App 自动更新系统、Shadcn UI Toast 组件 |

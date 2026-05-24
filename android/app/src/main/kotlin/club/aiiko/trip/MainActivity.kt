@@ -27,6 +27,7 @@ class MainActivity : FlutterActivity() {
     private val NOTIFICATION_CLICK_CHANNEL = "notification_click"
     private val FLUTTER_BRIDGE_CHANNEL = "flutter_bridge"
     private val LOG_CHANNEL = "log_service"
+    private val WEBVIEW_CHANNEL = "nyanya/webview"
 
     private val REQUEST_CODE_BYDAUTO_PERMISSIONS = 1001
     private val INSTALL_PERMISSION_REQUEST_CODE = 1002
@@ -203,6 +204,27 @@ class MainActivity : FlutterActivity() {
                     result.notImplemented()
                 }
             }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WEBVIEW_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getSystemWebViewVersion" -> {
+                    val version = getSystemWebViewVersion()
+                    result.success(version)
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+    }
+
+    private fun getSystemWebViewVersion(): String {
+        return try {
+            val packageInfo = packageManager.getPackageInfo("com.google.android.webview", 0)
+            packageInfo.versionName ?: "0"
+        } catch (e: Exception) {
+            "0"
         }
     }
 

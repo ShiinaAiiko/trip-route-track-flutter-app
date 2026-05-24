@@ -1278,6 +1278,190 @@ synchronized(this) {
 | 发布日期 | 2026-05-21 |
 | release.sh 版本 | v1.0.9 |
 
+### 版本信息
+
+| 项目 | 值 |
+|------|-----|
+| App 版本 | v1.0.10 (1.0.10+100) |
+| 发布日期 | 2026-05-24 |
+| release.sh 版本 | v1.0.10 |
+
+### NyaNyaWebview 模块化与多内核架构
+
+**功能概述**：将 GeckoView 相关代码拆分为独立组件 `nyanya_webview`，支持通过参数自由切换 GeckoView 或系统 WebView 作为渲染内核
+
+**模块结构**：`modules/nyanya_webview/`
+
+**核心设计**：
+
+1. **WebViewInterface** (`lib/src/webview_interface.dart`)
+   - 抽象接口，定义 WebView 的通用方法
+   - 所有 WebView 实现必须实现此接口
+
+2. **WebViewOptions** (`lib/src/webview_options.dart`)
+   - 核心配置类，包含 `engine` 参数
+   - `WebViewEngine.gecko` - 使用 GeckoView 内核
+   - `WebViewEngine.system` - 使用系统 WebView 内核
+
+3. **GeckoWebview** (`lib/src/gecko_webview.dart`)
+   - GeckoView 内核实现
+   - 基于原有的 GeckoViewPlatform.kt
+   - 私有状态类 `_NyaNyaWebviewState`
+
+4. **SystemWebview** (`lib/src/system_webview.dart`)
+   - 系统 WebView 内核实现
+   - 使用 Flutter 的 `WebViewWidget`
+   - 私有状态类 `_SystemWebviewState`
+
+5. **WebViewFactory** (`lib/src/webview_factory.dart`)
+   - 根据 `engine` 参数创建对应的 WebView 实现
+   - 对外提供统一的 `NyaNyaWebview` 组件
+
+**引擎选择逻辑（EngineManager）**：
+
+**文件**：`modules/flutter_bridge/lib/src/services/engine_manager.dart`
+
+**逻辑**：
+```dart
+// 1. 默认使用 system 引擎
+_selectedEngine = WebViewEngine.system;
+
+// 2. 检查系统 WebView 版本，如果低于 85 则切换为 gecko
+final version = await _getSystemWebViewVersion();
+if (version < 85) {
+    _selectedEngine = WebViewEngine.gecko;
+}
+
+// 3. 如果用户有自定义设置，优先使用用户设置
+final savedEngine = prefs.getString(_prefsKeyCustomEngine);
+if (savedEngine != null) {
+    _selectedEngine = savedEngine == 'gecko' ? WebViewEngine.gecko : WebViewEngine.system;
+}
+```
+
+**前端切换引擎**：
+- 发送 `switchEngine` 消息，参数为 `'gecko'` 或 `'system'`
+- 设置会持久化保存到 SharedPreferences
+- 下次启动 App 时直接使用用户保存的引擎设置
+
+**系统 WebView 实现要点**：
+
+1. **JavaScript 注入**：
+   ```javascript
+   (function() {
+       window.isFlutterApp = true;
+       window.flutterServerPort = $serverPort;
+       window.flutterServerHost = 'http://127.0.0.1:$serverPort';
+       
+       if (!window.ReactNativeWebView) {
+           window.ReactNativeWebView = {
+               postMessage: function(message) {
+                   var xhr = new XMLHttpRequest();
+                   xhr.open('GET', 'http://127.0.0.1:$serverPort/__flutter_bridge__?message=' + encodeURIComponent(message), true);
+                   xhr.send();
+               }
+           };
+       }
+       // URL 变化检测...
+   })();
+   ```
+
+2. **postMessage 处理**：
+   ```kotlin
+   "postMessage" -> {
+       val message = call.argument<String>("message")
+       val wrappedMessage = "if (window.onFlutterMessage) { window.onFlutterMessage($message); }"
+       // 执行 JavaScript
+   }
+   ```
+
+3. **HTTP 流量支持**：
+   - AndroidManifest.xml 添加 `android:usesCleartextTraffic="true"`
+
+**关键代码位置**：
+- `modules/nyanya_webview/lib/src/webview_interface.dart` - 抽象接口
+- `modules/nyanya_webview/lib/src/webview_options.dart` - 配置选项
+- `modules/nyanya_webview/lib/src/gecko_webview.dart` - GeckoView 实现
+- `modules/nyanya_webview/lib/src/system_webview.dart` - 系统 WebView 实现
+- `modules/nyanya_webview/lib/src/webview_factory.dart` - 工厂类
+- `modules/nyanya_webview/android/src/main/kotlin/.../SystemWebViewPlatform.kt` - Android 端实现
+- `modules/flutter_bridge/lib/src/services/engine_manager.dart` - 引擎选择逻辑
+
+### 加载日志类型化系统
+
+**功能概述**：将加载日志从字符串数组改为带类型标记的对象数组，支持按类型过滤和显示
+
+**设计**：
+
+1. **LoadingLog 模型** (`lib/models/loading_log.dart`)：
+   ```dart
+   enum LoadingLogType {
+     engine,    // 引擎
+     server,    // 服务器
+     web,       // 界面
+   }
+
+   class LoadingLog {
+     final LoadingLogType type;
+     final String message;
+   }
+   ```
+
+2. **显示逻辑** (`lib/components/loading_content.dart`)：
+   ```dart
+   List<LoadingLog> get _displayLoadingLogs {
+       Map<LoadingLogType, LoadingLog> latestLogs = {};
+       
+       for (final log in loadingLog) {
+           latestLogs[log.type] = log;
+       }
+       
+       List<LoadingLog> result = [];
+       if (latestLogs.containsKey(LoadingLogType.engine)) {
+           result.add(latestLogs[LoadingLogType.engine]!);
+       }
+       if (latestLogs.containsKey(LoadingLogType.server)) {
+           result.add(latestLogs[LoadingLogType.server]!);
+       }
+       if (latestLogs.containsKey(LoadingLogType.web)) {
+           result.add(latestLogs[LoadingLogType.web]!);
+       }
+       
+       return result;
+   }
+   ```
+
+**优势**：
+- 不依赖语言关键词，支持所有语言（zh-CN、en-US、zh-TW）
+- 每种类型只显示最新的一条日志
+- 固定显示顺序：引擎 → 服务器 → 界面
+
+**关键代码位置**：
+- `lib/models/loading_log.dart` - 日志模型定义
+- `lib/components/loading_content.dart` - 显示组件
+- `lib/main.dart` - 日志添加逻辑
+
+### appConfig 消息增强
+
+**功能**：在 `appConfig` 消息中增加 `engine` 参数，返回当前使用的渲染引擎
+
+**消息格式**：
+```javascript
+{
+  "type": "appConfig",
+  "payload": {
+    "version": "1.0.5",
+    "buildNumber": "11372",
+    "fullVersion": "1.0.5+11372",
+    "system": "Flutter App",
+    "engine": "system"  // 或 "gecko"
+  }
+}
+```
+
+**关键代码位置**：
+- `modules/flutter_bridge/lib/src/bridge_controller.dart` (`_handleLoadMessage` 方法)
+
 ### i18n 翻译更新
 
 **变更内容**：
@@ -1285,12 +1469,9 @@ synchronized(this) {
 |-----|-------|-------|-------|
 | loading_subtitle | 由 Vibe Coding 构建 | Built with Vibe Coding | 由 Vibe Coding 建構 |
 | update_skip | 下次再说 | - | 下次再說 |
-
-### 自动更新服务优化
-
-**变更**：移除下载前清理旧 APK 文件的逻辑
-
-**原因**：避免在下载过程中删除正在使用的 APK 文件导致问题
+| loading_system_webview | 加载 System WebView 内核中... | Loading System WebView engine... | 載入 System WebView 核心中... |
+| loading_system_webview_success | ✓ System WebView 内核加载成功 | ✓ System WebView engine loaded | ✓ System WebView 核心載入成功 |
+| loading_system_webview_failed | ✗ System WebView 内核加载失败 | ✗ System WebView engine load failed | ✗ System WebView 核心載入失敗 |
 
 ---
 

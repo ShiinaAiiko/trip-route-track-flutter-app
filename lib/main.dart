@@ -13,10 +13,13 @@ import 'package:shadcn_ui/shadcn_ui.dart';
 // import 'package:flutter_foreground_task/flutter_foreground_task.dart'; // 暂时禁用
 import 'local_server.dart';
 import 'components/components.dart';
+import 'models/loading_log.dart';
 import 'package:flutter_bridge/src/bridge_controller.dart';
 import 'package:flutter_bridge/src/bridge_message.dart';
 import 'package:flutter_bridge/src/services/file_log_service.dart';
 import 'package:i18n/i18n.dart';
+import 'package:nyanya_webview/nyanya_webview.dart';
+import 'package:flutter_bridge/src/services/engine_manager.dart';
 
 String? _initialUrl;
 String _appTitle = '';
@@ -296,7 +299,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   static bool _isLoadingStatic = true;
   static bool _isPageLoadedStatic = false; // 标记页面是否已经成功加载过
   static LoadingStep _loadingStepStatic = LoadingStep.initial;
-  static List<String> _loadingLogStatic = [];
+  static List<LoadingLog> _loadingLogStatic = [];
   static DateTime? _lastBackgroundTimeStatic; // 记录进入后台的时间
   static bool _isInBackgroundStatic = false; // 标记是否在后台
   static DateTime? _lastRecoveryTimeStatic; // 记录上次恢复的时间
@@ -310,6 +313,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   static bool _canGoForwardStatic = false; // 是否可以前进到下一页
   static String _currentTitleStatic = ''; // 当前页面标题
   static String _currentUrlStatic = ''; // 当前页面URL
+  static WebViewEngine? _selectedEngineStatic; // 选中的引擎类型
   // ================================
 
   double _pitch = 0.0;
@@ -318,10 +322,11 @@ class _WebViewContainerState extends State<WebViewContainer>
   bool _isPageLoaded = _isPageLoadedStatic;
   Brightness _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
   late String _loadingSubtitle;
+  WebViewEngine? _selectedEngine;
   
   // 详细加载状态追踪
   LoadingStep _loadingStep = _loadingStepStatic;
-  List<String> _loadingLog = List.from(_loadingLogStatic);
+  List<LoadingLog> _loadingLog = List.from(_loadingLogStatic);
   
   // 后台状态追踪
   DateTime? _lastBackgroundTime = _lastBackgroundTimeStatic;
@@ -363,14 +368,14 @@ class _WebViewContainerState extends State<WebViewContainer>
       print('[NYANYA-INIT] first load, starting sequence');
       // 发送 App 刚启动打开事件
       BridgeController().sendAppStartEvent();
-      // 开始详细加载流程
-      _startLoadingSequence();
+      // 先获取引擎类型，再开始加载流程
+      _initEngineAndStartLoading();
       
       // 超时时间延长到15秒，确保有足够时间完成所有加载步骤
       _loadTimeoutTimer = Timer(const Duration(seconds: 15), () {
         if (mounted && _isLoading) {
           print('Loading timeout after 15 seconds');
-          _addLoadingLog(BridgeController().i18nService.t('loading_web_failed'));
+          _addLoadingLog(LoadingLogType.web, BridgeController().i18nService.t('loading_web_failed'));
           setState(() {
             _loadingStep = LoadingStep.webFailed;
             _loadingStepStatic = _loadingStep;
@@ -400,18 +405,41 @@ class _WebViewContainerState extends State<WebViewContainer>
     }
   }
 
-  /// 验证 GeckoView 是否准备就绪
-  Future<bool> _checkGeckoViewReady() async {
+  /// 初始化引擎类型并开始加载流程
+  Future<void> _initEngineAndStartLoading() async {
+    try {
+      _selectedEngine = await EngineManager().getSelectedEngine();
+      _selectedEngineStatic = _selectedEngine;
+      print('[NYANYA-ENGINE] Selected engine: ${_selectedEngine?.name ?? 'unknown'}');
+    } catch (e) {
+      print('[NYANYA-ENGINE] Failed to get engine: $e');
+      _selectedEngine = WebViewEngine.system;
+      _selectedEngineStatic = _selectedEngine;
+    }
+    
+    await _startLoadingSequence();
+  }
+
+  /// 验证 WebView 是否准备就绪
+  Future<bool> _checkWebViewReady() async {
+    // 等待 channel 可用
+    int waitAttempts = 0;
+    const maxWaitAttempts = 20;
+    while (_channel == null && waitAttempts < maxWaitAttempts) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      waitAttempts++;
+    }
+    
     if (_channel == null) {
-      print('[NYANYA-GECKO] Channel not available yet');
+      print('[NYANYA-WEBVIEW] Channel not available after waiting');
       return false;
     }
     try {
-      final result = await _channel?.invokeMethod<bool>('checkGeckoViewReady');
-      print('[NYANYA-GECKO] checkGeckoViewReady result: $result');
+      final result = await _channel?.invokeMethod<bool>('checkWebViewReady');
+      print('[NYANYA-WEBVIEW] checkWebViewReady result: $result');
       return result ?? false;
     } catch (e) {
-      print('[NYANYA-GECKO] checkGeckoViewReady failed: $e');
+      print('[NYANYA-WEBVIEW] checkWebViewReady failed: $e');
       return false;
     }
   }
@@ -432,11 +460,19 @@ class _WebViewContainerState extends State<WebViewContainer>
   /// 处理加载失败，决定是否重试
   Future<void> _handleLoadFailure(String translationKey, LoadingStep errorStep) async {
     final i18n = BridgeController().i18nService;
+    
+    LoadingLogType type = LoadingLogType.engine;
+    if (errorStep == LoadingStep.serverFailed) {
+      type = LoadingLogType.server;
+    } else if (errorStep == LoadingStep.webFailed) {
+      type = LoadingLogType.web;
+    }
+    
     setState(() {
       _loadingStep = errorStep;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(i18n.t(translationKey));
-      _loadingLogStatic.add(i18n.t(translationKey));
+      _loadingLog.add(LoadingLog(type: type, message: i18n.t(translationKey)));
+      _loadingLogStatic.add(LoadingLog(type: type, message: i18n.t(translationKey)));
     });
     
     // 检查是否可以重试
@@ -446,7 +482,7 @@ class _WebViewContainerState extends State<WebViewContainer>
       
       // 添加重试提示信息
       final retryMessage = '重试 $_retryCount/$_maxRetries...';
-      _addLoadingLog(retryMessage);
+      _addLoadingLog(LoadingLogType.server, retryMessage);
       
       print('[NYANYA-RETRY] Scheduling retry $_retryCount/$_maxRetries');
       
@@ -480,45 +516,51 @@ class _WebViewContainerState extends State<WebViewContainer>
       await Future.delayed(const Duration(milliseconds: 300));
     }
     
-    // 1. 加载 GeckoView 内核
+    // 1. 加载 WebView 内核
+    final engine = _selectedEngineStatic ?? _selectedEngine ?? WebViewEngine.system;
+    final isGecko = engine == WebViewEngine.gecko;
+    final loadingKey = isGecko ? 'loading_gecko' : 'loading_system_webview';
+    final loadingSuccessKey = isGecko ? 'loading_gecko_success' : 'loading_system_webview_success';
+    final loadingFailedKey = isGecko ? 'loading_gecko_failed' : 'loading_system_webview_failed';
+    
     setState(() {
       _loadingStep = LoadingStep.loadingGecko;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(i18n.t('loading_gecko'));
-      _loadingLogStatic.add(i18n.t('loading_gecko'));
+      _loadingLog.add(LoadingLog(type: LoadingLogType.engine, message: i18n.t(loadingKey)));
+      _loadingLogStatic.add(LoadingLog(type: LoadingLogType.engine, message: i18n.t(loadingKey)));
     });
-    print('Loading GeckoView engine...');
+    print('Loading WebView engine: ${engine.name}...');
     
-    // 等待 GeckoView 初始化，然后验证
-    bool geckoReady = false;
-    int geckoCheckAttempts = 0;
-    while (!geckoReady && geckoCheckAttempts < 5) {
+    // 等待 WebView 初始化，然后验证
+    bool webViewReady = false;
+    int webViewCheckAttempts = 0;
+    while (!webViewReady && webViewCheckAttempts < 5) {
       await Future.delayed(const Duration(milliseconds: 400));
-      geckoReady = await _checkGeckoViewReady();
-      geckoCheckAttempts++;
-      print('[NYANYA-GECKO] Check attempt $geckoCheckAttempts: $geckoReady');
+      webViewReady = await _checkWebViewReady();
+      webViewCheckAttempts++;
+      print('[NYANYA-WEBVIEW] Check attempt $webViewCheckAttempts: $webViewReady');
     }
     
-    if (!geckoReady) {
-      print('[NYANYA-GECKO] Failed to load GeckoView after all checks');
-      await _handleLoadFailure('loading_gecko_failed', LoadingStep.geckoFailed);
+    if (!webViewReady) {
+      print('[NYANYA-WEBVIEW] Failed to load WebView after all checks');
+      await _handleLoadFailure(loadingFailedKey, LoadingStep.geckoFailed);
       return;
     }
     
     setState(() {
       _loadingStep = LoadingStep.geckoSuccess;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(i18n.t('loading_gecko_success'));
-      _loadingLogStatic.add(i18n.t('loading_gecko_success'));
+      _loadingLog.add(LoadingLog(type: LoadingLogType.engine, message: i18n.t(loadingSuccessKey)));
+      _loadingLogStatic.add(LoadingLog(type: LoadingLogType.engine, message: i18n.t(loadingSuccessKey)));
     });
-    print('GeckoView engine loaded successfully');
+    print('WebView engine loaded successfully');
     
     // 2. 启动本地静态服务
     setState(() {
       _loadingStep = LoadingStep.loadingServer;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(i18n.t('loading_server'));
-      _loadingLogStatic.add(i18n.t('loading_server'));
+      _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server')));
+      _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server')));
     });
     print('Starting local server...');
     
@@ -582,8 +624,8 @@ class _WebViewContainerState extends State<WebViewContainer>
     setState(() {
       _loadingStep = LoadingStep.serverSuccess;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(i18n.t('loading_server_success'));
-      _loadingLogStatic.add(i18n.t('loading_server_success'));
+      _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_success')));
+      _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_success')));
     });
     print('Local server started successfully');
     
@@ -594,18 +636,18 @@ class _WebViewContainerState extends State<WebViewContainer>
     setState(() {
       _loadingStep = LoadingStep.loadingWeb;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(i18n.t('loading_web'));
-      _loadingLogStatic.add(i18n.t('loading_web'));
+      _loadingLog.add(LoadingLog(type: LoadingLogType.web, message: i18n.t('loading_web')));
+      _loadingLogStatic.add(LoadingLog(type: LoadingLogType.web, message: i18n.t('loading_web')));
     });
     print('Waiting for website response...');
     
     // 网站响应由 JavaScript 的 closeLoading 消息触发，这里不主动标记成功
   }
 
-  void _addLoadingLog(String message) {
+  void _addLoadingLog(LoadingLogType type, String message) {
     setState(() {
-      _loadingLog.add(message);
-      _loadingLogStatic.add(message);
+      _loadingLog.add(LoadingLog(type: type, message: message));
+      _loadingLogStatic.add(LoadingLog(type: type, message: message));
     });
   }
 
@@ -633,7 +675,7 @@ class _WebViewContainerState extends State<WebViewContainer>
       
       // 标记网站响应成功
       final i18n = BridgeController().i18nService.t('loading_web_success');
-      _addLoadingLog(i18n);
+      _addLoadingLog(LoadingLogType.web, i18n);
       
       setState(() {
         _loadingStep = LoadingStep.webSuccess;
@@ -1036,8 +1078,8 @@ class _WebViewContainerState extends State<WebViewContainer>
       if (!kernelHealthy) {
         print('[NYANYA-RECOVERY] Kernel unhealthy, restarting app instead of attempting recovery');
         setState(() {
-          _loadingLog.add(i18n.t('loading_server_failed'));
-          _loadingLogStatic.add(i18n.t('loading_server_failed'));
+          _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_failed')));
+          _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_failed')));
         });
         await _showNotification(i18n.t('app_exception_title'), i18n.t('app_exception_content'));
         Timer(const Duration(seconds: 1), () {
@@ -1049,8 +1091,8 @@ class _WebViewContainerState extends State<WebViewContainer>
       if (!serverHealthy) {
         print('[NYANYA-RECOVERY] Server unhealthy, restarting server only');
         setState(() {
-          _loadingLog.add(i18n.t('loading_server'));
-          _loadingLogStatic.add(i18n.t('loading_server'));
+          _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server')));
+          _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server')));
         });
 
         print('[NYANYA-RECOVERY] Restarting local server...');
@@ -1058,10 +1100,10 @@ class _WebViewContainerState extends State<WebViewContainer>
         print('[NYANYA-RECOVERY] Server restarted successfully');
 
         setState(() {
-          _loadingLog.add(i18n.t('loading_server_success'));
-          _loadingLogStatic.add(i18n.t('loading_server_success'));
-          _loadingLog.add(i18n.t('loading_web'));
-          _loadingLogStatic.add(i18n.t('loading_web'));
+          _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_success')));
+          _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_success')));
+          _loadingLog.add(LoadingLog(type: LoadingLogType.web, message: i18n.t('loading_web')));
+          _loadingLogStatic.add(LoadingLog(type: LoadingLogType.web, message: i18n.t('loading_web')));
         });
 
         await Future.delayed(const Duration(milliseconds: 300));
@@ -1079,8 +1121,8 @@ class _WebViewContainerState extends State<WebViewContainer>
     } catch (e) {
       print('[NYANYA-RECOVERY] Failed to perform recovery: $e');
       setState(() {
-        _loadingLog.add(i18n.t('loading_server_failed'));
-        _loadingLogStatic.add(i18n.t('loading_server_failed'));
+        _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_failed')));
+        _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_failed')));
       });
       await _showNotification(i18n.t('app_exception_title'), i18n.t('app_exception_content'));
 
@@ -1094,9 +1136,9 @@ class _WebViewContainerState extends State<WebViewContainer>
   Future<void> _reloadWebView() async {
     if (_channel != null) {
       try {
-        final isReady = await _channel!.invokeMethod<bool>('checkGeckoViewReady') ?? false;
+        final isReady = await _channel!.invokeMethod<bool>('checkWebViewReady') ?? false;
         if (!isReady) {
-          print('[NYANYA-RECOVERY] GeckoView not ready after shutdown, skipping reload');
+          print('[NYANYA-RECOVERY] WebView not ready after shutdown, skipping reload');
           return;
         }
 
@@ -1105,7 +1147,7 @@ class _WebViewContainerState extends State<WebViewContainer>
         print('Reloading webview with URL: $url');
       } catch (e) {
         print('Failed to reload webview: $e');
-        print('GeckoView may be destroyed, will be recreated on next frame');
+        print('WebView may be destroyed, will be recreated on next frame');
       }
     }
   }
@@ -1487,111 +1529,88 @@ class _WebViewContainerState extends State<WebViewContainer>
     );
   }
 
-  Widget _buildGeckoView() {
-    const viewType = 'geckoView';
+  Widget _buildNyaNyaWebview() {
     final initialUrl = _initialUrl ?? LocalServer.instance.url;
     final serverPort = LocalServer.instance.port;
-    final creationParams = <String, dynamic>{
-      'initialUrl': initialUrl,
-      'serverPort': serverPort,
-      'isDarkMode': _brightness == Brightness.dark,
-    };
+    final engine = _selectedEngineStatic ?? _selectedEngine ?? WebViewEngine.system;
 
-    if (Theme.of(context).platform == TargetPlatform.android) {
-      return PlatformViewLink(
-        viewType: viewType,
-        surfaceFactory: (BuildContext context, PlatformViewController controller) {
-          return AndroidViewSurface(
-            controller: controller as AndroidViewController,
-            gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
-            hitTestBehavior: PlatformViewHitTestBehavior.opaque,
-          );
-        },
-        onCreatePlatformView: (PlatformViewCreationParams params) {
-          final controller = PlatformViewsService.initSurfaceAndroidView(
-            id: params.id,
-            viewType: viewType,
-            layoutDirection: TextDirection.ltr,
-            creationParams: creationParams,
-            creationParamsCodec: const StandardMessageCodec(),
-          );
-          controller.addOnPlatformViewCreatedListener((int id) {
-            print('PlatformView created with id: $id');
-            _channel = MethodChannel('gecko_view_$id');
-            print('MethodChannel created: gecko_view_$id');
-            BridgeController().setChannel(_channel);
-            BridgeController().setExternalHandler(_handleMethodCall);
-            print('BridgeController initialized');
-            
-            _channel!.setMethodCallHandler((call) async {
-              switch (call.method) {
-                case 'onPageStart':
-                  print('Page started: ${call.arguments}');
-                  break;
-                case 'onPageStop':
-                  print('Page stopped: ${call.arguments}');
-                  break;
-                case 'onTitleChange':
-                  final title = call.arguments['title'] as String? ?? '';
-                  if (mounted) {
-                    setState(() {
-                      _currentTitle = title;
-                      _currentTitleStatic = title;
-                    });
-                  }
-                  break;
-                case 'onTabStackChanged':
-                  print('Tab stack changed: ${call.arguments}');
-                  // 防抖：避免短时间内多次更新导致闪烁
-                  _tabStackChangedTimer?.cancel();
-                  _tabStackChangedTimer = Timer(const Duration(milliseconds: 100), () {
-                    final tabsData = call.arguments['tabs'] as List<dynamic>? ?? [];
-                    final canGoBack = call.arguments['canGoBack'] as bool? ?? false;
-                    final canGoForward = call.arguments['canGoForward'] as bool? ?? false;
-                    if (mounted) {
-                      setState(() {
-                        _tabs = tabsData.map((tab) => TabInfo.fromMap(Map<String, dynamic>.from(tab))).toList();
-                        _tabsStatic = _tabs;
-                        _canGoBack = canGoBack;
-                        _canGoBackStatic = canGoBack;
-                        _canGoForward = canGoForward;
-                        _canGoForwardStatic = canGoForward;
-                        final currentTab = _tabs.isNotEmpty ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first) : null;
-                        print('[_onTabStackChanged] _canGoBack=$_canGoBack, _canGoForward=$_canGoForward, currentTab=${currentTab?.url}, isCurrent=${currentTab?.isCurrent}');
-                      });
-                    }
-                  });
-                  break;
-                case 'onTabChanged':
-                  print('Tab changed: ${call.arguments}');
-                  _loadTabs();
-                  break;
-                case 'onTabOpened':
-                  print('Tab opened: ${call.arguments}');
-                  _loadTabs();
-                  break;
-                case 'onRequestExitApp':
-                  print('Request exit app');
-                  _handleExitAppRequest();
-                  break;
+    final options = WebViewOptions(
+      engine: engine,
+      initialUrl: initialUrl,
+      serverPort: serverPort,
+    );
+
+    return NyaNyaWebview(
+      options: options,
+      messageHandler: (String message) {
+        BridgeController().handleWebMessage(message);
+      },
+      onChannelCreated: (MethodChannel channel) {
+        print('PlatformView created with channel: ${channel.name}');
+        _channel = channel;
+        BridgeController().setChannel(_channel);
+        BridgeController().setExternalHandler(_handleMethodCall);
+        print('BridgeController initialized');
+
+        _channel!.setMethodCallHandler((call) async {
+          switch (call.method) {
+            case 'onPageStart':
+              print('Page started: ${call.arguments}');
+              break;
+            case 'onPageStop':
+              print('Page stopped: ${call.arguments}');
+              break;
+            case 'onTitleChange':
+              final title = call.arguments['title'] as String? ?? '';
+              if (mounted) {
+                setState(() {
+                  _currentTitle = title;
+                  _currentTitleStatic = title;
+                });
               }
-            });
-            
-            Future.delayed(const Duration(milliseconds: 500), () {
+              break;
+            case 'onTabStackChanged':
+              print('Tab stack changed: ${call.arguments}');
+              // 防抖：避免短时间内多次更新导致闪烁
+              _tabStackChangedTimer?.cancel();
+              _tabStackChangedTimer = Timer(const Duration(milliseconds: 100), () {
+                final tabsData = call.arguments['tabs'] as List<dynamic>? ?? [];
+                final canGoBack = call.arguments['canGoBack'] as bool? ?? false;
+                final canGoForward = call.arguments['canGoForward'] as bool? ?? false;
+                if (mounted) {
+                  setState(() {
+                    _tabs = tabsData.map((tab) => TabInfo.fromMap(Map<String, dynamic>.from(tab))).toList();
+                    _tabsStatic = _tabs;
+                    _canGoBack = canGoBack;
+                    _canGoBackStatic = canGoBack;
+                    _canGoForward = canGoForward;
+                    _canGoForwardStatic = _canGoForward;
+                    final currentTab = _tabs.isNotEmpty ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first) : null;
+                    print('[_onTabStackChanged] _canGoBack=$_canGoBack, _canGoForward=$_canGoForward, currentTab=${currentTab?.url}, isCurrent=${currentTab?.isCurrent}');
+                  });
+                }
+              });
+              break;
+            case 'onTabChanged':
+              print('Tab changed: ${call.arguments}');
               _loadTabs();
-            });
-            
-            params.onPlatformViewCreated(id);
-          });
-          controller.create();
-          return controller;
-        },
-      );
-    } else {
-      return const Center(
-        child: Text('This platform is not supported'),
-      );
-    }
+              break;
+            case 'onTabOpened':
+              print('Tab opened: ${call.arguments}');
+              _loadTabs();
+              break;
+            case 'onRequestExitApp':
+              print('Request exit app');
+              _handleExitAppRequest();
+              break;
+          }
+        });
+
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _loadTabs();
+        });
+      },
+    );
   }
 
   @override
@@ -1614,7 +1633,7 @@ class _WebViewContainerState extends State<WebViewContainer>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _buildGeckoView(),
+                  _buildNyaNyaWebview(),
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 500),
                     transitionBuilder: (Widget child, Animation<double> animation) {

@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:nyanya_webview/nyanya_webview.dart';
 import 'bridge_message.dart';
 import 'services/keep_awake_service.dart';
 import 'services/background_service.dart';
@@ -21,6 +22,7 @@ import 'services/notification_service.dart';
 import 'services/vehicle_service.dart';
 import 'services/update_service.dart';
 import 'services/log_service.dart';
+import 'services/engine_manager.dart';
 
 typedef MessageHandler = void Function(BridgeMessage message);
 typedef FlutterMethodCallHandler = void Function(MethodCall call);
@@ -501,18 +503,21 @@ class BridgeController {
 Future<void> _handleLoadMessage() async {
     try {
       final packageInfo = await PackageInfo.fromPlatform();
+      final engine = await EngineManager().getSelectedEngine();
       sendMessage('appConfig', {
         'version': packageInfo.version,       // 例如 "1.0.5"
         'buildNumber': packageInfo.buildNumber, // 例如 "11372"
         'fullVersion': '${packageInfo.version}+${packageInfo.buildNumber}', // 组合版
         'system': 'Flutter App',
+        'engine': engine.name,
       });
     } catch (e) {
       sendMessage('appConfig', {
         'version': 'unknown',
         'buildNumber': 'unknown',
-        'fullVersion':'unknown',
+        'fullVersion': 'unknown',
         'system': 'Flutter App',
+        'engine': 'unknown',
       });
     }
   }
@@ -1036,6 +1041,12 @@ Future<void> _handleLoadMessage() async {
         case 'openAppSettings':
           _handleOpenAppSettings();
           break;
+        case 'switchEngine':
+          final type = message.payload as String?;
+          if (type != null) {
+            _handleSwitchEngine(type, bridgeId: bridgeId);
+          }
+          break;
         // default 不需要特殊处理，shouldDispatch 保持 true
       }
       
@@ -1206,6 +1217,29 @@ Future<void> _handleLoadMessage() async {
     } catch (e) {
       print('[Bridge] Third party login error: $e');
       sendMessage('thirdPartyLogin', {
+        'success': false,
+        'error': e.toString(),
+      }, bridgeId: bridgeId);
+    }
+  }
+
+  Future<void> _handleSwitchEngine(String type, {String? bridgeId}) async {
+    print('[Bridge] Switch engine requested: $type');
+    
+    try {
+      final engine = type == 'gecko' ? WebViewEngine.gecko : WebViewEngine.system;
+      
+      // 使用全局的EngineManager来设置引擎
+      await EngineManager().setCustomEngine(engine);
+      
+      sendMessage('switchEngine', {
+        'success': true,
+        'engine': type,
+        'message': 'Engine switched to $type, please restart app to take effect',
+      }, bridgeId: bridgeId);
+    } catch (e) {
+      print('[Bridge] Switch engine error: $e');
+      sendMessage('switchEngine', {
         'success': false,
         'error': e.toString(),
       }, bridgeId: bridgeId);

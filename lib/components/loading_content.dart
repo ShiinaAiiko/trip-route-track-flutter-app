@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'loading_dots.dart';
+import '../models/loading_log.dart';
 
 class LoadingContent extends StatelessWidget {
   final Brightness brightness;
   final String subtitle;
-  final List<String> loadingLog;
+  final List<LoadingLog> loadingLog;
 
   const LoadingContent({
     super.key,
@@ -30,13 +31,13 @@ class LoadingContent extends StatelessWidget {
               constraints: const BoxConstraints(maxHeight: 120),
               child: ListView.builder(
                 shrinkWrap: true,
-                itemCount: _filteredLoadingLog.length,
+                itemCount: _displayLoadingLogs.length,
                 itemBuilder: (context, index) {
-                  final log = _filteredLoadingLog[index];
+                  final log = _displayLoadingLogs[index];
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Text(
-                      log,
+                      log.message,
                       style: TextStyle(
                         color: brightness == Brightness.dark
                             ? Colors.white.withOpacity(0.8)
@@ -71,19 +72,27 @@ class LoadingContent extends StatelessWidget {
     );
   }
 
-  List<String> get _filteredLoadingLog {
-    final Map<String, String> latestStatus = {};
-
+  List<LoadingLog> get _displayLoadingLogs {
+    // 每种类型只显示最新的一条，总共最多显示3条（引擎、服务器、界面）
+    Map<LoadingLogType, LoadingLog> latestLogs = {};
+    
+    // 遍历所有日志，每种类型保留最新的一条
     for (final log in loadingLog) {
-      if (log.contains('GeckoView') || log.contains('内核')) {
-        latestStatus['gecko'] = log;
-      } else if (log.contains('服务') || log.toLowerCase().contains('server')) {
-        latestStatus['server'] = log;
-      } else if (log.contains('界面') || log.toLowerCase().contains('interface') || log.contains('准备')) {
-        latestStatus['web'] = log;
-      }
+      latestLogs[log.type] = log;
     }
-
-    return latestStatus.values.toList();
+    
+    // 按固定顺序返回：引擎 → 服务器 → 界面
+    List<LoadingLog> result = [];
+    if (latestLogs.containsKey(LoadingLogType.engine)) {
+      result.add(latestLogs[LoadingLogType.engine]!);
+    }
+    if (latestLogs.containsKey(LoadingLogType.server)) {
+      result.add(latestLogs[LoadingLogType.server]!);
+    }
+    if (latestLogs.containsKey(LoadingLogType.web)) {
+      result.add(latestLogs[LoadingLogType.web]!);
+    }
+    
+    return result;
   }
 }
