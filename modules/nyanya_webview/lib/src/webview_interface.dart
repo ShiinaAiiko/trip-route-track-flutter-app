@@ -21,6 +21,8 @@ abstract class WebViewInterface {
 
   Future<void> setWebMessageHandler(WebViewMessageHandler handler);
 
+  Future<void> openInBrowser(String url);
+
   Future<void> dispose();
 }
 

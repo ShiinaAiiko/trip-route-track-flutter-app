@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -1539,81 +1540,39 @@ class _WebViewContainerState extends State<WebViewContainer>
     final serverPort = LocalServer.instance.port;
     final engine = _selectedEngineStatic ?? _selectedEngine ?? WebViewEngine.system;
 
-    final options = WebViewOptions(
-      engine: engine,
-      initialUrl: initialUrl,
-      serverPort: serverPort,
-    );
-
     return NyaNyaWebview(
-      options: options,
+      options: WebViewOptions(
+        engine: engine,
+        initialUrl: initialUrl,
+        serverPort: serverPort,
+        newTabBehavior: NewTabBehavior.delegate,
+      ),
       messageHandler: (String message) {
         BridgeController().handleWebMessage(message);
       },
-      onChannelCreated: (MethodChannel channel) {
-        print('PlatformView created with channel: ${channel.name}');
+      onChannelCreated: (channel) {
         _channel = channel;
-        BridgeController().setChannel(_channel);
-        BridgeController().setExternalHandler(_handleMethodCall);
-        print('BridgeController initialized');
-
-        _channel!.setMethodCallHandler((call) async {
-          switch (call.method) {
-            case 'onPageStart':
-              print('Page started: ${call.arguments}');
-              break;
-            case 'onPageStop':
-              print('Page stopped: ${call.arguments}');
-              break;
-            case 'onTitleChange':
-              final title = call.arguments['title'] as String? ?? '';
-              if (mounted) {
-                setState(() {
-                  _currentTitle = title;
-                  _currentTitleStatic = title;
-                });
-              }
-              break;
-            case 'onTabStackChanged':
-              print('Tab stack changed: ${call.arguments}');
-              // 防抖：避免短时间内多次更新导致闪烁
-              _tabStackChangedTimer?.cancel();
-              _tabStackChangedTimer = Timer(const Duration(milliseconds: 100), () {
-                final tabsData = call.arguments['tabs'] as List<dynamic>? ?? [];
-                final canGoBack = call.arguments['canGoBack'] as bool? ?? false;
-                final canGoForward = call.arguments['canGoForward'] as bool? ?? false;
-                if (mounted) {
-                  setState(() {
-                    _tabs = tabsData.map((tab) => TabInfo.fromMap(Map<String, dynamic>.from(tab))).toList();
-                    _tabsStatic = _tabs;
-                    _canGoBack = canGoBack;
-                    _canGoBackStatic = canGoBack;
-                    _canGoForward = canGoForward;
-                    _canGoForwardStatic = _canGoForward;
-                    final currentTab = _tabs.isNotEmpty ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first) : null;
-                    print('[_onTabStackChanged] _canGoBack=$_canGoBack, _canGoForward=$_canGoForward, currentTab=${currentTab?.url}, isCurrent=${currentTab?.isCurrent}');
-                  });
-                }
-              });
-              break;
-            case 'onTabChanged':
-              print('Tab changed: ${call.arguments}');
-              _loadTabs();
-              break;
-            case 'onTabOpened':
-              print('Tab opened: ${call.arguments}');
-              _loadTabs();
-              break;
-            case 'onRequestExitApp':
-              print('Request exit app');
-              _handleExitAppRequest();
-              break;
-          }
-        });
-
-        Future.delayed(const Duration(milliseconds: 500), () {
-          _loadTabs();
-        });
+        BridgeController().setChannel(channel);
+      },
+      onOpenUrl: (url, target) {
+        print('[NyaNyaOpenURL] MAIN: onOpenUrl called: url=$url, target=$target');
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TabManagerWidget(
+              initialUrl: url,
+              optionsBuilder: (tabUrl) => WebViewOptions(
+                engine: engine,
+                initialUrl: tabUrl,
+                serverPort: serverPort,
+                newTabBehavior: NewTabBehavior.delegate,
+              ),
+              maxTabs: 10,
+              showTabBar: true,
+              brightness: _brightness,
+            ),
+          ),
+        );
       },
     );
   }

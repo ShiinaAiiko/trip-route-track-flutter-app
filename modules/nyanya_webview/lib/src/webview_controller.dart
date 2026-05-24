@@ -8,6 +8,7 @@ class WebViewController {
   late NyaNyaWebviewController _nyaNyaController;
   late WebViewBridge _bridge;
   final WebViewOptions _options;
+  OpenUrlHandler? _onOpenUrl;
 
   WebViewController(this._options) {
     _nyaNyaController = NyaNyaWebviewController();
@@ -22,6 +23,7 @@ class WebViewController {
           options: _options,
           messageHandler: _handleWebMessage,
           controllerKey: _nyaNyaController.key,
+          onOpenUrl: _onOpenUrl,
         );
         break;
       case WebViewEngine.system:
@@ -56,6 +58,15 @@ class WebViewController {
   Future<void> evaluateJavascript(String script) => _nyaNyaController.evaluateJavascript(script);
 
   Future<void> postMessage(String message) => _nyaNyaController.postMessage(message);
+
+  Future<void> setOnOpenUrlHandler(OpenUrlHandler? handler) {
+    _onOpenUrl = handler;
+    return Future.value();
+  }
+
+  Future<void> openInBrowser(String url) {
+    return _nyaNyaController.openInBrowser(url);
+  }
 
   void on(String eventName, BridgeMessageHandler handler) {
     _bridge.on(eventName, handler);

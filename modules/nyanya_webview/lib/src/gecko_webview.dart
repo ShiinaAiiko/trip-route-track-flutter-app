@@ -17,6 +17,7 @@ class NyaNyaWebview extends StatefulWidget {
   final NyaNyaMessageHandler messageHandler;
   final GlobalKey<_NyaNyaWebviewState>? controllerKey;
   final NyaNyaChannelCreatedCallback? onChannelCreated;
+  final OpenUrlHandler? onOpenUrl;
 
   const NyaNyaWebview({
     super.key,
@@ -24,6 +25,7 @@ class NyaNyaWebview extends StatefulWidget {
     required this.messageHandler,
     this.controllerKey,
     this.onChannelCreated,
+    this.onOpenUrl,
   });
 
   @override
@@ -41,8 +43,9 @@ class _NyaNyaWebviewState extends State<NyaNyaWebview> {
       return const SizedBox.shrink();
     }
 
+    print('[NyaNyaOpenURL] NyaNyaWebview.build: engine=${widget.options.engine}, onOpenUrl callback exists: ${widget.onOpenUrl != null}');
+
     if (defaultTargetPlatform == TargetPlatform.android) {
-      // 根据 engine 参数选择不同的实现
       switch (widget.options.engine) {
         case WebViewEngine.gecko:
           return GeckoWebview(
@@ -52,6 +55,7 @@ class _NyaNyaWebviewState extends State<NyaNyaWebview> {
               _channel = channel;
               widget.onChannelCreated?.call(channel);
             },
+            onOpenUrl: widget.onOpenUrl,
           );
         case WebViewEngine.system:
           return SystemWebview(
@@ -61,6 +65,7 @@ class _NyaNyaWebviewState extends State<NyaNyaWebview> {
               _channel = channel;
               widget.onChannelCreated?.call(channel);
             },
+            onOpenUrl: widget.onOpenUrl,
           );
       }
     }
@@ -68,6 +73,15 @@ class _NyaNyaWebviewState extends State<NyaNyaWebview> {
     return const Center(
       child: Text('NyaNyaWebview is only supported on Android'),
     );
+  }
+
+  void _handleOpenUrl(String url, String? target) {
+    print('[NyaNyaOpenURL] NyaNyaWebview._handleOpenUrl: url=$url, target=$target, newTabBehavior=${widget.options.newTabBehavior}, onOpenUrl callback exists: ${widget.onOpenUrl != null}');
+    if (widget.options.newTabBehavior == NewTabBehavior.delegate && widget.onOpenUrl != null) {
+      widget.onOpenUrl!(url, target);
+    } else {
+      loadUrl(url);
+    }
   }
 
   Future<void> loadUrl(String url) async {
@@ -106,6 +120,10 @@ class _NyaNyaWebviewState extends State<NyaNyaWebview> {
       await _waitForChannel();
     }
     await _channel?.invokeMethod('postMessage', {'message': message});
+  }
+
+  Future<void> openInBrowser(String url) async {
+    await _channel?.invokeMethod('openInBrowser', {'url': url});
   }
 
   Future<void> _waitForChannel() async {
@@ -150,17 +168,18 @@ class _NyaNyaWebviewState extends State<NyaNyaWebview> {
   }
 }
 
-// GeckoWebview 内部实现
 class GeckoWebview extends StatefulWidget {
   final WebViewOptions options;
   final NyaNyaMessageHandler messageHandler;
   final NyaNyaChannelCreatedCallback? onChannelCreated;
+  final OpenUrlHandler? onOpenUrl;
 
   const GeckoWebview({
     super.key,
     required this.options,
     required this.messageHandler,
     this.onChannelCreated,
+    this.onOpenUrl,
   });
 
   @override
@@ -205,6 +224,14 @@ class _GeckoWebviewState extends State<GeckoWebview> {
           _platformViewId = id;
           _channel = MethodChannel('club.aiiko.gecko_view_$id');
           _channel!.setMethodCallHandler(_handleMethodCall);
+          
+          print('[NyaNyaOpenURL] GeckoWebview: Platform view created, id=$id, channel name="club.aiiko.gecko_view_$id"');
+          print('[NyaNyaOpenURL] GeckoWebview: Testing communication - sending test message to native');
+          _channel!.invokeMethod('testCommunication', {'test': 'hello'}).then((result) {
+            print('[NyaNyaOpenURL] GeckoWebview: Test communication successful, result=$result');
+          }).catchError((error) {
+            print('[NyaNyaOpenURL] GeckoWebview: Test communication failed, error=$error');
+          });
 
           widget.onChannelCreated?.call(_channel!);
 
@@ -219,10 +246,21 @@ class _GeckoWebviewState extends State<GeckoWebview> {
   }
 
   Future<dynamic> _handleMethodCall(MethodCall call) async {
+    print('[NyaNyaOpenURL] GeckoWebview._handleMethodCall: received method=${call.method}, arguments=${call.arguments}');
     switch (call.method) {
       case 'onWebMessage':
         final String message = call.arguments as String;
         widget.messageHandler(message);
+        break;
+      case 'onOpenUrl':
+        final String url = call.arguments['url'] as String? ?? '';
+        final String? target = call.arguments['target'] as String?;
+        print('[NyaNyaOpenURL] GeckoWebview: onOpenUrl called, url=$url, target=$target, newTabBehavior=${widget.options.newTabBehavior}, onOpenUrl callback exists: ${widget.onOpenUrl != null}');
+        if (widget.options.newTabBehavior == NewTabBehavior.delegate && widget.onOpenUrl != null) {
+          widget.onOpenUrl!(url, target);
+        } else {
+          _loadUrl(url);
+        }
         break;
       case 'onPageStart':
         break;
@@ -251,6 +289,7 @@ class NyaNyaWebviewController {
   Future<bool> canGoForward() => _key.currentState?.canGoForward() ?? Future.value(false);
   Future<void> evaluateJavascript(String script) => _key.currentState?.evaluateJavascript(script) ?? Future.value();
   Future<void> postMessage(String message) => _key.currentState?.postMessage(message) ?? Future.value();
+  Future<void> openInBrowser(String url) => _key.currentState?.openInBrowser(url) ?? Future.value();
   Future<bool> checkWebViewReady() => _key.currentState?.checkWebViewReady() ?? Future.value(false);
   Future<bool> checkSessionsHealth() => _key.currentState?.checkSessionsHealth() ?? Future.value(false);
   Future<void> shutdownGeckoRuntime() => _key.currentState?.shutdownGeckoRuntime() ?? Future.value();

@@ -14,12 +14,14 @@ class SystemWebview extends StatefulWidget {
   final WebViewOptions options;
   final NyaNyaMessageHandler messageHandler;
   final NyaNyaChannelCreatedCallback? onChannelCreated;
+  final OpenUrlHandler? onOpenUrl;
 
   const SystemWebview({
     super.key,
     required this.options,
     required this.messageHandler,
     this.onChannelCreated,
+    this.onOpenUrl,
   });
 
   @override
@@ -66,7 +68,6 @@ class _SystemWebviewState extends State<SystemWebview> {
             _channel = MethodChannel('club.aiiko.system_view_$id');
             _channel!.setMethodCallHandler(_handleMethodCall);
 
-            // 通知外部 channel 已创建
             widget.onChannelCreated?.call(_channel!);
 
             loadUrl(widget.options.initialUrl);
@@ -89,6 +90,11 @@ class _SystemWebviewState extends State<SystemWebview> {
       case 'onWebMessage':
         final String message = call.arguments as String;
         widget.messageHandler(message);
+        break;
+      case 'onOpenUrl':
+        final String url = call.arguments['url'] as String? ?? '';
+        final String? target = call.arguments['target'] as String?;
+        widget.onOpenUrl?.call(url, target);
         break;
       case 'onPageStart':
         break;
@@ -133,6 +139,10 @@ class _SystemWebviewState extends State<SystemWebview> {
       await _waitForChannel();
     }
     await _channel?.invokeMethod('postMessage', {'message': message});
+  }
+
+  Future<void> openInBrowser(String url) async {
+    await _channel?.invokeMethod('openInBrowser', {'url': url});
   }
 
   Future<void> _waitForChannel() async {

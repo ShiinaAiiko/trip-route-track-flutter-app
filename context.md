@@ -1467,3 +1467,177 @@ if (savedEngine != null) {
 3. **前台服务 MIUI 兼容性**：
    - `flutter_foreground_task` 插件与 MIUI 系统不兼容
    - 已暂时禁用前台服务
+
+---
+
+## 双核 WebView 标签页（Tabs）功能开发
+
+### 功能概述
+
+实现双核 WebView（GeckoView 和系统 WebView）的标签页功能，支持：
+- 拦截所有新开页面操作（`window.open`、`<a target="_blank">` 等）
+- 通过 `onOpenUrl` 回调通知 Flutter 层
+- 根据 `newTabBehavior` 配置决定行为：
+  - `replace`：在当前 WebView 实例中直接处理，替换原有网页
+  - `delegate`：委托给 Flutter 层，打开新的标签页
+- 使用 `TabManagerWidget` 管理独立标签页，支持无限叠加路由
+- 关闭标签页后能完美回到原页面状态
+
+### 核心设计
+
+#### 1. WebViewOptions 配置
+
+```dart
+class WebViewOptions {
+  final WebViewEngine engine;
+  final String initialUrl;
+  final int serverPort;
+  final NewTabBehavior newTabBehavior; // 新增：决定新标签页行为
+}
+
+enum NewTabBehavior {
+  replace,  // 在当前 WebView 中替换
+  delegate, // 委托给 Flutter 层处理
+}
+```
+
+#### 2. onOpenUrl 回调机制
+
+将 `onOpenUrl` 从 `WebViewOptions` 中移出，作为独立的回调参数：
+
+```dart
+NyaNyaWebview(
+  options: options,
+  onOpenUrl: (url, target) {
+    // 处理新开页面
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TabManagerWidget(
+          initialUrl: url,
+          optionsBuilder: (tabUrl) => WebViewOptions(
+            engine: engine,
+            initialUrl: tabUrl,
+            serverPort: serverPort,
+            newTabBehavior: NewTabBehavior.delegate,
+          ),
+        ),
+      ),
+    );
+  },
+)
+```
+
+#### 3. TabManagerWidget 组件
+
+位于 `modules/nyanya_webview` 模块中，作为独立标签页的容器：
+- 提供 PWA 风格的顶部导航栏
+- 包含返回、刷新、关闭等操作
+- 内部使用双核 WebView 渲染内容
+- 支持继续打开新标签页（无限叠加）
+
+### 实现细节
+
+#### GeckoView 端实现
+
+**文件**：`modules/nyanya_webview/android/src/main/kotlin/club/aiiko/nyanya_webview/GeckoViewPlatform.kt`
+
+1. **onNewSession 回调处理**：
+```kotlin
+override fun onNewSession(s: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
+    Log.d("NyaNyaOpenURL", "TabManager: onNewSession called, uri: $uri, methodChannel: $methodChannel")
+    try {
+        val params = mapOf("url" to uri, "target" to "_blank")
+        Log.d("NyaNyaOpenURL", "TabManager: Invoking methodChannel.invokeMethod(\"onOpenUrl\", $params)")
+        methodChannel.invokeMethod("onOpenUrl", params)
+        Log.d("NyaNyaOpenURL", "TabManager: methodChannel.invokeMethod completed successfully")
+    } catch (e: Exception) {
+        Log.e("NyaNyaOpenURL", "TabManager: Error invoking onOpenUrl", e)
+    }
+    return null  // 返回 null，阻止 GeckoView 自动打开新 Session
+}
+```
+
+2. **MethodChannel 消息传递**：确保原生端能正确调用 Flutter 端的 `onOpenUrl`
+
+#### Flutter 端实现
+
+**文件**：`modules/nyanya_webview/lib/src/gecko_webview.dart`
+
+1. **_handleMethodCall 处理**：
+```dart
+Future<dynamic> _handleMethodCall(MethodCall call) async {
+    print('[NyaNyaOpenURL] GeckoWebview._handleMethodCall: received method=${call.method}, arguments=${call.arguments}');
+    switch (call.method) {
+        case 'onOpenUrl':
+            final String url = call.arguments['url'] as String? ?? '';
+            final String? target = call.arguments['target'] as String?;
+            print('[NyaNyaOpenURL] GeckoWebview: onOpenUrl called, url=$url, target=$target, newTabBehavior=${widget.options.newTabBehavior}, onOpenUrl callback exists: ${widget.onOpenUrl != null}');
+            if (widget.options.newTabBehavior == NewTabBehavior.delegate && widget.onOpenUrl != null) {
+                widget.onOpenUrl!(url, target);
+            } else {
+                _loadUrl(url);
+            }
+            break;
+    }
+}
+```
+
+2. **通信测试**：添加测试验证 MethodChannel 连通性
+```dart
+_channel!.invokeMethod('testCommunication', {'test': 'hello'}).then((result) {
+    print('[NyaNyaOpenURL] GeckoWebview: Test communication successful, result=$result');
+}).catchError((error) {
+    print('[NyaNyaOpenURL] GeckoWebview: Test communication failed, error=$error');
+});
+```
+
+### 日志系统
+
+统一使用 `NyaNyaOpenURL` 标签，便于追踪完整调用链：
+
+| 位置 | 日志内容 |
+|------|----------|
+| GeckoViewPlatform.kt | `onNewSession called`、`Invoking methodChannel.invokeMethod` |
+| gecko_webview.dart | `_handleMethodCall received`、`onOpenUrl called` |
+| main.dart | `MAIN: onOpenUrl called` |
+
+### 当前问题与排查
+
+#### 问题：onOpenUrl 事件未到达 Flutter 端
+
+**现象**：
+- 原生端 `onNewSession` 被正确触发
+- `methodChannel.invokeMethod("onOpenUrl", params)` 调用成功
+- 但 Flutter 端 `_handleMethodCall` 未接收到消息
+
+**已实施的排查措施**：
+1. ✅ 统一日志标签为 `NyaNyaOpenURL`
+2. ✅ 添加完整调用链日志
+3. ✅ 添加通信测试验证 MethodChannel 连通性
+4. ✅ 确认 `newTabBehavior` 配置正确
+
+**下一步排查**：
+- 检查 MethodChannel 名称是否匹配
+- 验证 MethodChannel 回调注册时机
+- 确认 Widget 生命周期状态
+
+### 关键代码位置
+
+| 文件 | 说明 |
+|------|------|
+| `modules/nyanya_webview/lib/src/webview_options.dart` | WebViewOptions 配置类，新增 NewTabBehavior |
+| `modules/nyanya_webview/lib/src/gecko_webview.dart` | GeckoWebview 实现，包含 onOpenUrl 回调处理 |
+| `modules/nyanya_webview/android/src/main/kotlin/.../GeckoViewPlatform.kt` | GeckoView 原生实现，onNewSession 回调 |
+| `modules/nyanya_webview/lib/src/tab_manager_widget.dart` | TabManagerWidget 组件（待完善导航栏） |
+| `lib/main.dart` | 应用层 onOpenUrl 回调实现 |
+
+### 开发状态
+
+- ✅ GeckoView 端 onNewSession 拦截
+- ✅ MethodChannel 消息传递框架
+- ✅ onOpenUrl 回调机制
+- ✅ 双核 WebView 统一接口
+- 🚧 TabManagerWidget 导航栏 UI
+- 🚧 System WebView 端 onOpenUrl 实现
+- 🚧 修复 onOpenUrl 事件传递问题

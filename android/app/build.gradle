@@ -16,7 +16,7 @@ if (localPropertiesFile.exists()) {
 // Load environment variables from project root .env file
 ext {
     envProperties = new Properties()
-    File envFile = file("../.env")
+    File envFile = file("../../.env")
     if (envFile.exists()) {
         envFile.withReader("UTF-8") { reader ->
             envProperties.load(reader)

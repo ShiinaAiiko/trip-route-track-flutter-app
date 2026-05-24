@@ -30,7 +30,7 @@ setGoogleClientId() {
 }
 
 dev() {
-	# adb logcat | grep "LOCATION1"
+	# adb logcat | grep "NyaNyaWebview"
 	# adb logcat | grep "GeckoViewPlatform\|gps1"
 	# adb logcat | grep "message.type\|gps12"
 	# 更新 assets 目录配置

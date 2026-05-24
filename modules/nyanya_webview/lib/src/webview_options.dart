@@ -3,6 +3,13 @@ enum WebViewEngine {
   system,
 }
 
+enum NewTabBehavior {
+  replace,
+  delegate,
+}
+
+typedef OpenUrlHandler = void Function(String url, String? target);
+
 class WebViewOptions {
   final WebViewEngine engine;
   final String initialUrl;
@@ -11,6 +18,7 @@ class WebViewOptions {
   final bool enableMixedContent;
   final int serverPort;
   final Map<String, String>? headers;
+  final NewTabBehavior newTabBehavior;
 
   const WebViewOptions({
     this.engine = WebViewEngine.gecko,
@@ -20,6 +28,7 @@ class WebViewOptions {
     this.enableMixedContent = true,
     this.serverPort = 13218,
     this.headers,
+    this.newTabBehavior = NewTabBehavior.delegate,
   });
 
   WebViewOptions copyWith({
@@ -30,6 +39,7 @@ class WebViewOptions {
     bool? enableMixedContent,
     int? serverPort,
     Map<String, String>? headers,
+    NewTabBehavior? newTabBehavior,
   }) {
     return WebViewOptions(
       engine: engine ?? this.engine,
@@ -39,6 +49,7 @@ class WebViewOptions {
       enableMixedContent: enableMixedContent ?? this.enableMixedContent,
       serverPort: serverPort ?? this.serverPort,
       headers: headers ?? this.headers,
+      newTabBehavior: newTabBehavior ?? this.newTabBehavior,
     );
   }
 }

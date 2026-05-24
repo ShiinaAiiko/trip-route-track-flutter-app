@@ -308,14 +308,18 @@ class TabManager(
         Log.d(TAG, "setupSession called for session: $session")
         session.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onNewSession(s: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
-                Log.d(TAG, "onNewSession called: $uri")
-                val sessionSettings = GeckoSessionSettings.Builder()
-                    .usePrivateMode(false)
-                    .build()
-                val newSession = GeckoSession(sessionSettings)
-                setupSession(newSession, serverPort)
-                addTab(newSession, uri)
-                return GeckoResult.fromValue(newSession)
+                Log.d("NyaNyaOpenURL", "TabManager: onNewSession called, uri=$uri, methodChannel=$methodChannel")
+                // 通知 Flutter 有新标签页打开
+                try {
+                    val params = mapOf("url" to uri, "target" to "_blank")
+                    Log.d("NyaNyaOpenURL", "TabManager: Invoking methodChannel.invokeMethod(\"onOpenUrl\", $params)")
+                    methodChannel.invokeMethod("onOpenUrl", params)
+                    Log.d("NyaNyaOpenURL", "TabManager: methodChannel.invokeMethod completed successfully")
+                } catch (e: Exception) {
+                    Log.e("NyaNyaOpenURL", "TabManager: Error invoking onOpenUrl", e)
+                }
+                // 关键：返回 null！告诉 GeckoView 不要自己处理，由 Flutter 决定
+                return null
             }
 
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
@@ -521,10 +525,11 @@ class GeckoViewPlatform(
     }
 
     init {
-        Log.d("GeckoViewPlatform", "Creating MethodChannel with id: $id")
+        Log.d("NyaNyaOpenURL", "GeckoViewPlatform: Creating MethodChannel with id: $id")
         methodChannel = MethodChannel(messenger, "club.aiiko.gecko_view_$id")
+        Log.d("NyaNyaOpenURL", "GeckoViewPlatform: MethodChannel created, name=club.aiiko.gecko_view_$id, channel=$methodChannel")
         methodChannel.setMethodCallHandler(this)
-        Log.d("GeckoViewPlatform", "MethodChannel created: club.aiiko.gecko_view_$id")
+        Log.d("NyaNyaOpenURL", "GeckoViewPlatform: MethodChannel.setMethodCallHandler completed")
 
         val isDarkMode = creationParams?.get("isDarkMode") as? Boolean ?: true
         val bgColor = if (isDarkMode) {
@@ -607,7 +612,12 @@ class GeckoViewPlatform(
     private var lastGeolocationCallback: String? = null
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        Log.d("NyaNyaOpenURL", "GeckoViewPlatform: onMethodCall called, method=${call.method}, arguments=${call.arguments}")
         when (call.method) {
+            "testCommunication" -> {
+                Log.d("NyaNyaOpenURL", "GeckoViewPlatform: Received testCommunication message from Flutter")
+                result.success(mapOf("status" to "ok", "message" to "Hello from native!"))
+            }
             "loadUrl" -> {
                 val url = call.argument<String>("url")
                 if (url != null) {
