@@ -12,13 +12,20 @@
 - **URL 美化**：内部网站 URL 自动替换为友好显示地址
 - **标签状态管理**：使用 ChangeNotifier 管理标签状态
 - **最大标签数限制**：可配置最大标签页数量，超出自动关闭旧标签
+- **标题/URL 联动**：支持 WebView 标题和 URL 变化时自动更新导航栏
+- **分享功能**：支持复制当前页面 URL 到剪贴板
+- **国际化支持**：内置 zh-CN、zh-TW、en-US 三种语言支持
+- **UUID 生成**：使用标准 UUID v4 生成唯一 tabId
+- **onTabClosed 回调**：标签页关闭时触发回调，用于资源清理
+- **下拉菜单自动关闭**：点击按钮后自动关闭下拉菜单
+- **导航状态管理**：正确处理 canGoBack/canGoForward 状态
 
 ## 目录结构
 
 ```
 tab_manager/
 ├── tab_manager.dart          # 标签管理器（状态管理）
-├── tab_page.dart             # 单个标签页 Widget
+├── tab_page.dart             # 单个标签页 Widget（含导航栏）
 └── tab_manager_widget.dart   # 标签管理器主 Widget
 ```
 
@@ -101,9 +108,10 @@ class TabManagerWidget extends StatefulWidget {
   final WebViewOptions Function(String url) optionsBuilder;  // 选项构建器
   final int maxTabs;                                    // 最大标签数（默认 10）
   final bool showTabBar;                                // 是否显示标签栏（默认 true）
-  final Widget? loadingWidget;                          // 加载中 Widget
-  final Brightness? brightness;                         // 亮度模式
+  final Widget? loadingWidget;                           // 加载中 Widget
+  final Brightness? brightness;                          // 亮度模式
   final void Function(WebViewBridge bridge)? onBridgeReady;  // Bridge 就绪回调
+  final String? language;                               // 国际化语言（默认 en-US）
 }
 ```
 
@@ -112,6 +120,7 @@ class TabManagerWidget extends StatefulWidget {
 - 管理标签页的打开/关闭/切换
 - 处理新页面打开（通过 onOpenUrl）
 - URL 美化显示
+- 传递语言参数给 TabPage
 
 **标签栏特性**：
 - 水平滚动显示标签
@@ -124,7 +133,7 @@ class TabManagerWidget extends StatefulWidget {
 
 **文件**：`tab_page.dart`
 
-单个标签页的 Widget，内部封装 WebView。
+单个标签页的 Widget，内部封装 WebView 和导航栏。
 
 **构造参数**：
 
@@ -137,7 +146,58 @@ class TabPage extends StatefulWidget {
   final void Function(String tabId, String url)? onUrlChanged;
   final OpenUrlHandler? onOpenUrl;
   final VoidCallback? onClose;
+  final void Function(String tabId)? onTabClosed; // 标签页关闭回调
+  final String? language; // 国际化语言
 }
+```
+
+**内置 i18n 翻译**：
+
+| Key | zh-CN | zh-TW | en-US |
+|-----|-------|-------|-------|
+| share | 分享 | 分享 | Share |
+| url_copied | 已复制URL | 已複製URL | URL copied |
+| copy_failed | 复制失败 | 複製失敗 | Copy failed |
+| loading | 加载中... | 載入中... | Loading... |
+
+**导航栏功能**：
+
+| 功能 | 说明 |
+|------|------|
+| 关闭按钮 | 左侧关闭按钮，点击关闭当前标签页 |
+| 标题显示 | 中间显示网页标题，实时更新 |
+| URL 显示 | 标题下方显示当前 URL，美化处理 |
+| 返回按钮 | 导航栏下拉菜单中，可前进/后退/刷新/分享 |
+| 前进按钮 | 根据历史记录状态启用/禁用 |
+| 刷新按钮 | 刷新当前页面 |
+| 分享按钮 | 复制 URL 到剪贴板并显示提示 |
+
+**使用示例**：
+
+```dart
+TabPage(
+  tabId: 'tab_1',
+  url: 'https://trip.aiiko.club',
+  options: webViewOptions,
+  language: 'zh-CN',  // 可选，默认 en-US
+  onTitleChanged: (tabId, title) {
+    print('Title changed: $title');
+  },
+  onUrlChanged: (tabId, url) {
+    print('URL changed: $url');
+  },
+  onOpenUrl: (url, target) {
+    // 处理新开页面
+  },
+  onClose: () {
+    // 关闭标签页
+    Navigator.of(context).pop();
+  },
+  onTabClosed: (tabId) {
+    // 标签页已关闭，清理资源
+    print('Tab closed: $tabId');
+  },
+)
 ```
 
 **TabPageRoute**：
@@ -192,6 +252,24 @@ TabPage (标签1)
 - 127.0.0.1:13218 / 13219 / 13220
 ```
 
+### 标题/URL 联动机制
+
+```
+原生端 (GeckoView)
+  ↓ onTitleChange / onPageStart 事件
+MethodChannel
+  ↓
+GeckoWebview._actualHandleMethodCall()
+  ↓ 转发消息
+widget.messageHandler (WebViewBridge)
+  ↓ JSON 解析
+TabPage._handleMessage()
+  ↓
+setState() 更新 UI
+  ↓
+onTitleChanged / onUrlChanged 回调通知 TabManager
+```
+
 ## 使用指南
 
 ### 基本使用 - TabManagerWidget
@@ -210,6 +288,7 @@ TabManagerWidget(
   maxTabs: 10,
   showTabBar: true,
   brightness: Brightness.light,
+  language: 'zh-CN',  // 可选，默认 en-US
   onBridgeReady: (bridge) {
     // Bridge 就绪，可以注册事件监听
     bridge.on('myEvent', (message) {
@@ -269,6 +348,16 @@ navigateToTab(
   url: tab.url,
 );
 ```
+
+### 导航栏自定义
+
+TabPage 内置了完整的导航栏，包含：
+
+- **左侧关闭按钮**：调用 `Navigator.of(context).pop()` 关闭当前标签页
+- **中间标题区域**：显示网页标题和 URL
+- **右侧下拉菜单**：返回、前进、刷新、分享功能
+
+如需自定义导航栏，可通过修改 TabPage 的 `_buildTitle()`、`_buildDropdownMenu()` 等方法实现。
 
 ### 自定义标签栏
 
@@ -367,6 +456,23 @@ class CustomTabPage extends StatelessWidget {
 }
 ```
 
+### 添加新的 i18n 翻译
+
+在 `tab_page.dart` 的 `_TabPageI18n` 类中添加新语言：
+
+```dart
+static final Map<String, Map<String, String>> _translations = {
+  'zh-CN': { /* ... */ },
+  'zh-TW': { /* ... */ },
+  'en-US': { /* ... */ },
+  'ja-JP': {  // 新增日语
+    'share': '共有',
+    'url_copied': 'URLをコピーしました',
+    'copy_failed': 'コピーに失敗しました',
+  },
+};
+```
+
 ### 添加标签页持久化
 
 在 `TabManager` 中添加保存/加载方法：
@@ -403,6 +509,7 @@ class TabManager extends ChangeNotifier {
 - 打印 `tabManager.tabs` 查看所有标签状态
 - 打印 `tabManager.currentIndex` 查看当前标签索引
 - 使用 `adb logcat | grep NyaNyaOpenURL` 查看标签页相关日志
+- 导航栏状态变化可通过 `_updateNavigationState()` 方法调试
 
 ## 当前开发状态
 
@@ -415,6 +522,14 @@ class TabManager extends ChangeNotifier {
 | 标签栏 UI | ✅ 已完成 |
 | URL 美化显示 | ✅ 已完成 |
 | 最大标签数限制 | ✅ 已完成 |
+| 标题/URL 联动 | ✅ 已完成 |
+| 导航栏（关闭/返回/前进/刷新/分享） | ✅ 已完成 |
+| 国际化支持 | ✅ 已完成 |
+| UUID 生成 | ✅ 已完成 |
+| onTabClosed 回调 | ✅ 已完成 |
+| 下拉菜单自动关闭 | ✅ 已完成 |
+| 导航状态（canGoBack/canGoForward）| ✅ 已完成 |
+| 多语言加载文本 | ✅ 已完成 |
 | 标签页持久化 | ❌ 未实现 |
 | 标签页缩略图 | ❌ 未实现 |
 | 标签页拖拽排序 | ❌ 未实现 |

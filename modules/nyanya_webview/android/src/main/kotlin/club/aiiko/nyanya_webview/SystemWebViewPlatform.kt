@@ -26,13 +26,22 @@ class SystemWebViewPlatform(
     private val serverPort: Int = creationParams?.get("serverPort") as? Int ?: 13218
 
     init {
+        Log.d("NyaNyaOpenURL", "SystemWebViewPlatform.init STARTED, id=$id")
         Log.d(TAG, "Creating SystemWebViewPlatform with serverPort: $serverPort")
 
         container = FrameLayout(context)
 
         // 先创建 methodChannel
-        methodChannel = MethodChannel(messenger, "club.aiiko.system_view_$id")
-        methodChannel.setMethodCallHandler(this)
+        try {
+            val channelName = "club.aiiko.system_view_$id"
+            Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: Creating MethodChannel with name: $channelName")
+            methodChannel = MethodChannel(messenger, channelName)
+            methodChannel.setMethodCallHandler(this)
+            Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: MethodCallHandler successfully set!")
+        } catch (e: Exception) {
+            Log.e("NyaNyaOpenURL", "SystemWebViewPlatform: ERROR creating MethodChannel!", e)
+            throw e
+        }
 
         webView = WebView(context).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -74,13 +83,64 @@ class SystemWebViewPlatform(
                     defaultValue: String?,
                     result: JsPromptResult?
                 ): Boolean {
-                    // 处理 JavaScript postMessage
                     if (message != null && result != null) {
                         methodChannel.invokeMethod("onWebMessage", message)
                         result.confirm("")
                         return true
                     }
                     return super.onJsPrompt(view, url, message, defaultValue, result)
+                }
+
+                override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
+                    Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: onCreateWindow called, isUserGesture=$isUserGesture")
+                    
+                    // 创建临时 WebView 来捕获 URL
+                    val newWebView = WebView(context)
+                    newWebView.settings.javaScriptEnabled = true
+                    
+                    // 设置 WebViewClient 来捕获 URL
+                    newWebView.webViewClient = object : WebViewClient() {
+                        override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                            super.onPageStarted(view, url, favicon)
+                            Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: onCreateWindow intercepted URL: $url")
+                            if (url != null && url != "about:blank") {
+                                try {
+                                    val params = mapOf("url" to url, "target" to "_blank")
+                                    Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: Preparing to invoke onOpenUrl to Flutter, params=$params")
+                                    
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        try {
+                                            Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: NOW invoking methodChannel.invokeMethod('onOpenUrl', $params)")
+                                            methodChannel.invokeMethod("onOpenUrl", params)
+                                            Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: invokeMethod('onOpenUrl') completed successfully!")
+                                        } catch (e: Exception) {
+                                            Log.e("NyaNyaOpenURL", "SystemWebViewPlatform: ERROR in invokeMethod('onOpenUrl')!", e)
+                                            e.printStackTrace()
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("NyaNyaOpenURL", "SystemWebViewPlatform: Error preparing to invoke onOpenUrl", e)
+                                    e.printStackTrace()
+                                }
+                            }
+                            // 取消新窗口创建
+                            resultMsg?.let {
+                                val transport = it.obj as WebView.WebViewTransport
+                                transport.webView = null
+                                it.sendToTarget()
+                            }
+                            newWebView.stopLoading()
+                        }
+                    }
+                    
+                    // 将新 WebView 设置到 transport
+                    resultMsg?.let {
+                        val transport = it.obj as WebView.WebViewTransport
+                        transport.webView = newWebView
+                        it.sendToTarget()
+                    }
+                    
+                    return true
                 }
             }
 
@@ -224,7 +284,6 @@ class SystemWebViewPlatform(
                 Log.d(TAG, "postMessage called: $message")
 
                 if (message != null) {
-                    // 使用 onFlutterMessage 回调函数 - 与 GeckoView 一致
                     val wrappedMessage = "if (window.onFlutterMessage) { window.onFlutterMessage($message); }"
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                         webView.evaluateJavascript(wrappedMessage, null)

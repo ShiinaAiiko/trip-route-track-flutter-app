@@ -3,7 +3,7 @@ name="trip-route-track"
 runName="$name-flutter-app"
 port=23204
 branch="main"
-version="v1.0.10"
+version="v1.0.12"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
@@ -34,6 +34,9 @@ dev() {
 	# adb logcat | grep "GeckoViewPlatform\|gps1"
 	# adb logcat | grep "message.type\|gps12"
 	# 更新 assets 目录配置
+
+	# adb logcat -c && adb logcat | grep --line-buffered -E -i "onOpenUrl|NyaNyaOpenURL" | grep --line-buffered -E -v -i "sendMessage|postMessage" | tee flutter_log.txt
+	# adb logcat -c && adb logcat | grep --line-buffered -E -i "onLocationChange|onTitleChange" | grep --line-buffered -E -v -i "sendMessage|postMessage" | tee flutter_log.txt
 
 	loadEnv
 	setGoogleClientId "dev"

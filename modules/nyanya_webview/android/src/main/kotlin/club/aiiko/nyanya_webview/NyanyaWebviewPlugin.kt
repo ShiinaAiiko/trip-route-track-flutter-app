@@ -1,5 +1,6 @@
 package club.aiiko.nyanya_webview
 
+import android.util.Log
 import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -10,20 +11,24 @@ class NyanyaWebviewPlugin : FlutterPlugin, ActivityAware {
     private var methodChannel: MethodChannel? = null
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+        Log.d("NyaNyaOpenURL", "NyanyaWebviewPlugin.onAttachedToEngine STARTED")
         val messenger = flutterPluginBinding.binaryMessenger
         methodChannel = MethodChannel(messenger, "nyanya_webview")
         
         // 注册 GeckoView
+        Log.d("NyaNyaOpenURL", "NyanyaWebviewPlugin: Registering GeckoViewFactory")
         flutterPluginBinding.platformViewRegistry.registerViewFactory(
             "geckoView",
             GeckoViewFactory(messenger)
         )
         
         // 注册 SystemWebView
+        Log.d("NyaNyaOpenURL", "NyanyaWebviewPlugin: Registering SystemWebViewFactory")
         flutterPluginBinding.platformViewRegistry.registerViewFactory(
             "systemWebView",
             SystemWebViewFactory(messenger)
         )
+        Log.d("NyaNyaOpenURL", "NyanyaWebviewPlugin.onAttachedToEngine COMPLETED")
     }
 
     override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {

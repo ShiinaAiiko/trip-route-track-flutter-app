@@ -6,11 +6,17 @@
 
 ## 功能特性
 
-- **双核引擎支持**：支持 GeckoView 和系统 WebView（当前仅 GeckoView 已实现）
+- **双核引擎支持**：支持 GeckoView 和系统 WebView
 - **统一 API**：通过抽象接口提供一致的 WebView 操作
 - **标签页管理**：内置标签页管理功能（详见 tab_manager 模块）
 - **JavaScript Bridge**：完整的 Flutter ↔ WebView 双向通信机制
 - **新页面拦截**：支持拦截 `window.open` 和 `<a target="_blank">` 等新开页面操作
+- **标题/URL 联动**：支持 WebView 页面标题和 URL 变化事件回调
+- **MethodChannel 通信**：Flutter 与原生端双向通信
+- **sessionId 机制**：支持多标签页 JS Bridge 隔离
+- **UUID 生成**：使用标准 UUID v4 生成 sessionId
+- **onChannelCreated 回调**：获取 MethodChannel 实例
+- **导航状态支持**：完整的 canGoBack/canGoForward 实现
 
 ## 目录结构
 
@@ -100,7 +106,7 @@ WebView 的控制器类，封装了 WebView 的所有操作，提供统一的 AP
 
 主要功能：
 - 根据配置选择 WebView 引擎
-- 封装 WebView 操作（加载、前进、后退等）
+- 封装 WebView 操作（加载、前进、后退、刷新等）
 - 管理 JavaScript Bridge
 - 处理新标签页回调
 
@@ -162,6 +168,7 @@ GeckoView 引擎的 Flutter 和 Android 原生实现。
 - PlatformView 集成（使用 Hybrid Composition 模式）
 - MethodChannel 通信
 - onOpenUrl 回调处理
+- 标题/URL 变化事件转发
 
 **Android 端**：
 - GeckoView 初始化和配置
@@ -169,6 +176,19 @@ GeckoView 引擎的 Flutter 和 Android 原生实现。
 - onNewSession 拦截（用于新开页面）
 - JavaScript 执行
 - 消息收发
+- 标题/URL 变化监听
+
+**MethodChannel 事件处理**：
+
+| 方法 | 说明 |
+|------|------|
+| `testCommunication` | 测试通信连通性 |
+| `onWebMessage` | WebView 发送的 JavaScript 消息 |
+| `onTitleChange` | 页面标题变化 |
+| `onPageStart` | 页面开始加载 |
+| `onPageStop` | 页面加载完成 |
+| `onOpenUrl` | 拦截到新开页面请求 |
+| `onRequestExitApp` | WebView 无法后退，请求退出 |
 
 **新页面拦截流程**：
 ```
@@ -178,18 +198,37 @@ GeckoView.onNewSession() 触发
   ↓
 MethodChannel.invokeMethod('onOpenUrl', params)
   ↓
-Flutter 端 _handleMethodCall() 接收
+Flutter 端 _actualHandleMethodCall() 接收
   ↓
 根据 newTabBehavior 决定：
   - replace → 直接加载到当前 WebView
   - delegate → 调用 widget.onOpenUrl()
 ```
 
+**标题/URL 联动流程**：
+```
+原生端 (GeckoSession)
+  ↓ onTitleChange / onPageStart 事件
+MethodChannel.invokeMethod('onTitleChange' / 'onPageStart')
+  ↓
+Flutter 端 _actualHandleMethodCall() 接收
+  ↓
+widget.messageHandler() 转发消息
+  ↓
+WebViewBridge.handleMessage() 解析
+  ↓
+TabPage._handleMessage() 处理
+  ↓
+setState() 更新 UI
+```
+
 ### 6. SystemWebview - 系统 WebView 实现
 
 **文件**：`lib/src/system_webview.dart` 和 `android/src/main/kotlin/.../SystemWebViewPlatform.kt`
 
-**状态**：未实现（待开发）
+系统 WebView 引擎的 Flutter 和 Android 原生实现。
+
+**状态**：✅ 已完成
 
 ## 使用指南
 
@@ -249,6 +288,7 @@ TabManagerWidget(
     newTabBehavior: NewTabBehavior.delegate,
   ),
   maxTabs: 10,
+  language: 'zh-CN',  // 可选，默认 en-US
   onBridgeReady: (bridge) {
     // Bridge 就绪回调
   },
@@ -274,21 +314,27 @@ TabManagerWidget(
 - 使用 `NyaNyaOpenURL` 日志标签过滤 onOpenUrl 相关日志
 - 使用 `adb logcat | grep NyaNyaOpenURL` 查看标签页相关日志
 - 在 `GeckoViewPlatform.kt` 和 `gecko_webview.dart` 中添加调试日志
+- 标题/URL 变化可通过日志 `[NyaNyaOpenURL-Flutter] GeckoWebview: onTitleChange received` 查看
 
 ## 当前开发状态
 
 | 功能 | 状态 |
 |------|------|
 | GeckoView 引擎实现 | ✅ 已完成 |
-| 系统 WebView 引擎实现 |  ✅ 已完成
+| 系统 WebView 引擎实现 | ✅ 已完成 |
 | WebViewInterface 接口 | ✅ 已完成 |
 | WebViewOptions 配置 | ✅ 已完成 |
 | WebViewController 控制器 | ✅ 已完成 |
 | WebViewBridge 桥接 | ✅ 已完成 |
-| onOpenUrl 回调机制 | 🚧 待开发 |
+| onOpenUrl 回调机制 | ✅ 已完成 |
 | MethodChannel 通信 | ✅ 已完成 |
-| 新页面拦截（GeckoView）| 🚧 待开发 |
-| 新页面拦截（SystemWebView）| 🚧 待开发 |
+| 新页面拦截（GeckoView）| ✅ 已完成 |
+| 新页面拦截（System WebView）| ✅ 已完成 |
+| 标题/URL 联动（GeckoView）| ✅ 已完成 |
+| sessionId 机制 | ✅ 已完成 |
+| UUID 生成 | ✅ 已完成 |
+| onChannelCreated 回调 | ✅ 已完成 |
+| 导航状态（canGoBack/canGoForward）| ✅ 已完成 |
 
 ## 相关文档
 

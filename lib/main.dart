@@ -25,56 +25,6 @@ import 'package:flutter_bridge/src/services/engine_manager.dart';
 String? _initialUrl;
 String _appTitle = '';
 
-
-
-// 标签页数据类
-class TabInfo {
-  final dynamic id; // 使用 dynamic 兼容 Long/int
-  final String url;
-  final String title;
-  final bool isCurrent;
-
-  TabInfo({
-    required this.id,
-    required this.url,
-    required this.title,
-    required this.isCurrent,
-  });
-
-  factory TabInfo.fromMap(Map<String, dynamic> map) {
-    String url = map['url'] as String;
-    // 检测是否为内部网站（本地服务端口）
-    final isInternalWebsite = url.contains('localhost:13218') ||
-        url.contains('localhost:13219') ||
-        url.contains('localhost:13220') ||
-        url.contains('127.0.0.1:13218') ||
-        url.contains('127.0.0.1:13219') ||
-        url.contains('127.0.0.1:13220');
-    // 若判定为内部网站，则将显示用域名统一修改为 trip.aiiko.club
-    if (isInternalWebsite) {
-      url = url.replaceAll(
-        RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
-        'https://trip.aiiko.club',
-      );
-    }
-    return TabInfo(
-      id: map['id'],
-      url: url,
-      title: map['title'] as String,
-      isCurrent: map['isCurrent'] as bool? ?? false,
-    );
-  }
-
-  TabInfo copyWith({String? url, String? title, bool? isCurrent}) {
-    return TabInfo(
-      id: id,
-      url: url ?? this.url,
-      title: title ?? this.title,
-      isCurrent: isCurrent ?? this.isCurrent,
-    );
-  }
-}
-
 // 全局通知服务
 FlutterLocalNotificationsPlugin? _notificationPlugin;
 
@@ -91,7 +41,7 @@ Future<void> _showNotification(String title, String body) async {
   if (_notificationPlugin == null) {
     await _initNotificationService();
   }
-  
+
   const AndroidNotificationDetails androidPlatformChannelSpecifics =
       AndroidNotificationDetails(
     'local_server_channel',
@@ -134,7 +84,7 @@ Future<void> _showNotification(String title, String body) async {
 //       allowWifiLock: true,
 //     ),
 //   );
-//   
+//
 //   await FlutterForegroundTask.requestNotificationPermission();
 // }
 
@@ -169,16 +119,16 @@ void main() async {
   await FileLogService().init();
 
   await _initNotificationService();
-  
+
   // 初始化 BridgeController (包含 i18n)
   await BridgeController().init();
   final i18nService = BridgeController().i18nService;
   _appTitle = i18nService.t('app_title');
-  
+
   // 获取自定义 host（如果有）
   final customHost = await BridgeController().getCustomHost();
   String? baseUrl;
-  
+
   if (customHost != null && customHost.isNotEmpty) {
     // 使用自定义 host
     baseUrl = customHost;
@@ -189,12 +139,12 @@ void main() async {
     baseUrl = localServerUrl;
     print('Using local server: $baseUrl');
   }
-  
+
   _initialUrl = BridgeController().languageService.getLocalizedUrl(baseUrl);
-  
+
   // 初始化前台服务（提升应用在后台的存活概率）- 需要 i18n
   // await _initForegroundTask(i18nService); // 暂时禁用
-  
+
   // 启动本地服务（带重试机制），只有在使用本地服务时才需要
   if (customHost == null || customHost.isEmpty) {
     try {
@@ -202,10 +152,11 @@ void main() async {
       print('Local server started successfully on $baseUrl');
     } catch (e) {
       print('Failed to start local server after retries: $e');
-      await _showNotification(i18nService.t('service_start_failed_title'), i18nService.t('service_start_failed_content'));
+      await _showNotification(i18nService.t('service_start_failed_title'),
+          i18nService.t('service_start_failed_content'));
     }
   }
-  
+
   final brightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
   SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
@@ -228,7 +179,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
-  Brightness _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  Brightness _brightness =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
 
   @override
   void initState() {
@@ -245,7 +197,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangePlatformBrightness() {
     setState(() {
-      _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+      _brightness =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness;
     });
   }
 
@@ -309,11 +262,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   static const int _maxRetriesStatic = 3; // 最大重试次数
   static bool _safeAreaTopStatic = true; // 标记顶部是否启用SafeArea
   static bool _safeAreaBottomStatic = true; // 标记底部是否启用SafeArea
-  static List<TabInfo> _tabsStatic = []; // 标签页列表
-  static bool _canGoBackStatic = false; // 是否可以返回上一页
-  static bool _canGoForwardStatic = false; // 是否可以前进到下一页
-  static String _currentTitleStatic = ''; // 当前页面标题
-  static String _currentUrlStatic = ''; // 当前页面URL
+  static DateTime? _lastBackPressTimeStatic; // 记录上次按返回键的时间
   static WebViewEngine? _selectedEngineStatic; // 选中的引擎类型
   static int? _webViewVersionStatic; // 系统WebView版本号
   // ================================
@@ -322,38 +271,40 @@ class _WebViewContainerState extends State<WebViewContainer>
   double _roll = 0.0;
   bool _isLoading = _isLoadingStatic;
   bool _isPageLoaded = _isPageLoadedStatic;
-  Brightness _brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  Brightness _brightness =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
   late String _loadingSubtitle;
   WebViewEngine? _selectedEngine;
   int? _webViewVersion; // 系统WebView版本号
-  
+
   // 详细加载状态追踪
   LoadingStep _loadingStep = _loadingStepStatic;
   List<LoadingLog> _loadingLog = List.from(_loadingLogStatic);
-  
+
   // 后台状态追踪
   DateTime? _lastBackgroundTime = _lastBackgroundTimeStatic;
   bool _isInBackground = _isInBackgroundStatic;
   DateTime? _lastRecoveryTime = _lastRecoveryTimeStatic;
   bool _safeAreaTop = _safeAreaTopStatic;
-  
+
   // 重试机制追踪
   int _retryCount = _retryCountStatic;
   static const int _maxRetries = _maxRetriesStatic;
-  
-  // 标签页状态
-  List<TabInfo> _tabs = _tabsStatic;
-  bool _canGoBack = _canGoBackStatic;
-  bool _canGoForward = _canGoForwardStatic;
-  String _currentTitle = _currentTitleStatic;
-  String _currentUrl = _currentUrlStatic;
+
+  // 标签页状态 (已移除，标签页管理移至 nyanya_webview 模块)
+
+  // 固定的 GlobalKey，防止 NyaNyaWebview 重建！
+  final _nyaNyaWebviewKey = GlobalKey<State<NyaNyaWebview>>();
+
+  // 保存最终的 engine，一旦确定就不再变化！
+  WebViewEngine? _finalEngine;
 
   Timer? _sensorTimer;
   Timer? _loadTimeoutTimer;
   Timer? _exitAppTimer;
   Timer? _tabStackChangedTimer;
   bool _exitAppRequested = false;
-  
+
   late void Function(BridgeMessage) _closeLoadingHandler;
 
   @override
@@ -365,7 +316,7 @@ class _WebViewContainerState extends State<WebViewContainer>
     _loadingSubtitle = BridgeController().i18nService.t('loading_subtitle');
     _bridgeHandlerListener();
     _statusBarHandlerListener();
-    
+
     // 关键修复：如果页面已经加载过，就不应该重新运行加载序列
     if (!_isPageLoaded) {
       print('[NYANYA-INIT] first load, starting sequence');
@@ -373,17 +324,18 @@ class _WebViewContainerState extends State<WebViewContainer>
       BridgeController().sendAppStartEvent();
       // 先获取引擎类型，再开始加载流程
       _initEngineAndStartLoading();
-      
+
       // 超时时间延长到15秒，确保有足够时间完成所有加载步骤
       _loadTimeoutTimer = Timer(const Duration(seconds: 15), () {
         if (mounted && _isLoading) {
           print('Loading timeout after 15 seconds');
-          _addLoadingLog(LoadingLogType.web, BridgeController().i18nService.t('loading_web_failed'));
+          _addLoadingLog(LoadingLogType.web,
+              BridgeController().i18nService.t('loading_web_failed'));
           setState(() {
             _loadingStep = LoadingStep.webFailed;
             _loadingStepStatic = _loadingStep;
           });
-          
+
           // 再等待2秒后关闭加载界面
           Timer(const Duration(seconds: 2), () {
             if (mounted && _isLoading) {
@@ -416,13 +368,23 @@ class _WebViewContainerState extends State<WebViewContainer>
       // 获取WebView版本号用于显示
       _webViewVersion = await EngineManager().getWebViewVersion();
       _webViewVersionStatic = _webViewVersion;
-      print('[NYANYA-ENGINE] Selected engine: ${_selectedEngine?.name ?? 'unknown'}, WebView version: $_webViewVersion');
+      print(
+          '[NYANYA-ENGINE] Selected engine: ${_selectedEngine?.name ?? 'unknown'}, WebView version: $_webViewVersion');
     } catch (e) {
       print('[NYANYA-ENGINE] Failed to get engine: $e');
       _selectedEngine = WebViewEngine.system;
       _selectedEngineStatic = _selectedEngine;
     }
-    
+
+    // 设置最终确定的 engine
+    _finalEngine = _selectedEngine;
+    print('[NYANYA-ENGINE] Final engine set to: ${_finalEngine!.name}');
+
+    // 触发 rebuild，开始渲染 WebView
+    if (mounted) {
+      setState(() {});
+    }
+
     await _startLoadingSequence();
   }
 
@@ -435,7 +397,7 @@ class _WebViewContainerState extends State<WebViewContainer>
       await Future.delayed(const Duration(milliseconds: 100));
       waitAttempts++;
     }
-    
+
     if (_channel == null) {
       print('[NYANYA-WEBVIEW] Channel not available after waiting');
       return false;
@@ -449,66 +411,68 @@ class _WebViewContainerState extends State<WebViewContainer>
       return false;
     }
   }
-  
+
   /// 验证本地服务是否准备就绪
   bool _checkServerReady() {
     final result = LocalServer.instance.checkServerHealth();
     print('[NYANYA-SERVER] checkServerHealth result: $result');
     return result;
   }
-  
+
   /// 重置重试计数
   void _resetRetryCount() {
     _retryCount = 0;
     _retryCountStatic = 0;
   }
-  
+
   /// 处理加载失败，决定是否重试
-  Future<void> _handleLoadFailure(String translationKey, LoadingStep errorStep) async {
+  Future<void> _handleLoadFailure(
+      String translationKey, LoadingStep errorStep) async {
     final i18n = BridgeController().i18nService;
-    
+
     LoadingLogType type = LoadingLogType.engine;
     if (errorStep == LoadingStep.serverFailed) {
       type = LoadingLogType.server;
     } else if (errorStep == LoadingStep.webFailed) {
       type = LoadingLogType.web;
     }
-    
+
     setState(() {
       _loadingStep = errorStep;
       _loadingStepStatic = _loadingStep;
       _loadingLog.add(LoadingLog(type: type, message: i18n.t(translationKey)));
-      _loadingLogStatic.add(LoadingLog(type: type, message: i18n.t(translationKey)));
+      _loadingLogStatic
+          .add(LoadingLog(type: type, message: i18n.t(translationKey)));
     });
-    
+
     // 检查是否可以重试
     if (_retryCount < _maxRetries) {
       _retryCount++;
       _retryCountStatic = _retryCount;
-      
+
       // 添加重试提示信息
       final retryMessage = '重试 $_retryCount/$_maxRetries...';
       _addLoadingLog(LoadingLogType.server, retryMessage);
-      
+
       print('[NYANYA-RETRY] Scheduling retry $_retryCount/$_maxRetries');
-      
+
       // 等待一小段时间后重试
       await Future.delayed(const Duration(milliseconds: 500));
       await _startLoadingSequence();
     } else {
       // 达到最大重试次数，重启 App
       print('[NYANYA-RETRY] Max retries reached, restarting App');
-      
+
       Timer(const Duration(seconds: 2), () {
         BridgeController().restartApp();
       });
     }
   }
-  
+
   /// 详细加载流程
   Future<void> _startLoadingSequence() async {
     final i18n = BridgeController().i18nService;
-    
+
     // 如果是重试，先清理资源
     if (_retryCount > 0) {
       print('[NYANYA-RETRY] Attempt $_retryCount/$_maxRetries');
@@ -521,22 +485,27 @@ class _WebViewContainerState extends State<WebViewContainer>
       // 等待一小段时间让资源清理完成
       await Future.delayed(const Duration(milliseconds: 300));
     }
-    
+
     // 1. 加载 WebView 内核
-    final engine = _selectedEngineStatic ?? _selectedEngine ?? WebViewEngine.system;
+    final engine =
+        _selectedEngineStatic ?? _selectedEngine ?? WebViewEngine.system;
     final isGecko = engine == WebViewEngine.gecko;
     final loadingKey = isGecko ? 'loading_gecko' : 'loading_system_webview';
-    final loadingSuccessKey = isGecko ? 'loading_gecko_success' : 'loading_system_webview_success';
-    final loadingFailedKey = isGecko ? 'loading_gecko_failed' : 'loading_system_webview_failed';
-    
+    final loadingSuccessKey =
+        isGecko ? 'loading_gecko_success' : 'loading_system_webview_success';
+    final loadingFailedKey =
+        isGecko ? 'loading_gecko_failed' : 'loading_system_webview_failed';
+
     setState(() {
       _loadingStep = LoadingStep.loadingGecko;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(LoadingLog(type: LoadingLogType.engine, message: i18n.t(loadingKey)));
-      _loadingLogStatic.add(LoadingLog(type: LoadingLogType.engine, message: i18n.t(loadingKey)));
+      _loadingLog.add(
+          LoadingLog(type: LoadingLogType.engine, message: i18n.t(loadingKey)));
+      _loadingLogStatic.add(
+          LoadingLog(type: LoadingLogType.engine, message: i18n.t(loadingKey)));
     });
     print('Loading WebView engine: ${engine.name}...');
-    
+
     // 等待 WebView 初始化，然后验证
     bool webViewReady = false;
     int webViewCheckAttempts = 0;
@@ -544,32 +513,37 @@ class _WebViewContainerState extends State<WebViewContainer>
       await Future.delayed(const Duration(milliseconds: 400));
       webViewReady = await _checkWebViewReady();
       webViewCheckAttempts++;
-      print('[NYANYA-WEBVIEW] Check attempt $webViewCheckAttempts: $webViewReady');
+      print(
+          '[NYANYA-WEBVIEW] Check attempt $webViewCheckAttempts: $webViewReady');
     }
-    
+
     if (!webViewReady) {
       print('[NYANYA-WEBVIEW] Failed to load WebView after all checks');
       await _handleLoadFailure(loadingFailedKey, LoadingStep.geckoFailed);
       return;
     }
-    
+
     setState(() {
       _loadingStep = LoadingStep.geckoSuccess;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(LoadingLog(type: LoadingLogType.engine, message: i18n.t(loadingSuccessKey)));
-      _loadingLogStatic.add(LoadingLog(type: LoadingLogType.engine, message: i18n.t(loadingSuccessKey)));
+      _loadingLog.add(LoadingLog(
+          type: LoadingLogType.engine, message: i18n.t(loadingSuccessKey)));
+      _loadingLogStatic.add(LoadingLog(
+          type: LoadingLogType.engine, message: i18n.t(loadingSuccessKey)));
     });
     print('WebView engine loaded successfully');
-    
+
     // 2. 启动本地静态服务
     setState(() {
       _loadingStep = LoadingStep.loadingServer;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server')));
-      _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server')));
+      _loadingLog.add(LoadingLog(
+          type: LoadingLogType.server, message: i18n.t('loading_server')));
+      _loadingLogStatic.add(LoadingLog(
+          type: LoadingLogType.server, message: i18n.t('loading_server')));
     });
     print('Starting local server...');
-    
+
     bool serverSuccess = false;
     try {
       if (_retryCount > 0) {
@@ -582,71 +556,40 @@ class _WebViewContainerState extends State<WebViewContainer>
       print('Local server failed to start: $e');
       serverSuccess = false;
     }
-    
+
     if (!serverSuccess) {
       print('[NYANYA-SERVER] Failed to start or verify local server');
-      await _handleLoadFailure('loading_server_failed', LoadingStep.serverFailed);
+      await _handleLoadFailure(
+          'loading_server_failed', LoadingStep.serverFailed);
       return;
     }
-    
-    LocalServer.onUrlChange = (String url, String title) {
-      print('[onUrlChange] url: $url, title: $title');
-      if (mounted) {
-        String displayUrl = url;
-        String displayTitle = title;
 
-        // 检测是否为内部网站（本地服务端口）
-        final isInternalWebsite = url.contains('localhost:13218') ||
-            url.contains('localhost:13219') ||
-            url.contains('localhost:13220') ||
-            url.contains('127.0.0.1:13218') ||
-            url.contains('127.0.0.1:13219') ||
-            url.contains('127.0.0.1:13220');
-
-        // 若判定为内部网站，则将显示用域名统一修改为 trip.aiiko.club
-        if (isInternalWebsite) {
-          displayUrl = url.replaceAll(
-            RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
-            'https://trip.aiiko.club',
-          );
-          print('[onUrlChange] 内部网站检测成功，替换后的URL: $displayUrl');
-        }
-
-        setState(() {
-          _currentUrl = displayUrl;
-          _currentUrlStatic = displayUrl;
-          _currentTitle = displayTitle;
-          _currentTitleStatic = displayTitle;
-          if (_tabs.isNotEmpty) {
-            final currentIndex = _tabs.indexWhere((t) => t.isCurrent);
-            if (currentIndex >= 0) {
-              _tabs[currentIndex] = _tabs[currentIndex].copyWith(url: displayUrl, title: displayTitle);
-              _tabsStatic = _tabs;
-            }
-          }
-        });
-      }
-    };
     setState(() {
       _loadingStep = LoadingStep.serverSuccess;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_success')));
-      _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_success')));
+      _loadingLog.add(LoadingLog(
+          type: LoadingLogType.server,
+          message: i18n.t('loading_server_success')));
+      _loadingLogStatic.add(LoadingLog(
+          type: LoadingLogType.server,
+          message: i18n.t('loading_server_success')));
     });
     print('Local server started successfully');
-    
+
     // 加载成功，重置重试计数
     _resetRetryCount();
-    
+
     // 3. 等待网站响应
     setState(() {
       _loadingStep = LoadingStep.loadingWeb;
       _loadingStepStatic = _loadingStep;
-      _loadingLog.add(LoadingLog(type: LoadingLogType.web, message: i18n.t('loading_web')));
-      _loadingLogStatic.add(LoadingLog(type: LoadingLogType.web, message: i18n.t('loading_web')));
+      _loadingLog.add(
+          LoadingLog(type: LoadingLogType.web, message: i18n.t('loading_web')));
+      _loadingLogStatic.add(
+          LoadingLog(type: LoadingLogType.web, message: i18n.t('loading_web')));
     });
     print('Waiting for website response...');
-    
+
     // 网站响应由 JavaScript 的 closeLoading 消息触发，这里不主动标记成功
   }
 
@@ -657,32 +600,14 @@ class _WebViewContainerState extends State<WebViewContainer>
     });
   }
 
-  void _handleExitAppRequest() {
-    if (_exitAppRequested) {
-      print('Exiting app now');
-      _exitAppTimer?.cancel();
-      _exitAppTimer = null;
-      SystemNavigator.pop();
-    } else {
-      _exitAppRequested = true;
-      final exitMessage = BridgeController().i18nService.t('press_back_again_to_exit');
-      _showToast(exitMessage);
-
-      _exitAppTimer?.cancel();
-      _exitAppTimer = Timer(const Duration(seconds: 3), () {
-        _exitAppRequested = false;
-      });
-    }
-  }
-
   void _bridgeHandlerListener() {
     _closeLoadingHandler = (message) {
       print('Received closeLoading message');
-      
+
       // 标记网站响应成功
       final i18n = BridgeController().i18nService.t('loading_web_success');
       _addLoadingLog(LoadingLogType.web, i18n);
-      
+
       setState(() {
         _loadingStep = LoadingStep.webSuccess;
         _loadingStepStatic = _loadingStep;
@@ -694,17 +619,19 @@ class _WebViewContainerState extends State<WebViewContainer>
       _loadTimeoutTimer?.cancel();
     };
     BridgeController().on('closeLoading', _closeLoadingHandler);
-    
+
     BridgeController().setUpdateCheckingCallback(() {
       _showCheckingUpdateDialog();
     });
-    
-    BridgeController().setUpdateCheckCallback((versionInfo, currentVersion, showCheckingNotification) {
+
+    BridgeController().setUpdateCheckCallback(
+        (versionInfo, currentVersion, showCheckingNotification) {
       if (showCheckingNotification) {
         _closeCheckingUpdateDialog();
       }
       if (versionInfo != null) {
-        _showUpdateAvailableDialog(versionInfo.version, versionInfo.downloadUrl);
+        _showUpdateAvailableDialog(
+            versionInfo.version, versionInfo.downloadUrl);
       } else {
         if (showCheckingNotification) {
           _showNoUpdateDialog(currentVersion);
@@ -712,11 +639,14 @@ class _WebViewContainerState extends State<WebViewContainer>
       }
     });
 
-    BridgeController().setLocalWebResourcesUpdateProgressCallback((progress, stage, receivedBytes, totalBytes) {
-      _updateLocalWebResourcesProgress(progress, stage, receivedBytes, totalBytes);
+    BridgeController().setLocalWebResourcesUpdateProgressCallback(
+        (progress, stage, receivedBytes, totalBytes) {
+      _updateLocalWebResourcesProgress(
+          progress, stage, receivedBytes, totalBytes);
     });
 
-    BridgeController().setLocalWebResourcesUpdateCompleteCallback((success, error) {
+    BridgeController()
+        .setLocalWebResourcesUpdateCompleteCallback((success, error) {
       _closeLocalWebResourcesUpdateDialog();
     });
   }
@@ -725,7 +655,8 @@ class _WebViewContainerState extends State<WebViewContainer>
 
   bool _isLocalWebResourcesUpdateDialogOpen = false;
   final ValueNotifier<int> _localWebResourcesUpdateProgress = ValueNotifier(0);
-  final ValueNotifier<String> _localWebResourcesUpdateStage = ValueNotifier('downloading');
+  final ValueNotifier<String> _localWebResourcesUpdateStage =
+      ValueNotifier('downloading');
   final ValueNotifier<int> _localWebResourcesReceivedBytes = ValueNotifier(0);
   final ValueNotifier<int> _localWebResourcesTotalBytes = ValueNotifier(0);
 
@@ -749,7 +680,7 @@ class _WebViewContainerState extends State<WebViewContainer>
     _localWebResourcesReceivedBytes.value = 0;
     _localWebResourcesTotalBytes.value = 0;
     final i18n = BridgeController().i18nService;
-    
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -763,7 +694,7 @@ class _WebViewContainerState extends State<WebViewContainer>
               ValueListenableBuilder<String>(
                 valueListenable: _localWebResourcesUpdateStage,
                 builder: (context, stage, child) {
-                  return Text(stage == 'downloading' 
+                  return Text(stage == 'downloading'
                       ? i18n.t('hot_update_downloading')
                       : i18n.t('hot_update_extracting'));
                 },
@@ -782,7 +713,8 @@ class _WebViewContainerState extends State<WebViewContainer>
                   ValueListenableBuilder<int>(
                     valueListenable: _localWebResourcesUpdateProgress,
                     builder: (context, progress, child) {
-                      return Text(i18n.t('hot_update_download_progress', {'progress': '$progress'}));
+                      return Text(i18n.t('hot_update_download_progress',
+                          {'progress': '$progress'}));
                     },
                   ),
                   ValueListenableBuilder<String>(
@@ -819,8 +751,10 @@ class _WebViewContainerState extends State<WebViewContainer>
     );
   }
 
-  void _updateLocalWebResourcesProgress(int progress, String stage, int receivedBytes, int totalBytes) {
-    print('[Main] Update progress: $progress% (stage: $stage, $receivedBytes/$totalBytes)');
+  void _updateLocalWebResourcesProgress(
+      int progress, String stage, int receivedBytes, int totalBytes) {
+    print(
+        '[Main] Update progress: $progress% (stage: $stage, $receivedBytes/$totalBytes)');
     if (!_isLocalWebResourcesUpdateDialogOpen) {
       _showLocalWebResourcesUpdateDialog();
     }
@@ -902,7 +836,8 @@ class _WebViewContainerState extends State<WebViewContainer>
       context: context,
       builder: (context) => AlertDialog(
         title: Text(i18n.t('update_no_new_version_title')),
-        content: Text(i18n.t('update_no_new_version_content', {'version': currentVersion})),
+        content: Text(i18n
+            .t('update_no_new_version_content', {'version': currentVersion})),
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -916,7 +851,9 @@ class _WebViewContainerState extends State<WebViewContainer>
   void _statusBarHandlerListener() {
     BridgeController().setStatusBarChangeHandler((String type) {
       setState(() {
-        _safeAreaTop = (type != 'transparent-light' && type != 'transparent-dark' && type != 'hide');
+        _safeAreaTop = (type != 'transparent-light' &&
+            type != 'transparent-dark' &&
+            type != 'hide');
         _safeAreaTopStatic = _safeAreaTop;
       });
     });
@@ -926,28 +863,28 @@ class _WebViewContainerState extends State<WebViewContainer>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     print('[NYANYA-LIFECYCLE] state=$state');
-    
+
     // 发送通用的生命周期变化事件
     BridgeController().sendAppLifecycleChangeEvent(state.name);
-    
+
     if (state == AppLifecycleState.paused) {
       _lastBackgroundTime = DateTime.now();
       _lastBackgroundTimeStatic = _lastBackgroundTime;
       _isInBackground = true;
       _isInBackgroundStatic = _isInBackground;
-      
+
       // 发送离开 App 进入后台事件
       BridgeController().sendAppPauseEvent();
-      
+
       // TODO: 前台服务暂时禁用 (flutter_foreground_task 与 MIUI 不兼容)
       // _startForegroundTaskSafe();
     } else if (state == AppLifecycleState.resumed) {
       _isInBackground = false;
       _isInBackgroundStatic = _isInBackground;
-      
+
       // 发送重新回到 App 事件
       BridgeController().sendAppResumeEvent();
-      
+
       // TODO: 前台服务暂时禁用
       // _stopForegroundTaskSafe();
       _checkAndRecoverState();
@@ -992,7 +929,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   // }
 
   /// 检测并恢复应用状态
-  /// 
+  ///
   /// 核心原则：
   /// 1. 每次从后台返回都检测
   /// 2. 只有服务真的挂了才恢复
@@ -1001,29 +938,32 @@ class _WebViewContainerState extends State<WebViewContainer>
     print('[NYANYA-CHECK] === Checking app state on resume ===');
     print('[NYANYA-CHECK]   _lastBackgroundTime: $_lastBackgroundTime');
     print('[NYANYA-CHECK]   _isPageLoaded: $_isPageLoaded');
-    print('[NYANYA-CHECK]   LocalServer status: ${LocalServer.instance.status}');
-    print('[NYANYA-CHECK]   LocalServer serverExists: ${LocalServer.instance.serverExists}');
+    print(
+        '[NYANYA-CHECK]   LocalServer status: ${LocalServer.instance.status}');
+    print(
+        '[NYANYA-CHECK]   LocalServer serverExists: ${LocalServer.instance.serverExists}');
     print('[NYANYA-CHECK]   _channel: ${_channel == null ? "null" : "exists"}');
-    
+
     if (_lastBackgroundTime == null) {
       print('[NYANYA-CHECK] First launch, skip check');
       return;
     }
-    
-    final bgDuration = DateTime.now().difference(_lastBackgroundTime!).inMilliseconds;
+
+    final bgDuration =
+        DateTime.now().difference(_lastBackgroundTime!).inMilliseconds;
     print('[NYANYA-CHECK] Background duration: ${bgDuration}ms');
-    
+
     if (!_isPageLoaded) {
       print('[NYANYA-CHECK] Page never loaded, skip recovery');
       return;
     }
-    
+
     final serverHealthy = LocalServer.instance.checkServerHealth();
     print('[NYANYA-CHECK] Server health: $serverHealthy');
-    
+
     final kernelHealthy = await checkKernelHealth();
     print('[NYANYA-CHECK] Kernel health: $kernelHealthy');
-    
+
     if (!serverHealthy || !kernelHealthy) {
       print('[NYANYA-RECOVERY] Starting recovery...');
       await _performRecovery();
@@ -1036,16 +976,17 @@ class _WebViewContainerState extends State<WebViewContainer>
   Future<bool> checkKernelHealth() async {
     _kernelHealthyStatic = _channel != null;
     if (!_kernelHealthyStatic) return false;
-    
+
     try {
       final result = await _channel!.invokeMethod<bool>('checkSessionsHealth');
       _kernelHealthyStatic = result ?? false;
-      print('[NYANYA-KERNEL] checkSessionsHealth result: $_kernelHealthyStatic');
+      print(
+          '[NYANYA-KERNEL] checkSessionsHealth result: $_kernelHealthyStatic');
     } catch (e) {
       print('[NYANYA-KERNEL] checkSessionsHealth failed: $e');
       _kernelHealthyStatic = false;
     }
-    
+
     return _kernelHealthyStatic;
   }
 
@@ -1082,12 +1023,18 @@ class _WebViewContainerState extends State<WebViewContainer>
       print('[NYANYA-RECOVERY] Kernel: $kernelHealthy, Server: $serverHealthy');
 
       if (!kernelHealthy) {
-        print('[NYANYA-RECOVERY] Kernel unhealthy, restarting app instead of attempting recovery');
+        print(
+            '[NYANYA-RECOVERY] Kernel unhealthy, restarting app instead of attempting recovery');
         setState(() {
-          _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_failed')));
-          _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_failed')));
+          _loadingLog.add(LoadingLog(
+              type: LoadingLogType.server,
+              message: i18n.t('loading_server_failed')));
+          _loadingLogStatic.add(LoadingLog(
+              type: LoadingLogType.server,
+              message: i18n.t('loading_server_failed')));
         });
-        await _showNotification(i18n.t('app_exception_title'), i18n.t('app_exception_content'));
+        await _showNotification(
+            i18n.t('app_exception_title'), i18n.t('app_exception_content'));
         Timer(const Duration(seconds: 1), () {
           BridgeController().restartApp();
         });
@@ -1097,8 +1044,10 @@ class _WebViewContainerState extends State<WebViewContainer>
       if (!serverHealthy) {
         print('[NYANYA-RECOVERY] Server unhealthy, restarting server only');
         setState(() {
-          _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server')));
-          _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server')));
+          _loadingLog.add(LoadingLog(
+              type: LoadingLogType.server, message: i18n.t('loading_server')));
+          _loadingLogStatic.add(LoadingLog(
+              type: LoadingLogType.server, message: i18n.t('loading_server')));
         });
 
         print('[NYANYA-RECOVERY] Restarting local server...');
@@ -1106,10 +1055,16 @@ class _WebViewContainerState extends State<WebViewContainer>
         print('[NYANYA-RECOVERY] Server restarted successfully');
 
         setState(() {
-          _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_success')));
-          _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_success')));
-          _loadingLog.add(LoadingLog(type: LoadingLogType.web, message: i18n.t('loading_web')));
-          _loadingLogStatic.add(LoadingLog(type: LoadingLogType.web, message: i18n.t('loading_web')));
+          _loadingLog.add(LoadingLog(
+              type: LoadingLogType.server,
+              message: i18n.t('loading_server_success')));
+          _loadingLogStatic.add(LoadingLog(
+              type: LoadingLogType.server,
+              message: i18n.t('loading_server_success')));
+          _loadingLog.add(LoadingLog(
+              type: LoadingLogType.web, message: i18n.t('loading_web')));
+          _loadingLogStatic.add(LoadingLog(
+              type: LoadingLogType.web, message: i18n.t('loading_web')));
         });
 
         await Future.delayed(const Duration(milliseconds: 300));
@@ -1123,14 +1078,18 @@ class _WebViewContainerState extends State<WebViewContainer>
         _isLoading = false;
         _isLoadingStatic = _isLoading;
       });
-
     } catch (e) {
       print('[NYANYA-RECOVERY] Failed to perform recovery: $e');
       setState(() {
-        _loadingLog.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_failed')));
-        _loadingLogStatic.add(LoadingLog(type: LoadingLogType.server, message: i18n.t('loading_server_failed')));
+        _loadingLog.add(LoadingLog(
+            type: LoadingLogType.server,
+            message: i18n.t('loading_server_failed')));
+        _loadingLogStatic.add(LoadingLog(
+            type: LoadingLogType.server,
+            message: i18n.t('loading_server_failed')));
       });
-      await _showNotification(i18n.t('app_exception_title'), i18n.t('app_exception_content'));
+      await _showNotification(
+          i18n.t('app_exception_title'), i18n.t('app_exception_content'));
 
       Timer(const Duration(seconds: 3), () {
         BridgeController().restartApp();
@@ -1142,9 +1101,11 @@ class _WebViewContainerState extends State<WebViewContainer>
   Future<void> _reloadWebView() async {
     if (_channel != null) {
       try {
-        final isReady = await _channel!.invokeMethod<bool>('checkWebViewReady') ?? false;
+        final isReady =
+            await _channel!.invokeMethod<bool>('checkWebViewReady') ?? false;
         if (!isReady) {
-          print('[NYANYA-RECOVERY] WebView not ready after shutdown, skipping reload');
+          print(
+              '[NYANYA-RECOVERY] WebView not ready after shutdown, skipping reload');
           return;
         }
 
@@ -1216,11 +1177,11 @@ class _WebViewContainerState extends State<WebViewContainer>
     BridgeController().off('closeLoading', _closeLoadingHandler);
     super.dispose();
   }
-  
+
   // ================================
   // 标签页相关方法 - 放在这里确保在build之前声明
   // ================================
-  
+
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     print('_handleMethodCall: ${call.method}');
     switch (call.method) {
@@ -1228,298 +1189,6 @@ class _WebViewContainerState extends State<WebViewContainer>
         break;
       case 'onPageStop':
         break;
-    }
-  }
-  
-  Future<void> _loadTabs() async {
-    if (_channel == null) return;
-    try {
-      final tabsData = await _channel!.invokeMethod<List<dynamic>>('getTabsInfo');
-      if (tabsData != null && mounted) {
-        setState(() {
-          _tabs = tabsData.map((tab) => TabInfo.fromMap(Map<String, dynamic>.from(tab))).toList();
-          _tabsStatic = _tabs;
-        });
-      }
-    } catch (e) {
-      print('Error loading tabs: $e');
-    }
-  }
-  
-  Future<void> _closeCurrentTab() async {
-    if (_channel == null) return;
-    try {
-      await _channel!.invokeMethod<bool>('closeCurrentTab');
-      // 注意：原生端会触发 onTabStackChanged，不需要再次调用 _loadTabs()
-    } catch (e) {
-      print('Error closing current tab: $e');
-    }
-  }
-  
-  Future<void> _closeTab(dynamic tabId) async {
-    if (_channel == null) return;
-    try {
-      await _channel!.invokeMethod<bool>('closeTab', {'tabId': tabId});
-      // 注意：原生端会触发 onTabStackChanged，不需要再次调用 _loadTabs()
-    } catch (e) {
-      print('Error closing tab: $e');
-    }
-  }
-
-  // 获取简化的 URL（去掉协议前缀），内部网站替换域名为 trip.aiiko.club
-  String _getDisplayUrl(String url) {
-    String processedUrl = url;
-    // 检测是否为内部网站（本地服务端口）
-    final isInternalWebsite = url.contains('localhost:13218') ||
-        url.contains('localhost:13219') ||
-        url.contains('localhost:13220') ||
-        url.contains('127.0.0.1:13218') ||
-        url.contains('127.0.0.1:13219') ||
-        url.contains('127.0.0.1:13220');
-    // 若判定为内部网站，则将显示用域名统一修改为 trip.aiiko.club
-    if (isInternalWebsite) {
-      processedUrl = url.replaceAll(
-        RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
-        'https://trip.aiiko.club',
-      );
-    }
-    if (processedUrl.startsWith('https://')) {
-      return processedUrl.substring(8);
-    }
-    if (processedUrl.startsWith('http://')) {
-      return processedUrl.substring(7);
-    }
-    return processedUrl;
-  }
-
-  // 构建 Chrome PWA 样式的 header
-  Widget _buildPwaHeader() {
-    final textColor = _brightness == Brightness.dark ? Colors.white : Colors.black;
-    final subTextColor = _brightness == Brightness.dark ? Colors.white70 : Colors.black54;
-    final backgroundColor = _brightness == Brightness.dark ? const Color(0xFF202124) : Colors.white;
-    
-    // 获取当前标签
-    final currentTab = _tabs.isNotEmpty 
-        ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first)
-        : null;
-    
-    final displayTitle = currentTab?.title.isNotEmpty == true 
-        ? currentTab!.title 
-        : (_currentTitle.isNotEmpty ? _currentTitle : '');
-    final displayUrl = currentTab?.url.isNotEmpty == true 
-        ? _getDisplayUrl(currentTab!.url) 
-        : '';
-    
-    // 只有标签数 > 1 时才显示 header，否则返回空容器（高度为0）以便 AnimatedSize 动画
-    if (_tabs.length <= 1) {
-      return Container(height: 0);
-    }
-    
-    return Container(
-      color: backgroundColor,
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top,
-        left: 4,
-        right: 4,
-        bottom: 8,
-      ),
-      child: Row(
-        children: [
-          // 左侧 X 按钮
-          SizedBox(
-            width: 44,
-            height: 44,
-            child: IconButton(
-              icon: const Icon(Icons.close, size: 24),
-              padding: EdgeInsets.zero,
-              color: textColor,
-              onPressed: () async {
-                await _closeCurrentTab();
-              },
-            ),
-          ),
-          const SizedBox(width: 4),
-          // 中间：标题 + URL（两行）
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (displayTitle.isNotEmpty)
-                  Text(
-                    displayTitle,
-                    style: TextStyle(
-                      color: textColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                if (displayUrl.isNotEmpty)
-                  Text(
-                    displayUrl,
-                    style: TextStyle(
-                      color: subTextColor,
-                      fontSize: 12,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          // 右侧三个点按钮
-          SizedBox(
-            width: 44,
-            height: 44,
-            child: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, size: 24),
-              color: backgroundColor,
-              iconColor: textColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              onSelected: (value) {
-                _handleMenuAction(value);
-              },
-              itemBuilder: (context) {
-                return [
-                  PopupMenuItem<String>(
-                    padding: EdgeInsets.zero,
-                    value: 'actions',
-                    child: Column(
-                      children: [
-                        // 顶部图标按钮行
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _buildMenuIconButton(
-                              context,
-                              Icons.arrow_back,
-                              'back',
-                              !_canGoBack,
-                            ),
-                            _buildMenuIconButton(
-                              context,
-                              Icons.arrow_forward,
-                              'forward',
-                              !_canGoForward,
-                            ),
-                            _buildMenuIconButton(
-                              context,
-                              Icons.refresh,
-                              'refresh',
-                              false,
-                            ),
-                          ],
-                        ),
-                        const Divider(height: 1),
-                        // 列表项
-                        // _buildMenuItem(context, Icons.open_in_browser, 'open_in_browser'),
-                        _buildMenuItem(context, Icons.share, 'share'),
-                      ],
-                    ),
-                  ),
-                ];
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenuIconButton(BuildContext ctx, IconData icon, String action, bool disabled) {
-    final textColor = _brightness == Brightness.dark ? Colors.white : Colors.black;
-    return IconButton(
-      icon: Icon(icon, size: 20),
-      color: disabled ? Colors.grey : textColor,
-      onPressed: disabled ? null : () {
-        Navigator.pop(ctx);
-        _handleMenuAction(action);
-      },
-    );
-  }
-
-  Widget _buildMenuItem(BuildContext ctx, IconData icon, String key) {
-    final textColor = _brightness == Brightness.dark ? Colors.white : Colors.black;
-    final label = BridgeController().i18nService.t(key);
-    return SizedBox(
-      height: 48,
-      child: InkWell(
-        onTap: () {
-          Navigator.pop(ctx);
-          _handleMenuAction(key);
-        },
-        child: Row(
-          children: [
-            const SizedBox(width: 16),
-            Icon(icon, size: 20, color: textColor),
-            const SizedBox(width: 16),
-            Text(
-              label,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _handleMenuAction(String action) {
-    print('[_handleMenuAction] action: $action, _channel: ${_channel == null ? "null" : "exists"}');
-    switch (action) {
-      case 'back':
-        _channel?.invokeMethod('goBack');
-        break;
-      case 'forward':
-        _channel?.invokeMethod('goForward');
-        break;
-      case 'refresh':
-        _channel?.invokeMethod('reload');
-        break;
-      case 'open_in_browser':
-        _openInBrowser();
-        break;
-      case 'share':
-        _shareUrl();
-        break;
-    }
-  }
-
-  void _openInBrowser() async {
-    print('[_openInBrowser] called');
-    final currentTab = _tabs.isNotEmpty
-        ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first)
-        : null;
-    final url = currentTab?.url ?? _currentUrl;
-    print('[_openInBrowser] url: $url');
-    if (url.isNotEmpty && _channel != null) {
-      try {
-        await _channel!.invokeMethod('openInBrowser', {'url': url});
-        print('[_openInBrowser] success');
-      } catch (e) {
-        print('[_openInBrowser] error: $e');
-      }
-    }
-  }
-
-  void _shareUrl() async {
-    print('[_shareUrl] called');
-    final currentTab = _tabs.isNotEmpty
-        ? _tabs.firstWhere((t) => t.isCurrent, orElse: () => _tabs.first)
-        : null;
-    final url = currentTab?.url ?? _currentUrl;
-    print('[_shareUrl] url: $url');
-    if (url.isNotEmpty) {
-      await Clipboard.setData(ClipboardData(text: url));
-      final message = BridgeController().i18nService.t('url_copied');
-      _showToast(message);
     }
   }
 
@@ -1536,91 +1205,187 @@ class _WebViewContainerState extends State<WebViewContainer>
   }
 
   Widget _buildNyaNyaWebview() {
+    // 关键：如果 engine 还没确定，先渲染一个占位符！
+    // 确保不会出现先 SystemWebView 后 GeckoView 的切换！
+    if (_finalEngine == null) {
+      // 尝试确定 engine
+      if (_selectedEngineStatic != null) {
+        _finalEngine = _selectedEngineStatic;
+        print(
+            '[NYANYA-ENGINE] Final engine determined (static): ${_finalEngine!.name}');
+        // 等下一帧再 build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      } else if (_selectedEngine != null) {
+        _finalEngine = _selectedEngine;
+        print(
+            '[NYANYA-ENGINE] Final engine determined (state): ${_finalEngine!.name}');
+        // 等下一帧再 build
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      }
+
+      // 还没确定，先返回占位符
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    // engine 已经确定，可以安全地渲染 WebView 了！
+    final engine = _finalEngine!;
     final initialUrl = _initialUrl ?? LocalServer.instance.url;
     final serverPort = LocalServer.instance.port;
-    final engine = _selectedEngineStatic ?? _selectedEngine ?? WebViewEngine.system;
 
-    return NyaNyaWebview(
-      options: WebViewOptions(
-        engine: engine,
-        initialUrl: initialUrl,
-        serverPort: serverPort,
-        newTabBehavior: NewTabBehavior.delegate,
-      ),
-      messageHandler: (String message) {
-        BridgeController().handleWebMessage(message);
+    print('[NYANYA-ENGINE] Rendering WebView with engine: ${engine.name}');
+
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        print('[NyaNyaOpenURL] MAIN: PopScope onPopInvoked');
+        final channel = _channel;
+        if (channel != null) {
+          final canGoBack =
+              await channel.invokeMethod<bool>('canGoBack') ?? false;
+          if (canGoBack) {
+            await channel.invokeMethod('goBack');
+          } else {
+            _handleMainClose();
+          }
+        } else {
+          _handleMainClose();
+        }
       },
-      onChannelCreated: (channel) {
-        _channel = channel;
-        BridgeController().setChannel(channel);
-      },
-      onOpenUrl: (url, target) {
-        print('[NyaNyaOpenURL] MAIN: onOpenUrl called: url=$url, target=$target');
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => TabManagerWidget(
-              initialUrl: url,
-              optionsBuilder: (tabUrl) => WebViewOptions(
-                engine: engine,
-                initialUrl: tabUrl,
-                serverPort: serverPort,
-                newTabBehavior: NewTabBehavior.delegate,
+      child: NyaNyaWebview(
+        key: _nyaNyaWebviewKey,
+        options: WebViewOptions(
+          engine: engine,
+          initialUrl: initialUrl,
+          serverPort: serverPort,
+          newTabBehavior: NewTabBehavior.delegate,
+        ),
+        messageHandler: (String message) {
+          print('[NyaNyaOpenURL] MAIN: messageHandler called: $message');
+          BridgeController().handleWebMessage(message, sessionId: 'main');
+        },
+        onChannelCreated: (channel) {
+          _channel = channel;
+          BridgeController().setChannel(channel, sessionId: 'main');
+        },
+        onClose: () {
+          _handleMainClose();
+        },
+        onOpenUrl: (url, target) {
+          print(
+              '[NyaNyaOpenURL] MAIN: onOpenUrl called: url=$url, target=$target');
+
+          Navigator.push(
+            context,
+            PageRouteBuilder(
+              pageBuilder: (context, animation, secondaryAnimation) =>
+                  TabManagerWidget(
+                initialUrl: url,
+                optionsBuilder: (tabUrl) => WebViewOptions(
+                  engine: engine,
+                  initialUrl: tabUrl,
+                  serverPort: serverPort,
+                  newTabBehavior: NewTabBehavior.delegate,
+                ),
+                maxTabs: 10,
+                showTabBar: true,
+                brightness: _brightness,
+                language: BridgeController().languageService.currentLanguage ==
+                        'system'
+                    ? null
+                    : BridgeController().languageService.currentLanguage,
+                onMessage: (tabId, message) {
+                  BridgeController()
+                      .handleWebMessage(message, sessionId: tabId);
+                },
+                onChannelCreated: (tabId, channel) {
+                  BridgeController().setChannel(channel, sessionId: tabId);
+                },
+                onTabClosed: (tabId) {
+                  BridgeController().removeChannel(tabId);
+                },
               ),
-              maxTabs: 10,
-              showTabBar: true,
-              brightness: _brightness,
+              // 推入动画：从右往左滑入
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                const begin = Offset(1.0, 0.0);
+                const end = Offset.zero;
+                const curve = Curves.easeInOut;
+                var tween = Tween(begin: begin, end: end)
+                    .chain(CurveTween(curve: curve));
+                return SlideTransition(
+                  position: animation.drive(tween),
+                  child: child,
+                );
+              },
+              // 返回动画：从左往右滑出
+              transitionDuration: const Duration(milliseconds: 300),
+              reverseTransitionDuration: const Duration(milliseconds: 300),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
+  }
+
+  void _handleMainClose() {
+    print('[NyaNyaOpenURL] MAIN: _handleMainClose called');
+    final now = DateTime.now();
+    if (_lastBackPressTimeStatic != null &&
+        now.difference(_lastBackPressTimeStatic!).inMilliseconds < 3000) {
+      print('[NyaNyaOpenURL] MAIN: Exiting app due to double back press');
+      SystemNavigator.pop();
+    } else {
+      _lastBackPressTimeStatic = now;
+      ShadToaster.of(context).show(
+        ShadToast(
+          title: Text(
+              BridgeController().i18nService.t('press_back_again_to_exit')),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final showHeader = _tabs.length > 1;
     return Scaffold(
-      backgroundColor: _brightness == Brightness.dark ? Colors.black : Colors.white,
+      backgroundColor:
+          _brightness == Brightness.dark ? Colors.black : Colors.white,
       body: SafeArea(
-        top: !showHeader,  // header 已经处理了状态栏 padding
+        top: true,
         bottom: true,
-        child: Column(
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            // Chrome PWA 样式的 header，使用 AnimatedSize 实现平滑过渡动画
-            AnimatedSize(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.linear,
-              child: _buildPwaHeader(),
-            ),
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  _buildNyaNyaWebview(),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 500),
-                    transitionBuilder: (Widget child, Animation<double> animation) {
-                      return FadeTransition(
-                        opacity: animation,
-                        child: child,
-                      );
-                    },
-                    child: _isLoading
-                        ? Container(
-                            key: const ValueKey('loading'),
-                            color: _brightness == Brightness.dark ? Colors.black : Colors.white,
-                            child: LoadingContent(
-                              brightness: _brightness,
-                              subtitle: _loadingSubtitle,
-                              loadingLog: _loadingLog,
-                            ),
-                          )
-                        : null,
-                  ),
-
-                ],
-              ),
+            _buildNyaNyaWebview(),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 500),
+              transitionBuilder: (Widget child, Animation<double> animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: child,
+                );
+              },
+              child: _isLoading
+                  ? Container(
+                      key: const ValueKey('loading'),
+                      color: _brightness == Brightness.dark
+                          ? Colors.black
+                          : Colors.white,
+                      child: LoadingContent(
+                        brightness: _brightness,
+                        subtitle: _loadingSubtitle,
+                        loadingLog: _loadingLog,
+                      ),
+                    )
+                  : null,
             ),
           ],
         ),
@@ -1628,5 +1393,3 @@ class _WebViewContainerState extends State<WebViewContainer>
     );
   }
 }
-
-

@@ -28,17 +28,42 @@ class SystemWebview extends StatefulWidget {
   State<SystemWebview> createState() => _SystemWebviewState();
 }
 
-class _SystemWebviewState extends State<SystemWebview> {
+class _SystemWebviewState extends State<SystemWebview> with AutomaticKeepAliveClientMixin {
   MethodChannel? _channel;
   int? _platformViewId;
   bool _isDisposed = false;
+  late WebViewOptions _currentOptions;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentOptions = widget.options;
+    print('[NyaNyaOpenURL] SystemWebview.initState: this.hashCode=${identityHashCode(this)}, widget.onOpenUrl = ${widget.onOpenUrl}');
+  }
+
+  @override
+  void didUpdateWidget(SystemWebview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    print('[NyaNyaOpenURL] SystemWebview.didUpdateWidget: this.hashCode=${identityHashCode(this)}');
+    if (widget.options != oldWidget.options) {
+      setState(() {
+        _currentOptions = widget.options;
+      });
+    }
+    // 不再需要跟踪 _onOpenUrl，直接用 widget.onOpenUrl
+  }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin requires this!
     if (_isDisposed) {
       return const SizedBox.shrink();
     }
 
+    print('[NyaNyaOpenURL] SystemWebview.build: this.hashCode=${identityHashCode(this)}');
     if (defaultTargetPlatform == TargetPlatform.android) {
       return PlatformViewLink(
         viewType: 'systemWebView',
@@ -55,10 +80,10 @@ class _SystemWebviewState extends State<SystemWebview> {
             viewType: 'systemWebView',
             layoutDirection: TextDirection.ltr,
             creationParams: <String, dynamic>{
-              'url': widget.options.initialUrl,
-              'serverPort': widget.options.serverPort,
-              'enableJavascript': widget.options.enableJavascript,
-              'enableMixedContent': widget.options.enableMixedContent,
+              'url': _currentOptions.initialUrl,
+              'serverPort': _currentOptions.serverPort,
+              'enableJavascript': _currentOptions.enableJavascript,
+              'enableMixedContent': _currentOptions.enableMixedContent,
             },
             creationParamsCodec: const StandardMessageCodec(),
           );
@@ -70,7 +95,7 @@ class _SystemWebviewState extends State<SystemWebview> {
 
             widget.onChannelCreated?.call(_channel!);
 
-            loadUrl(widget.options.initialUrl);
+            loadUrl(_currentOptions.initialUrl);
             params.onPlatformViewCreated(id);
           });
 
@@ -86,20 +111,61 @@ class _SystemWebviewState extends State<SystemWebview> {
   }
 
   Future<dynamic> _handleMethodCall(MethodCall call) async {
-    switch (call.method) {
-      case 'onWebMessage':
-        final String message = call.arguments as String;
-        widget.messageHandler(message);
-        break;
-      case 'onOpenUrl':
-        final String url = call.arguments['url'] as String? ?? '';
-        final String? target = call.arguments['target'] as String?;
-        widget.onOpenUrl?.call(url, target);
-        break;
-      case 'onPageStart':
-        break;
-      case 'onPageStop':
-        break;
+    print('[NyaNyaOpenURL] ========== SystemWebview._handleMethodCall START ==========');
+    print('[NyaNyaOpenURL] SystemWebview._handleMethodCall: received method=${call.method}, arguments=${call.arguments}');
+    print('[NyaNyaOpenURL] SystemWebview._handleMethodCall: widget.onOpenUrl is null? ${widget.onOpenUrl == null}');
+    print('[NyaNyaOpenURL] SystemWebview._handleMethodCall: _currentOptions.newTabBehavior = ${_currentOptions.newTabBehavior}');
+    try {
+      switch (call.method) {
+        case 'testCommunication':
+          print('[NyaNyaOpenURL] SystemWebview: testCommunication received from native!');
+          return {'status': 'ok', 'message': 'Hello from Flutter SystemWebview!', 'time': DateTime.now().millisecondsSinceEpoch};
+        case 'onWebMessage':
+          final String message = call.arguments as String;
+          widget.messageHandler(message);
+          return {'status': 'ok'};
+        case 'onOpenUrl':
+          print('[NyaNyaOpenURL] ========== SystemWebview onOpenUrl RECEIVED ==========');
+          final urlFromArgs = call.arguments['url'];
+          final targetFromArgs = call.arguments['target'];
+          print('[NyaNyaOpenURL] SystemWebview onOpenUrl raw args: url=$urlFromArgs (${urlFromArgs.runtimeType}), target=$targetFromArgs (${targetFromArgs.runtimeType})');
+          
+          final String url = urlFromArgs as String? ?? '';
+          final String? target = targetFromArgs as String?;
+          
+          print('[NyaNyaOpenURL] SystemWebview: onOpenUrl parsed, url=$url, target=$target');
+          print('[NyaNyaOpenURL] SystemWebview: _currentOptions.newTabBehavior = ${_currentOptions.newTabBehavior}');
+          print('[NyaNyaOpenURL] SystemWebview: widget.onOpenUrl != null = ${widget.onOpenUrl != null}');
+          
+          if (_currentOptions.newTabBehavior == NewTabBehavior.delegate) {
+            print('[NyaNyaOpenURL] SystemWebview: newTabBehavior is delegate');
+            if (widget.onOpenUrl != null) {
+              print('[NyaNyaOpenURL] SystemWebview: Calling user onOpenUrl callback NOW!');
+              widget.onOpenUrl!(url, target);
+              print('[NyaNyaOpenURL] SystemWebview: user onOpenUrl callback called!');
+            } else {
+              print('[NyaNyaOpenURL] SystemWebview: WARNING - widget.onOpenUrl is NULL!');
+            }
+          } else {
+            print('[NyaNyaOpenURL] SystemWebview: newTabBehavior is NOT delegate, loading url in current webview');
+            loadUrl(url);
+          }
+          print('[NyaNyaOpenURL] ========== SystemWebview onOpenUrl HANDLED ==========');
+          return {'status': 'ok', 'url': url, 'target': target};
+        case 'onPageStart':
+          return {'status': 'ok'};
+        case 'onPageStop':
+          return {'status': 'ok'};
+        default:
+          print('[NyaNyaOpenURL] SystemWebview: Unknown method called: ${call.method}');
+          return {'status': 'error', 'error': 'Unknown method'};
+      }
+    } catch (e, stack) {
+      print('[NyaNyaOpenURL] ========== ERROR IN SystemWebview _handleMethodCall ==========');
+      print('[NyaNyaOpenURL] SystemWebview: Error in _handleMethodCall: $e');
+      print('[NyaNyaOpenURL] SystemWebview: Stack trace: $stack');
+      print('[NyaNyaOpenURL] =================================================');
+      return {'status': 'error', 'error': e.toString()};
     }
   }
 
@@ -174,7 +240,9 @@ class _SystemWebviewState extends State<SystemWebview> {
 
   @override
   void dispose() {
+    print('[NyaNyaOpenURL] SystemWebview.dispose CALLED! this.hashCode=${identityHashCode(this)}, _channel=$_channel');
     _isDisposed = true;
+    _channel?.setMethodCallHandler(null);
     _channel?.invokeMethod('dispose');
     _channel = null;
     super.dispose();

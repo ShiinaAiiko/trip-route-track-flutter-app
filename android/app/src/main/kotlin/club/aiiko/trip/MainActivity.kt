@@ -50,11 +50,6 @@ class MainActivity : FlutterActivity() {
         
         // 初始化Google Sign-In
         initGoogleSignIn()
-        
-        flutterEngine.platformViewsController.registry.registerViewFactory(
-            "geckoView",
-            GeckoViewFactory(flutterEngine.dartExecutor.binaryMessenger)
-        )
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {

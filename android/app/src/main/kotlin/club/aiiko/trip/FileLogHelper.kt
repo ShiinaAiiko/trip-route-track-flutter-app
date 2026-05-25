@@ -13,12 +13,14 @@ object FileLogHelper {
     private const val LOG_DIR = "Download/log"
     private const val LOG_FILE_PREFIX = "app_native_log_"
     private const val MAX_LOG_SIZE = 5 * 1024 * 1024
-    private const val MAX_LOG_FILES = 10
+    private const val MAX_LOG_FILES = 5
 
     private var logFile: File? = null
     private val logQueue = ConcurrentLinkedQueue<String>()
     private val executor = Executors.newSingleThreadExecutor()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault())
+    private var cleanupCounter = 0
+    private const val CLEANUP_INTERVAL = 100
 
     val logFilePath: String?
         get() = logFile?.absolutePath
@@ -29,6 +31,8 @@ object FileLogHelper {
             if (!logDir.exists()) {
                 logDir.mkdirs()
             }
+
+            cleanupOldLogs(logDir)
 
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             logFile = File(logDir, "${LOG_FILE_PREFIX}${timestamp}.txt")
@@ -126,6 +130,12 @@ object FileLogHelper {
                     }
                     file.appendText(content.toString())
                 }
+
+                cleanupCounter++
+                if (cleanupCounter >= CLEANUP_INTERVAL) {
+                    cleanupCounter = 0
+                    logFile?.parentFile?.let { cleanupOldLogs(it) }
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -155,6 +165,8 @@ object FileLogHelper {
 
             logFile = File(currentFile.parent, "${LOG_FILE_PREFIX}${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt")
             logFile?.writeText("=== Log Rotated at ${Date()} ===\n\n")
+
+            currentFile.parentFile?.let { cleanupOldLogs(it) }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -162,14 +174,33 @@ object FileLogHelper {
 
     private fun cleanupOldLogs(logDir: File) {
         try {
-            val logFiles = logDir.listFiles { _, name -> name.startsWith(LOG_FILE_PREFIX) && name.endsWith(".txt") }
-                ?.sortedByDescending { it.lastModified() }
-                ?: return
+            val process = Runtime.getRuntime().exec("ls -t $logDir")
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            val allFileNames = mutableListOf<String>()
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                line?.let { allFileNames.add(it) }
+            }
+            reader.close()
+
+            Log.d("FileLogHelper", "cleanupOldLogs: total files in dir: ${allFileNames.size}")
+
+            val filtered = allFileNames.filter { it.startsWith(LOG_FILE_PREFIX) && it.endsWith(".txt") }
+            Log.d("FileLogHelper", "cleanupOldLogs: filtered count: ${filtered.size}")
+
+            val logFiles = filtered.map { File(logDir, it) }
+            Log.d("FileLogHelper", "cleanupOldLogs: logFiles count: ${logFiles.size}")
 
             if (logFiles.size > MAX_LOG_FILES) {
-                logFiles.drop(MAX_LOG_FILES).forEach { it.delete() }
+                val toDelete = logFiles.drop(MAX_LOG_FILES)
+                Log.d("FileLogHelper", "cleanupOldLogs: deleting ${toDelete.size} files")
+                toDelete.forEach {
+                    Log.d("FileLogHelper", "cleanupOldLogs: deleting ${it.name}")
+                    it.delete()
+                }
             }
         } catch (e: Exception) {
+            Log.e("FileLogHelper", "cleanupOldLogs failed", e)
             e.printStackTrace()
         }
     }

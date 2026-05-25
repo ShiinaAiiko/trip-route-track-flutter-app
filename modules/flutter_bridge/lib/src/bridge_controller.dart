@@ -49,6 +49,7 @@ class BridgeController {
   String? _pendingUpdateVersion;
 
   MethodChannel? _channel;
+  final Map<String, MethodChannel> _channels = {};
   StreamSubscription<Position>? _positionSubscription;
   final Map<String, List<MessageHandler>> _messageHandlers = {};
   FlutterMethodCallHandler? _externalHandler;
@@ -132,9 +133,18 @@ class BridgeController {
     });
   }
 
-  void setChannel(MethodChannel? channel) {
+  void setChannel(MethodChannel? channel, {String? sessionId}) {
     _channel = channel;
-    _channel?.setMethodCallHandler(_handleMethodCall);
+    if (sessionId != null && channel != null) {
+      _channels[sessionId] = channel;
+      print('[Bridge] Registered channel for session: $sessionId');
+    }
+    // _channel?.setMethodCallHandler(_handleMethodCall);
+  }
+
+  void removeChannel(String sessionId) {
+    _channels.remove(sessionId);
+    print('[Bridge] Removed channel for session: $sessionId');
   }
 
   void setExternalHandler(FlutterMethodCallHandler? handler) {
@@ -174,7 +184,10 @@ class BridgeController {
     _switchResourcesCallback = callback;
   }
 
-  void handleWebMessage(String messageString) {
+  void handleWebMessage(String messageString, {String? sessionId}) {
+    if (sessionId != null) {
+      print('[Bridge] handleWebMessage from session: $sessionId, message: $messageString');
+    }
     _handleWebMessage(messageString);
   }
 
@@ -187,8 +200,15 @@ class BridgeController {
     }
   }
 
-  Future<void> sendMessage(String type, dynamic payload, {String? bridgeId}) async {
-    if (_channel == null) return;
+  Future<void> sendMessage(String type, dynamic payload, {String? bridgeId, String? sessionId}) async {
+    MethodChannel? targetChannel = _channel;
+    if (sessionId != null && _channels.containsKey(sessionId)) {
+      targetChannel = _channels[sessionId];
+    }
+    if (targetChannel == null) {
+      print('[Bridge] sendMessage: No channel available for session: $sessionId');
+      return;
+    }
 
     final message = BridgeMessage(
       type: type,
@@ -197,7 +217,7 @@ class BridgeController {
     );
     final jsonString = jsonEncode(message.toJson());
 
-    await _channel?.invokeMethod('postMessage', {
+    await targetChannel.invokeMethod('postMessage', {
       'message': jsonString,
     });
   }

@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-**v1.0.11** (2026-05-24)
+**v1.0.12** (2026-05-25)
 
 ## 主要功能
 
@@ -40,6 +40,9 @@
 - ✅ **通知控制**（sendNotification/cancelNotification）- 灵活的通知管理
 - ✅ **混合内容访问支持** - HTTPS 页面可访问 localhost 的 HTTP 资源
 - ✅ **第三方登录功能** - Google Sign-In（已实现），QQ/GitHub（预留）
+- ✅ **多标签页管理** - 完整的标签页管理功能，支持多标签页浏览
+- ✅ **独立 JS Bridge** - 每个标签页都有独立的 JS Bridge，互不干扰
+- ✅ **双次退出确认** - 第一次按返回显示提示，3秒内再次按返回退出 App
 
 ## 技术栈
 
@@ -49,6 +52,15 @@
 - 比亚迪车机开放 API
 
 ## 项目进度
+
+### v1.0.12 (2026-05-25)
+- ✅ **多标签页 JS Bridge 隔离** - 每个标签页都有独立的 MethodChannel，通过 sessionId 区分
+- ✅ **导航功能修复** - 修复 canGoBack/canGoForward 返回 false 的问题
+- ✅ **下拉菜单关闭** - 点击返回/前进/分享按钮后自动关闭下拉菜单
+- ✅ **双次退出确认** - 第一次返回显示 Toast 提示，3秒内再次返回退出 App
+- ✅ **UUID 生成** - 使用标准 UUID v4 生成 tabId 和 sessionId
+- ✅ **多语言加载文本** - tab_page.dart 中添加 loading 翻译（zh-CN/zh-TW/en-US）
+- ✅ **标签页关闭清理** - 标签页关闭时调用 removeChannel 清理资源
 
 ### v1.0.11 (2026-05-24)
 - ✅ **多内核 WebView 架构** - 将 GeckoView 代码拆分为独立 `nyanya_webview` 模块

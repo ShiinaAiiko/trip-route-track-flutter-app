@@ -13,6 +13,10 @@ class TabManagerWidget extends StatefulWidget {
   final Widget? loadingWidget;
   final Brightness? brightness;
   final void Function(WebViewBridge bridge)? onBridgeReady;
+  final String? language;
+  final void Function(String tabId, String message)? onMessage;
+  final void Function(String tabId, dynamic channel)? onChannelCreated;
+  final void Function(String tabId)? onTabClosed;
 
   const TabManagerWidget({
     super.key,
@@ -23,6 +27,10 @@ class TabManagerWidget extends StatefulWidget {
     this.loadingWidget,
     this.brightness,
     this.onBridgeReady,
+    this.language,
+    this.onMessage,
+    this.onChannelCreated,
+    this.onTabClosed,
   });
 
   @override
@@ -33,6 +41,22 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
   late TabManager _tabManager;
   WebViewController? _currentController;
   bool _isLoading = true;
+
+  Future<bool> _handleBackPress() async {
+    print('[NyaNyaOpenURL] TabManagerWidget._handleBackPress called');
+    if (_currentController != null) {
+      final canGoBack = await _currentController!.canGoBack();
+      print(
+          '[NyaNyaOpenURL] TabManagerWidget._handleBackPress: canGoBack=$canGoBack');
+      if (canGoBack) {
+        await _currentController!.goBack();
+        return false; // 不关闭页面，WebView 内部后退
+      }
+    }
+    // WebView 无法后退，关闭当前标签页
+    Navigator.of(context).pop();
+    return false;
+  }
 
   @override
   void initState() {
@@ -62,31 +86,33 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
   }
 
   void _handleOpenUrl(String url, String? target) {
-    final tab = _tabManager.openTab(url);
-    _openTabPage(tab);
-  }
-
-  void _openTabPage(TabInfo tab) {
     Navigator.of(context).push(
-      TabPageRoute(
-        tabId: tab.id,
-        url: tab.url,
-        builder: (context) => _buildTabPageContent(tab),
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            TabManagerWidget(
+          initialUrl: url,
+          optionsBuilder: widget.optionsBuilder,
+          maxTabs: widget.maxTabs,
+          showTabBar: widget.showTabBar,
+          brightness: widget.brightness,
+          onBridgeReady: widget.onBridgeReady,
+        ),
+        // 推入动画：从右往左滑入
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOut;
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
+        // 返回动画：从左往右滑出
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
       ),
-    );
-  }
-
-  Widget _buildTabPageContent(TabInfo tab) {
-    return _TabPageContent(
-      tabId: tab.id,
-      url: tab.url,
-      options: _tabManager.buildOptions(tab.url),
-      onOpenUrl: _handleOpenUrl,
-      onClose: () {
-        _tabManager.closeTab(tab.id);
-        Navigator.of(context).pop();
-      },
-      onBridgeReady: widget.onBridgeReady,
     );
   }
 
@@ -118,22 +144,32 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
   @override
   Widget build(BuildContext context) {
     final brightness = widget.brightness ?? Brightness.light;
-    final textColor = brightness == Brightness.dark ? Colors.white : Colors.black;
-    final subTextColor = brightness == Brightness.dark ? Colors.white70 : Colors.black54;
-    final backgroundColor = brightness == Brightness.dark ? const Color(0xFF202124) : Colors.white;
+    final textColor =
+        brightness == Brightness.dark ? Colors.white : Colors.black;
+    final subTextColor =
+        brightness == Brightness.dark ? Colors.white70 : Colors.black54;
+    final backgroundColor =
+        brightness == Brightness.dark ? const Color(0xFF202124) : Colors.white;
 
     if (_tabManager.tabCount == 0) {
-      return widget.loadingWidget ?? const Center(child: CircularProgressIndicator());
+      return widget.loadingWidget ??
+          const Center(child: CircularProgressIndicator());
     }
 
-    return Column(
-      children: [
-        if (widget.showTabBar && _tabManager.hasMultipleTabs)
-          _buildTabBar(brightness, textColor, subTextColor, backgroundColor),
-        Expanded(
-          child: _buildCurrentTabContent(),
+    return WillPopScope(
+      onWillPop: _handleBackPress,
+      child: Scaffold(
+        body: Column(
+          children: [
+            if (widget.showTabBar && _tabManager.hasMultipleTabs)
+              _buildTabBar(
+                  brightness, textColor, subTextColor, backgroundColor),
+            Expanded(
+              child: _buildCurrentTabContent(),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -155,7 +191,8 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
               itemCount: _tabManager.tabCount,
               itemBuilder: (context, index) {
                 final tab = _tabManager.tabs[index];
-                return _buildTabItem(tab, textColor, subTextColor, backgroundColor);
+                return _buildTabItem(
+                    tab, textColor, subTextColor, backgroundColor);
               },
             ),
           ),
@@ -178,7 +215,8 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
         constraints: const BoxConstraints(maxWidth: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: isSelected ? backgroundColor : backgroundColor.withOpacity(0.5),
+          color:
+              isSelected ? backgroundColor : backgroundColor.withOpacity(0.5),
           border: Border(
             bottom: BorderSide(
               color: isSelected ? Colors.blue : Colors.transparent,
@@ -199,7 +237,8 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
                     style: TextStyle(
                       color: textColor,
                       fontSize: 13,
-                      fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                      fontWeight:
+                          isSelected ? FontWeight.w500 : FontWeight.normal,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -220,6 +259,8 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () {
+                final closingTabId = tab.id;
+                widget.onTabClosed?.call(closingTabId);
                 if (_tabManager.tabCount == 1) {
                   _tabManager.closeTab(tab.id);
                   Navigator.of(context).pop();
@@ -242,75 +283,31 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
   Widget _buildCurrentTabContent() {
     final currentTab = _tabManager.currentTab;
     if (currentTab == null) {
-      return widget.loadingWidget ?? const Center(child: CircularProgressIndicator());
+      return widget.loadingWidget ??
+          const Center(child: CircularProgressIndicator());
     }
 
-    return _TabPageContent(
+    return TabPage(
       key: ValueKey(currentTab.id),
       tabId: currentTab.id,
       url: currentTab.url,
       options: _tabManager.buildOptions(currentTab.url),
       onOpenUrl: _handleOpenUrl,
       onClose: () {
-        if (_tabManager.tabCount == 1) {
-          _tabManager.closeTab(currentTab.id);
-        } else {
-          _tabManager.closeTab(currentTab.id);
-        }
+        // onRequestExitApp 意味着 WebView 已经退无可退
+        // 应该返回上一个 Flutter 页面
+        Navigator.of(context).pop();
       },
-      onBridgeReady: widget.onBridgeReady,
+      onTitleChanged: (tabId, title) {
+        _tabManager.updateTabTitle(tabId, title);
+      },
+      onUrlChanged: (tabId, url) {
+        _tabManager.updateTabUrl(tabId, url);
+      },
+      language: widget.language,
+      onMessage: widget.onMessage,
+      onChannelCreated: widget.onChannelCreated,
+      onTabClosed: widget.onTabClosed,
     );
-  }
-}
-
-class _TabPageContent extends StatefulWidget {
-  final String tabId;
-  final String url;
-  final WebViewOptions options;
-  final OpenUrlHandler? onOpenUrl;
-  final VoidCallback? onClose;
-  final void Function(WebViewBridge bridge)? onBridgeReady;
-
-  const _TabPageContent({
-    super.key,
-    required this.tabId,
-    required this.url,
-    required this.options,
-    this.onOpenUrl,
-    this.onClose,
-    this.onBridgeReady,
-  });
-
-  @override
-  State<_TabPageContent> createState() => _TabPageContentState();
-}
-
-class _TabPageContentState extends State<_TabPageContent> {
-  late WebViewController _controller;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _initController();
-  }
-
-  void _initController() {
-    _controller = WebViewController(widget.options);
-    _controller.setOnOpenUrlHandler((url, target) {
-      widget.onOpenUrl?.call(url, target);
-    });
-    widget.onBridgeReady?.call(_controller.bridge);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _controller.build(context);
   }
 }

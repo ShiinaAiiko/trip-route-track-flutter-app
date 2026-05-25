@@ -24,6 +24,7 @@ class WebViewBridge {
 
   void handleMessage(String message) {
     try {
+      print('handleMessage Received message: $message');
       final Map<String, dynamic> data = jsonDecode(message);
       final String type = data['type'] as String;
       final dynamic payload = data['payload'];

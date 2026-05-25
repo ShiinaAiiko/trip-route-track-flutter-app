@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../webview_options.dart';
 import '../webview_controller.dart';
 
@@ -27,6 +29,33 @@ class TabInfo {
       isCurrent: isCurrent ?? this.isCurrent,
     );
   }
+}
+
+class UrlChangeBroadcaster {
+  static final UrlChangeBroadcaster _instance =
+      UrlChangeBroadcaster._internal();
+  factory UrlChangeBroadcaster() => _instance;
+  UrlChangeBroadcaster._internal();
+
+  final StreamController<UrlChangeEvent> _controller =
+      StreamController<UrlChangeEvent>.broadcast();
+
+  Stream<UrlChangeEvent> get stream => _controller.stream;
+
+  void broadcast(UrlChangeEvent event) {
+    _controller.add(event);
+  }
+
+  void dispose() {
+    _controller.close();
+  }
+}
+
+class UrlChangeEvent {
+  final String url;
+  final String title;
+
+  UrlChangeEvent({required this.url, this.title = ''});
 }
 
 class TabManager extends ChangeNotifier {
@@ -58,7 +87,7 @@ class TabManager extends ChangeNotifier {
   }
 
   String generateTabId() {
-    return 'tab_${DateTime.now().millisecondsSinceEpoch}_${_tabs.length}';
+    return const Uuid().v4();
   }
 
   TabInfo openTab(String url, {String? title}) {
