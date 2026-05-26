@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.12+408
+version: 1.0.12+410
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -32,7 +32,9 @@ dependencies:
   i18n:
     path: modules/i18n
   nyanya_webview:
-    path: modules/nyanya_webview
+    git:
+      url: https://github.com/ShiinaAiiko/nyanya-webview.git
+      branch: v1.0.0
   shadcn_ui: ^0.5.0
 
 dev_dependencies:
@@ -40,6 +42,10 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^3.0.2
+
+dependency_overrides:
+  nyanya_webview:
+    path: ../../../lib/nyanya-webview
 
 flutter:
   uses-material-design: true

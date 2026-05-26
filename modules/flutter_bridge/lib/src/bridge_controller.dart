@@ -394,6 +394,63 @@ class BridgeController {
     }
   }
 
+  Future<void> _handleGetCurrentLocation(
+      {String? bridgeId, String? sessionId}) async {
+    try {
+      final status = await Permission.locationWhenInUse.status;
+      if (status.isDenied) {
+        final result = await Permission.locationWhenInUse.request();
+        if (!result.isGranted) {
+          sendMessage(
+              'gpsPermissionDenied',
+              {
+                'title': _i18nService.t('gps_permission_denied'),
+                'message': '',
+                'type': 'warning',
+                'notification': true,
+                'module': 'location',
+              },
+              sessionId: sessionId);
+          return;
+        }
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const AndroidSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      sendMessage(
+          'getCurrentLocation',
+          {
+            'coords': {
+              'latitude': position.latitude,
+              'longitude': position.longitude,
+              'altitude': position.altitude,
+              'accuracy': position.accuracy,
+              'heading': position.heading,
+              'speed': position.speed,
+            },
+            'timestamp': position.timestamp.millisecondsSinceEpoch,
+          },
+          bridgeId: bridgeId,
+          sessionId: sessionId);
+    } catch (e) {
+      sendMessage(
+          'gpsError',
+          {
+            'title': _i18nService.t('gps_error'),
+            'message': 'getCurrentLocation failed: $e',
+            'type': 'error',
+            'notification': true,
+            'module': 'location',
+          },
+          bridgeId: bridgeId,
+          sessionId: sessionId);
+    }
+  }
+
   void _startLocationUpdatesInternal({String? sessionId}) {
     if (_positionSubscription != null) {
       _positionSubscription!.cancel();
@@ -1172,6 +1229,10 @@ class BridgeController {
         case 'enableLocation':
           _enableLocation = message.payload as bool;
           _handleEnableLocation(_enableLocation, sessionId: finalSessionId);
+          break;
+        case 'getCurrentLocation':
+          _handleGetCurrentLocation(
+              bridgeId: bridgeId, sessionId: finalSessionId);
           break;
         case 'keepScreenOn':
           final keepOn = message.payload as bool;

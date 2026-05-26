@@ -12,14 +12,14 @@
    - 例如：使用 `ShadToast` 替代 Material SnackBar，使用 `ShadButton` 替代 Material Button
 
 **Shadcn UI Toast 组件注意事项**：
-   - `ShadToast` 在移动端会强制设置 `minWidth: double.infinity`，导致弹框占满整个屏幕宽度
-   - 即使设置 `constraints` 或 `width` 参数也无法限制最大宽度
-   - `ShadToast` **内置了淡入淡出动画**，无需额外配置
-   - 如果需要控制宽度，只能使用自定义组件
+- `ShadToast` 在移动端会强制设置 `minWidth: double.infinity`，导致弹框占满整个屏幕宽度
+- 即使设置 `constraints` 或 `width` 参数也无法限制最大宽度
+- `ShadToast` **内置了淡入淡出动画**，无需额外配置
+- 如果需要控制宽度，只能使用自定义组件
 
 **当前 Toast 使用情况**：
-   - 退出提示：使用 `ShadToast`，显示"再按一次退出程序"，3秒后自动消失
-   - 分享提示：使用 `ShadToast`，显示"已复制URL"，2秒后自动消失
+- 退出提示：使用 `ShadToast`，显示"再按一次退出程序"，3秒后自动消失
+- 分享提示：使用 `ShadToast`，显示"已复制URL"，2秒后自动消失
 
 ---
 
@@ -337,7 +337,7 @@
 - `BYDAUTO_SPEED_GET` - 车速数据权限
 - `BYDAUTO_STATISTIC_GET` - 行驶数据权限
 - `BYDAUTO_TYRE_GET` - 轮胎数据权限
-- `BYDAUTO_ENGINE_GET` - 发动机数据权限
+- `BYDAUTO_ENGINE_GET` - 发动机通用权限
 - `BYDAUTO_ENERGY_GET` - 能量数据权限
 - `BYDAUTO_CHARGE_GET` - 充电数据权限
 
@@ -1476,6 +1476,33 @@ if (savedEngine != null) {
 | loading_system_webview | 加载 System WebView 内核中... | Loading System WebView engine... | 載入 System WebView 核心中... |
 | loading_system_webview_success | ✓ System WebView 内核加载成功 | ✓ System WebView engine loaded | ✓ System WebView 核心載入成功 |
 | loading_system_webview_failed | ✗ System WebView 内核加载失败 | ✗ System WebView engine load failed | ✗ System WebView 核心載入失敗 |
+
+---
+
+## nyanya_webview 独立仓库
+
+**变更概述**：nyanya_webview 双核库已从本地模块迁移到独立 GitHub 仓库
+
+**仓库地址**：`https://github.com/ShiinaAiiko/nyanya-webview.git`
+
+**pubspec.yaml 配置**：
+
+```yaml
+dependencies:
+  nyanya_webview:
+    git:
+      url: https://github.com/ShiinaAiiko/nyanya-webview.git
+      branch: v1.0.0
+
+dependency_overrides:
+  nyanya_webview:
+    path: ../../../lib/nyanya-webview
+```
+
+**说明**：
+- **正式发布**：依赖指向 GitHub 仓库，通过 `branch: v1.0.0` 获取稳定版本
+- **本地开发调试**：通过 `dependency_overrides` 使用本地路径覆盖，方便修改和调试 nyanya_webview 代码
+- 调试完成后，将更改推送到 GitHub 仓库，并移除 `dependency_overrides` 即可使用线上版本
 
 ---
 
