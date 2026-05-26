@@ -116,7 +116,7 @@ Future<void> _showNotification(String title, String body) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await FileLogService().init();
+  // await FileLogService().init();
 
   await _initNotificationService();
 
@@ -243,7 +243,7 @@ enum LoadingStep {
 
 class _WebViewContainerState extends State<WebViewContainer>
     with WidgetsBindingObserver {
-  MethodChannel? _channel;
+  IWebViewCommunication? _communication;
   StreamSubscription<GyroscopeEvent>? _gyroSubscription;
   StreamSubscription<AccelerometerEvent>? _accelSubscription;
 
@@ -390,26 +390,26 @@ class _WebViewContainerState extends State<WebViewContainer>
 
   /// 验证 WebView 是否准备就绪
   Future<bool> _checkWebViewReady() async {
-    // 等待 channel 可用
     int waitAttempts = 0;
     const maxWaitAttempts = 20;
-    while (_channel == null && waitAttempts < maxWaitAttempts) {
+    while (_communication == null && waitAttempts < maxWaitAttempts) {
       await Future.delayed(const Duration(milliseconds: 100));
       waitAttempts++;
     }
 
-    if (_channel == null) {
-      print('[NYANYA-WEBVIEW] Channel not available after waiting');
-      return false;
+    if (_communication != null) {
+      try {
+        final result = await _communication!.checkReady();
+        print('[NYANYA-WEBVIEW] checkWebViewReady (via comm) result: $result');
+        return result;
+      } catch (e) {
+        print('[NYANYA-WEBVIEW] checkWebViewReady (via comm) failed: $e');
+        return false;
+      }
     }
-    try {
-      final result = await _channel?.invokeMethod<bool>('checkWebViewReady');
-      print('[NYANYA-WEBVIEW] checkWebViewReady result: $result');
-      return result ?? false;
-    } catch (e) {
-      print('[NYANYA-WEBVIEW] checkWebViewReady failed: $e');
-      return false;
-    }
+
+    print('[NYANYA-WEBVIEW] No communication available');
+    return false;
   }
 
   /// 验证本地服务是否准备就绪
@@ -477,7 +477,10 @@ class _WebViewContainerState extends State<WebViewContainer>
     if (_retryCount > 0) {
       print('[NYANYA-RETRY] Attempt $_retryCount/$_maxRetries');
       try {
-        await _channel?.invokeMethod('shutdownGeckoRuntime');
+        // 所有引擎都调用 shutdown（SystemWebView 是空实现，GeckoView 是实际关闭）
+        if (_communication != null) {
+          await _communication!.shutdown();
+        }
         await LocalServer.instance.restart();
       } catch (e) {
         print('[NYANYA-RETRY] Failed to cleanup before retry: $e');
@@ -942,7 +945,8 @@ class _WebViewContainerState extends State<WebViewContainer>
         '[NYANYA-CHECK]   LocalServer status: ${LocalServer.instance.status}');
     print(
         '[NYANYA-CHECK]   LocalServer serverExists: ${LocalServer.instance.serverExists}');
-    print('[NYANYA-CHECK]   _channel: ${_channel == null ? "null" : "exists"}');
+    print(
+        '[NYANYA-CHECK]   _communication: ${_communication == null ? "null" : "exists"}');
 
     if (_lastBackgroundTime == null) {
       print('[NYANYA-CHECK] First launch, skip check');
@@ -972,21 +976,23 @@ class _WebViewContainerState extends State<WebViewContainer>
     }
   }
 
-  /// 检测 GeckoView 内核是否健康
+  /// 检测 WebView 内核是否健康
   Future<bool> checkKernelHealth() async {
-    _kernelHealthyStatic = _channel != null;
-    if (!_kernelHealthyStatic) return false;
-
-    try {
-      final result = await _channel!.invokeMethod<bool>('checkSessionsHealth');
-      _kernelHealthyStatic = result ?? false;
-      print(
-          '[NYANYA-KERNEL] checkSessionsHealth result: $_kernelHealthyStatic');
-    } catch (e) {
-      print('[NYANYA-KERNEL] checkSessionsHealth failed: $e');
-      _kernelHealthyStatic = false;
+    if (_communication != null) {
+      try {
+        final result = await _communication!.checkHealth();
+        _kernelHealthyStatic = result;
+        print(
+            '[NYANYA-KERNEL] checkHealth (via comm) result: $_kernelHealthyStatic');
+        return _kernelHealthyStatic;
+      } catch (e) {
+        print('[NYANYA-KERNEL] checkHealth (via comm) failed: $e');
+        return false;
+      }
     }
 
+    // 如果没有 communication，对于 system webview，我们认为是健康的
+    _kernelHealthyStatic = _finalEngine == WebViewEngine.system;
     return _kernelHealthyStatic;
   }
 
@@ -1099,21 +1105,20 @@ class _WebViewContainerState extends State<WebViewContainer>
 
   /// 重新加载 WebView
   Future<void> _reloadWebView() async {
-    if (_channel != null) {
+    if (_communication != null) {
       try {
-        final isReady =
-            await _channel!.invokeMethod<bool>('checkWebViewReady') ?? false;
+        final isReady = await _communication!.checkReady();
         if (!isReady) {
           print(
-              '[NYANYA-RECOVERY] WebView not ready after shutdown, skipping reload');
+              '[NYANYA-RECOVERY] WebView not ready, skipping reload (via comm)');
           return;
         }
 
         final url = _initialUrl ?? LocalServer.instance.url;
-        await _channel!.invokeMethod('loadUrl', {'url': url});
-        print('Reloading webview with URL: $url');
+        await _communication!.loadUrl(url);
+        print('Reloading webview with URL: $url (via comm)');
       } catch (e) {
-        print('Failed to reload webview: $e');
+        print('Failed to reload webview (via comm): $e');
         print('WebView may be destroyed, will be recreated on next frame');
       }
     }
@@ -1149,9 +1154,9 @@ class _WebViewContainerState extends State<WebViewContainer>
   }
 
   void _startSensorBridge() {
-    _sensorTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) {
-      if (_channel != null) {
-        final message = '''
+    _sensorTimer =
+        Timer.periodic(const Duration(milliseconds: 1000), (_) async {
+      final message = '''
           {
             "type": "SENSOR_DATA",
             "data": {
@@ -1161,7 +1166,13 @@ class _WebViewContainerState extends State<WebViewContainer>
             }
           }
         ''';
-        _channel?.invokeMethod('postMessage', {'message': message});
+
+      if (_communication != null) {
+        try {
+          await _communication!.postMessage(message);
+        } catch (e) {
+          print('[NYANYA-SENSOR] Failed to send via comm: $e');
+        }
       }
     });
   }
@@ -1176,32 +1187,6 @@ class _WebViewContainerState extends State<WebViewContainer>
     _tabStackChangedTimer?.cancel();
     BridgeController().off('closeLoading', _closeLoadingHandler);
     super.dispose();
-  }
-
-  // ================================
-  // 标签页相关方法 - 放在这里确保在build之前声明
-  // ================================
-
-  Future<dynamic> _handleMethodCall(MethodCall call) async {
-    print('_handleMethodCall: ${call.method}');
-    switch (call.method) {
-      case 'onPageStart':
-        break;
-      case 'onPageStop':
-        break;
-    }
-  }
-
-  void _showToast(String message) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    ShadToaster.of(context).show(
-      ShadToast(
-        title: Text(message),
-        alignment: Alignment.bottomCenter,
-        offset: const Offset(0, 50),
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   Widget _buildNyaNyaWebview() {
@@ -1235,28 +1220,40 @@ class _WebViewContainerState extends State<WebViewContainer>
 
     // engine 已经确定，可以安全地渲染 WebView 了！
     final engine = _finalEngine!;
+    // final engine = WebViewEngine.gecko;
     final initialUrl = _initialUrl ?? LocalServer.instance.url;
     final serverPort = LocalServer.instance.port;
 
     print('[NYANYA-ENGINE] Rendering WebView with engine: ${engine.name}');
 
+    final urlRewriteRules = [
+      UrlRewriteRule(
+        pattern:
+            RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
+        replacement: 'https://trip.aiiko.club',
+      ),
+    ];
+
     return PopScope(
       canPop: false,
       onPopInvoked: (didPop) async {
         if (didPop) return;
-        print('[NyaNyaOpenURL] MAIN: PopScope onPopInvoked');
-        final channel = _channel;
-        if (channel != null) {
-          final canGoBack =
-              await channel.invokeMethod<bool>('canGoBack') ?? false;
-          if (canGoBack) {
-            await channel.invokeMethod('goBack');
-          } else {
-            _handleMainClose();
+        print('[NyaNyaWebViewLog] MAIN: PopScope onPopInvoked');
+
+        if (_communication != null) {
+          try {
+            final canGoBack = await _communication!.canGoBack();
+            if (canGoBack) {
+              await _communication!.goBack();
+              return;
+            }
+          } catch (e) {
+            print('[NyaNyaWebViewLog] Failed to go back via comm: $e');
           }
-        } else {
-          _handleMainClose();
         }
+
+        // 如果以上都不行，就关闭 App
+        _handleMainClose();
       },
       child: NyaNyaWebview(
         key: _nyaNyaWebviewKey,
@@ -1265,21 +1262,30 @@ class _WebViewContainerState extends State<WebViewContainer>
           initialUrl: initialUrl,
           serverPort: serverPort,
           newTabBehavior: NewTabBehavior.delegate,
+          urlRewriteRules: urlRewriteRules,
         ),
         messageHandler: (String message) {
-          print('[NyaNyaOpenURL] MAIN: messageHandler called: $message');
-          BridgeController().handleWebMessage(message, sessionId: 'main');
+          // print('[NyaNyaWebViewLog] MAIN: messageHandler called: $message');
+          // BridgeController().handleWebMessage(message, sessionId: 'main');
         },
-        onChannelCreated: (channel) {
-          _channel = channel;
-          BridgeController().setChannel(channel, sessionId: 'main');
+        // onChannelCreated: (channel) {
+        //   _channel = channel;
+        //   //  BridgeController().setChannel(channel, sessionId: 'main');
+        //   if (channel is MethodChannel) {
+        //     BridgeController().setChannel(channel, sessionId: 'main');
+        //   }
+        // },
+        onCommunicationCreated: (communication) {
+          print('[NYANYA-MAIN] Communication created: $communication');
+          _communication = communication;
+          BridgeController().setCommunication(communication, sessionId: 'main');
         },
         onClose: () {
           _handleMainClose();
         },
         onOpenUrl: (url, target) {
           print(
-              '[NyaNyaOpenURL] MAIN: onOpenUrl called: url=$url, target=$target');
+              '[NyaNyaWebViewLog] MAIN: onOpenUrl called: url=$url, target=$target');
 
           Navigator.push(
             context,
@@ -1292,6 +1298,7 @@ class _WebViewContainerState extends State<WebViewContainer>
                   initialUrl: tabUrl,
                   serverPort: serverPort,
                   newTabBehavior: NewTabBehavior.delegate,
+                  urlRewriteRules: urlRewriteRules,
                 ),
                 maxTabs: 10,
                 showTabBar: true,
@@ -1301,14 +1308,24 @@ class _WebViewContainerState extends State<WebViewContainer>
                     ? null
                     : BridgeController().languageService.currentLanguage,
                 onMessage: (tabId, message) {
-                  BridgeController()
-                      .handleWebMessage(message, sessionId: tabId);
+                  // print(
+                  //     '[NyaNyaWebViewLog] MAIN-TabPage: messageHandler called: $message');
+                  // BridgeController()
+                  //     .handleWebMessage(message, sessionId: tabId);
                 },
-                onChannelCreated: (tabId, channel) {
-                  BridgeController().setChannel(channel, sessionId: tabId);
+                // onChannelCreated: (tabId, channel) {
+                //   //  BridgeController().setChannel(channel, sessionId: 'tabId');
+                //   if (channel is MethodChannel) {
+                //     BridgeController().setChannel(channel, sessionId: tabId);
+                //   }
+                // },
+                onCommunicationCreated: (tabId, communication) {
+                  print('[NYANYA-MAIN] Communication created for tab: $tabId');
+                  BridgeController()
+                      .setCommunication(communication, sessionId: tabId);
                 },
                 onTabClosed: (tabId) {
-                  BridgeController().removeChannel(tabId);
+                  BridgeController().removeCommunication(tabId);
                 },
               ),
               // 推入动画：从右往左滑入
@@ -1330,16 +1347,17 @@ class _WebViewContainerState extends State<WebViewContainer>
             ),
           );
         },
+        sessionId: 'main',
       ),
     );
   }
 
   void _handleMainClose() {
-    print('[NyaNyaOpenURL] MAIN: _handleMainClose called');
+    print('[NyaNyaWebViewLog] MAIN: _handleMainClose called');
     final now = DateTime.now();
     if (_lastBackPressTimeStatic != null &&
         now.difference(_lastBackPressTimeStatic!).inMilliseconds < 3000) {
-      print('[NyaNyaOpenURL] MAIN: Exiting app due to double back press');
+      print('[NyaNyaWebViewLog] MAIN: Exiting app due to double back press');
       SystemNavigator.pop();
     } else {
       _lastBackPressTimeStatic = now;

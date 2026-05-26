@@ -13,8 +13,8 @@
 - **标签状态管理**：使用 ChangeNotifier 管理标签状态
 - **最大标签数限制**：可配置最大标签页数量，超出自动关闭旧标签
 - **标题/URL 联动**：支持 WebView 标题和 URL 变化时自动更新导航栏
-- **分享功能**：支持复制当前页面 URL 到剪贴板
-- **国际化支持**：内置 zh-CN、zh-TW、en-US 三种语言支持
+- **分享功能**：支持复制当前页面 URL 到剪贴板，带有美化的 Toast 提示
+- **国际化支持**：内置 zh-CN、zh-TW、en-US 三种语言支持（i18n 内部实现，无需外部配置）
 - **UUID 生成**：使用标准 UUID v4 生成唯一 tabId
 - **onTabClosed 回调**：标签页关闭时触发回调，用于资源清理
 - **下拉菜单自动关闭**：点击按钮后自动关闭下拉菜单
@@ -151,7 +151,7 @@ class TabPage extends StatefulWidget {
 }
 ```
 
-**内置 i18n 翻译**：
+**内置 i18n 翻译**（内部 `_TabPageI18n` 类实现）：
 
 | Key | zh-CN | zh-TW | en-US |
 |-----|-------|-------|-------|
@@ -159,6 +159,16 @@ class TabPage extends StatefulWidget {
 | url_copied | 已复制URL | 已複製URL | URL copied |
 | copy_failed | 复制失败 | 複製失敗 | Copy failed |
 | loading | 加载中... | 載入中... | Loading... |
+
+**分享 Toast 样式**：
+
+分享功能使用 Flutter 内置 SnackBar 实现，无需外部依赖。样式特点：
+- 位置：距底部 120px，居中显示
+- 圆角：12px 圆角
+- 背景：半透明黑色 (#000000 + 87% opacity)
+- 阴影：elevation 8
+- 动画：默认淡入淡出效果
+- 时长：2 秒后自动消失
 
 **导航栏功能**：
 
@@ -170,7 +180,7 @@ class TabPage extends StatefulWidget {
 | 返回按钮 | 导航栏下拉菜单中，可前进/后退/刷新/分享 |
 | 前进按钮 | 根据历史记录状态启用/禁用 |
 | 刷新按钮 | 刷新当前页面 |
-| 分享按钮 | 复制 URL 到剪贴板并显示提示 |
+| 分享按钮 | 复制 URL 到剪贴板并显示美化 Toast（内部实现） |
 
 **使用示例**：
 
@@ -508,7 +518,7 @@ class TabManager extends ChangeNotifier {
 - 使用 `TabManager.addListener()` 监听状态变化
 - 打印 `tabManager.tabs` 查看所有标签状态
 - 打印 `tabManager.currentIndex` 查看当前标签索引
-- 使用 `adb logcat | grep NyaNyaOpenURL` 查看标签页相关日志
+- 使用 `adb logcat | grep NyaNyaWebViewLog` 查看标签页相关日志
 - 导航栏状态变化可通过 `_updateNavigationState()` 方法调试
 
 ## 当前开发状态

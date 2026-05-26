@@ -26,7 +26,7 @@ class SystemWebViewPlatform(
     private val serverPort: Int = creationParams?.get("serverPort") as? Int ?: 13218
 
     init {
-        Log.d("NyaNyaOpenURL", "SystemWebViewPlatform.init STARTED, id=$id")
+        Log.d("NyaNyaWebViewLog", "SystemWebViewPlatform.init STARTED, id=$id")
         Log.d(TAG, "Creating SystemWebViewPlatform with serverPort: $serverPort")
 
         container = FrameLayout(context)
@@ -34,12 +34,12 @@ class SystemWebViewPlatform(
         // 先创建 methodChannel
         try {
             val channelName = "club.aiiko.system_view_$id"
-            Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: Creating MethodChannel with name: $channelName")
+            Log.d("NyaNyaWebViewLog", "SystemWebViewPlatform: Creating MethodChannel with name: $channelName")
             methodChannel = MethodChannel(messenger, channelName)
             methodChannel.setMethodCallHandler(this)
-            Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: MethodCallHandler successfully set!")
+            Log.d("NyaNyaWebViewLog", "SystemWebViewPlatform: MethodCallHandler successfully set!")
         } catch (e: Exception) {
-            Log.e("NyaNyaOpenURL", "SystemWebViewPlatform: ERROR creating MethodChannel!", e)
+            Log.e("NyaNyaWebViewLog", "SystemWebViewPlatform: ERROR creating MethodChannel!", e)
             throw e
         }
 
@@ -92,7 +92,7 @@ class SystemWebViewPlatform(
                 }
 
                 override fun onCreateWindow(view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?): Boolean {
-                    Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: onCreateWindow called, isUserGesture=$isUserGesture")
+                    Log.d("NyaNyaWebViewLog", "SystemWebViewPlatform: onCreateWindow called, isUserGesture=$isUserGesture")
                     
                     // 创建临时 WebView 来捕获 URL
                     val newWebView = WebView(context)
@@ -102,24 +102,24 @@ class SystemWebViewPlatform(
                     newWebView.webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                             super.onPageStarted(view, url, favicon)
-                            Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: onCreateWindow intercepted URL: $url")
+                            Log.d("NyaNyaWebViewLog", "SystemWebViewPlatform: onCreateWindow intercepted URL: $url")
                             if (url != null && url != "about:blank") {
                                 try {
                                     val params = mapOf("url" to url, "target" to "_blank")
-                                    Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: Preparing to invoke onOpenUrl to Flutter, params=$params")
+                                    Log.d("NyaNyaWebViewLog", "SystemWebViewPlatform: Preparing to invoke onOpenUrl to Flutter, params=$params")
                                     
                                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                                         try {
-                                            Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: NOW invoking methodChannel.invokeMethod('onOpenUrl', $params)")
+                                            Log.d("NyaNyaWebViewLog", "SystemWebViewPlatform: NOW invoking methodChannel.invokeMethod('onOpenUrl', $params)")
                                             methodChannel.invokeMethod("onOpenUrl", params)
-                                            Log.d("NyaNyaOpenURL", "SystemWebViewPlatform: invokeMethod('onOpenUrl') completed successfully!")
+                                            Log.d("NyaNyaWebViewLog", "SystemWebViewPlatform: invokeMethod('onOpenUrl') completed successfully!")
                                         } catch (e: Exception) {
-                                            Log.e("NyaNyaOpenURL", "SystemWebViewPlatform: ERROR in invokeMethod('onOpenUrl')!", e)
+                                            Log.e("NyaNyaWebViewLog", "SystemWebViewPlatform: ERROR in invokeMethod('onOpenUrl')!", e)
                                             e.printStackTrace()
                                         }
                                     }
                                 } catch (e: Exception) {
-                                    Log.e("NyaNyaOpenURL", "SystemWebViewPlatform: Error preparing to invoke onOpenUrl", e)
+                                    Log.e("NyaNyaWebViewLog", "SystemWebViewPlatform: Error preparing to invoke onOpenUrl", e)
                                     e.printStackTrace()
                                 }
                             }

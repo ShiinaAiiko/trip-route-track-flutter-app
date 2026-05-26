@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../webview_options.dart';
 import '../webview_controller.dart';
 import '../webview_bridge.dart';
+import '../webview_communication_interface.dart';
 import 'tab_manager.dart';
 import 'tab_page.dart';
 
@@ -16,6 +17,8 @@ class TabManagerWidget extends StatefulWidget {
   final String? language;
   final void Function(String tabId, String message)? onMessage;
   final void Function(String tabId, dynamic channel)? onChannelCreated;
+  final void Function(String tabId, IWebViewCommunication)?
+      onCommunicationCreated;
   final void Function(String tabId)? onTabClosed;
 
   const TabManagerWidget({
@@ -30,6 +33,7 @@ class TabManagerWidget extends StatefulWidget {
     this.language,
     this.onMessage,
     this.onChannelCreated,
+    this.onCommunicationCreated,
     this.onTabClosed,
   });
 
@@ -39,21 +43,20 @@ class TabManagerWidget extends StatefulWidget {
 
 class _TabManagerWidgetState extends State<TabManagerWidget> {
   late TabManager _tabManager;
-  WebViewController? _currentController;
+  NyaNyaWebViewController? _currentController;
   bool _isLoading = true;
 
   Future<bool> _handleBackPress() async {
-    print('[NyaNyaOpenURL] TabManagerWidget._handleBackPress called');
+    print('[NyaNyaWebViewLog] TabManagerWidget._handleBackPress called');
     if (_currentController != null) {
       final canGoBack = await _currentController!.canGoBack();
       print(
-          '[NyaNyaOpenURL] TabManagerWidget._handleBackPress: canGoBack=$canGoBack');
+          '[NyaNyaWebViewLog] TabManagerWidget._handleBackPress: canGoBack=$canGoBack');
       if (canGoBack) {
         await _currentController!.goBack();
-        return false; // 不关闭页面，WebView 内部后退
+        return false;
       }
     }
-    // WebView 无法后退，关闭当前标签页
     Navigator.of(context).pop();
     return false;
   }
@@ -94,10 +97,15 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
           optionsBuilder: widget.optionsBuilder,
           maxTabs: widget.maxTabs,
           showTabBar: widget.showTabBar,
+          loadingWidget: widget.loadingWidget,
           brightness: widget.brightness,
           onBridgeReady: widget.onBridgeReady,
+          language: widget.language,
+          onMessage: widget.onMessage,
+          onChannelCreated: widget.onChannelCreated,
+          onCommunicationCreated: widget.onCommunicationCreated,
+          onTabClosed: widget.onTabClosed,
         ),
-        // 推入动画：从右往左滑入
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(1.0, 0.0);
           const end = Offset.zero;
@@ -109,7 +117,6 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
             child: child,
           );
         },
-        // 返回动画：从左往右滑出
         transitionDuration: const Duration(milliseconds: 300),
         reverseTransitionDuration: const Duration(milliseconds: 300),
       ),
@@ -117,21 +124,11 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
   }
 
   String _getDisplayUrl(String url) {
-    String processedUrl = url;
-    final isInternalWebsite = url.contains('localhost:13218') ||
-        url.contains('localhost:13219') ||
-        url.contains('localhost:13220') ||
-        url.contains('127.0.0.1:13218') ||
-        url.contains('127.0.0.1:13219') ||
-        url.contains('127.0.0.1:13220');
-
-    if (isInternalWebsite) {
-      processedUrl = url.replaceAll(
-        RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
-        'https://trip.aiiko.club',
-      );
+    final options = widget.optionsBuilder(url);
+    String processedUrl = options.applyUrlRewrite(url);
+    if (processedUrl.endsWith('/')) {
+      processedUrl = processedUrl.substring(0, processedUrl.length - 1);
     }
-
     if (processedUrl.startsWith('https://')) {
       return processedUrl.substring(8);
     }
@@ -294,8 +291,6 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
       options: _tabManager.buildOptions(currentTab.url),
       onOpenUrl: _handleOpenUrl,
       onClose: () {
-        // onRequestExitApp 意味着 WebView 已经退无可退
-        // 应该返回上一个 Flutter 页面
         Navigator.of(context).pop();
       },
       onTitleChanged: (tabId, title) {
@@ -307,6 +302,7 @@ class _TabManagerWidgetState extends State<TabManagerWidget> {
       language: widget.language,
       onMessage: widget.onMessage,
       onChannelCreated: widget.onChannelCreated,
+      onCommunicationCreated: widget.onCommunicationCreated,
       onTabClosed: widget.onTabClosed,
     );
   }

@@ -35,7 +35,8 @@ class TabManager(
     private val context: Context,
     private val methodChannel: MethodChannel,
     private val geckoView: GeckoView,
-    private var serverPort: Int = 8080
+    private var serverPort: Int = 8080,
+    private var sessionId: String? = null
 ) {
     companion object {
         private const val TAG = "TabManager"
@@ -63,7 +64,7 @@ class TabManager(
         } else null
 
     fun createNewTab(url: String): TabSession {
-        Log.d("NyaNyaOpenURL-Native", "Creating new tab for URL: $url")
+        Log.d("NyaNyaWebViewLog-Native", "Creating new tab for URL: $url")
         val sessionSettings = GeckoSessionSettings.Builder()
             .usePrivateMode(false)
             .build()
@@ -80,7 +81,7 @@ class TabManager(
     }
 
     fun addTab(session: GeckoSession, url: String): TabSession {
-        Log.d("NyaNyaOpenURL-Native", "Adding existing session as new tab: $url")
+        Log.d("NyaNyaWebViewLog-Native", "Adding existing session as new tab: $url")
         val tabSession = TabSession(session, url, "")
         tabStack.add(tabSession)
         currentTabIndex = tabStack.size - 1
@@ -91,12 +92,12 @@ class TabManager(
 
     fun closeCurrentTab(): Boolean {
         if (tabStack.size <= 1) {
-            Log.d("NyaNyaOpenURL-Native", "Cannot close last tab")
+            Log.d("NyaNyaWebViewLog-Native", "Cannot close last tab")
             return false
         }
         val tab = currentTab
         if (tab != null) {
-            Log.d("NyaNyaOpenURL-Native", "Closing tab: ${tab.title}")
+            Log.d("NyaNyaWebViewLog-Native", "Closing tab: ${tab.title}")
             tab.session.close()
             tabStack.removeAt(currentTabIndex)
             currentTabIndex = tabStack.size - 1
@@ -116,7 +117,7 @@ class TabManager(
             if (index == currentTabIndex && tabStack.size <= 1) {
                 return false
             }
-            Log.d("NyaNyaOpenURL-Native", "Closing tab by id: $tabId")
+            Log.d("NyaNyaWebViewLog-Native", "Closing tab by id: $tabId")
             tabStack[index].session.close()
             tabStack.removeAt(index)
             if (index <= currentTabIndex) {
@@ -134,7 +135,7 @@ class TabManager(
 
     fun goBackToPreviousTab(): Boolean {
         if (canGoBack) {
-            Log.d("NyaNyaOpenURL-Native", "Going back to previous tab")
+            Log.d("NyaNyaWebViewLog-Native", "Going back to previous tab")
             closeCurrentTab()
             return true
         }
@@ -154,16 +155,16 @@ class TabManager(
 
     private fun updateTab(session: GeckoSession, url: String? = null, title: String? = null) {
         val index = tabStack.indexOfFirst { it.session == session }
-        Log.d("NyaNyaOpenURL-Native", "updateTab called: session=$session, url=$url, title=$title, found index=$index, tabStack size=${tabStack.size}")
+        Log.d("NyaNyaWebViewLog-Native", "updateTab called: session=$session, url=$url, title=$title, found index=$index, tabStack size=${tabStack.size}")
         if (index >= 0) {
             val oldTab = tabStack[index]
             tabStack[index] = oldTab.copy(
                 url = url ?: oldTab.url,
                 title = title ?: oldTab.title
             )
-            Log.d("NyaNyaOpenURL-Native", "Tab updated: new url=${tabStack[index].url}, new title=${tabStack[index].title}")
+            Log.d("NyaNyaWebViewLog-Native", "Tab updated: new url=${tabStack[index].url}, new title=${tabStack[index].title}")
         } else {
-            Log.w("NyaNyaOpenURL-Native", "Tab not found in tabStack for session: $session")
+            Log.w("NyaNyaWebViewLog-Native", "Tab not found in tabStack for session: $session")
         }
     }
 
@@ -181,7 +182,7 @@ class TabManager(
                 )
             }
         } catch (e: Exception) {
-            Log.e("NyaNyaOpenURL-Native", "Error notifying tab changed: ${e.message}")
+            Log.e("NyaNyaWebViewLog-Native", "Error notifying tab changed: ${e.message}")
         }
     }
 
@@ -197,7 +198,7 @@ class TabManager(
                     "canGoForward" to tab.canGoForward
                 )
             }
-            Log.d("NyaNyaOpenURL-Native", "notifyTabStackChanged: canGoBack=$currentTabCanGoBack, canGoForward=$currentTabCanGoForward, tabs=${tabsInfo.size}")
+            Log.d("NyaNyaWebViewLog-Native", "notifyTabStackChanged: canGoBack=$currentTabCanGoBack, canGoForward=$currentTabCanGoForward, tabs=${tabsInfo.size}")
             methodChannel.invokeMethod(
                 "onTabStackChanged",
                 mapOf(
@@ -207,7 +208,7 @@ class TabManager(
                 )
             )
         } catch (e: Exception) {
-            Log.e("NyaNyaOpenURL-Native", "Error notifying tab stack changed: ${e.message}")
+            Log.e("NyaNyaWebViewLog-Native", "Error notifying tab stack changed: ${e.message}")
         }
     }
 
@@ -216,7 +217,7 @@ class TabManager(
             methodChannel.invokeMethod("onRequestExitApp", null)
             return true
         } catch (e: Exception) {
-            Log.e("NyaNyaOpenURL-Native", "Error invoking onRequestExitApp: ${e.message}")
+            Log.e("NyaNyaWebViewLog-Native", "Error invoking onRequestExitApp: ${e.message}")
             return false
         }
     }
@@ -226,28 +227,28 @@ class TabManager(
         
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onPageStart(s: GeckoSession, url: String) {
-                Log.d("NyaNyaOpenURL-Native", "onPageStart for tab: $url")
+                Log.d("NyaNyaWebViewLog-Native", "onPageStart for tab: $url")
                 try {
                     methodChannel.invokeMethod("onPageStart", mapOf("url" to url))
                 } catch (e: Exception) {
-                    Log.e("NyaNyaOpenURL-Native", "Error invoking onPageStart: ${e.message}")
+                    Log.e("NyaNyaWebViewLog-Native", "Error invoking onPageStart: ${e.message}")
                 }
             }
 
             override fun onPageStop(s: GeckoSession, success: Boolean) {
-                Log.d("NyaNyaOpenURL-Native", "onPageStop for tab: $success")
+                Log.d("NyaNyaWebViewLog-Native", "onPageStop for tab: $success")
                 try {
                     methodChannel.invokeMethod("onPageStop", mapOf("success" to success))
                     if (success) {
                         val index = tabStack.indexOfFirst { it.session == s }
                         if (index >= 0) {
                             val currentUrl = tabStack[index].url
-                            Log.d("NyaNyaOpenURL-Native", "onPageStop: currentUrl=$currentUrl")
+                            Log.d("NyaNyaWebViewLog-Native", "onPageStop: currentUrl=$currentUrl")
                             methodChannel.invokeMethod("onLocationChange", mapOf("url" to currentUrl))
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e("NyaNyaOpenURL-Native", "Error invoking onPageStop: ${e.message}")
+                    Log.e("NyaNyaWebViewLog-Native", "Error invoking onPageStop: ${e.message}")
                 }
                 if (success) {
                     val handler = Handler(Looper.getMainLooper())
@@ -262,7 +263,7 @@ class TabManager(
 
         session.contentDelegate = object : GeckoSession.ContentDelegate {
             override fun onTitleChange(s: GeckoSession, title: String?) {
-                Log.d("NyaNyaOpenURL-Native", "Title changed for tab: $title")
+                Log.d("NyaNyaWebViewLog-Native", "Title changed for tab: $title")
                 updateTab(s, title = title ?: "")
                 try {
                     methodChannel.invokeMethod(
@@ -270,7 +271,7 @@ class TabManager(
                         mapOf("title" to (title ?: ""))
                     )
                 } catch (e: Exception) {
-                    Log.e("NyaNyaOpenURL-Native", "Error invoking onTitleChange: ${e.message}")
+                    Log.e("NyaNyaWebViewLog-Native", "Error invoking onTitleChange: ${e.message}")
                 }
             }
         }
@@ -322,11 +323,11 @@ class TabManager(
                 val msg = prompt.message ?: ""
                 if (msg.startsWith("__flutter_bridge__:")) {
                     val jsonMessage = msg.removePrefix("__flutter_bridge__:")
-                    Log.d("NyaNyaOpenURL-Native", "JS Bridge message received: $jsonMessage")
+                    Log.d("NyaNyaWebViewLog-Native", "JS Bridge message received: $jsonMessage")
                     try {
                         methodChannel.invokeMethod("onWebMessage", jsonMessage)
                     } catch (e: Exception) {
-                        Log.e("NyaNyaOpenURL-Native", "Error invoking onWebMessage: ${e.message}")
+                        Log.e("NyaNyaWebViewLog-Native", "Error invoking onWebMessage: ${e.message}")
                     }
                     return GeckoResult.fromValue(prompt.confirm(""))
                 }
@@ -334,7 +335,7 @@ class TabManager(
             }
         }
 
-        Log.d("NyaNyaOpenURL-Native", "setupSession called for session: $session")
+        Log.d("NyaNyaWebViewLog-Native", "setupSession called for session: $session")
         session.navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onLocationChange(
                 session: GeckoSession, 
@@ -342,7 +343,7 @@ class TabManager(
                 permissions: List<GeckoSession.PermissionDelegate.ContentPermission>, 
                 isDraft: Boolean
             ) {
-                Log.d("NyaNyaOpenURL-Native", "URL 改变 (新版 API): $url")
+                Log.d("NyaNyaWebViewLog-Native", "URL 改变 (新版 API): $url")
                 
                 // 你的业务逻辑保持不变
                 try {
@@ -351,62 +352,62 @@ class TabManager(
                         mapOf("url" to (url ?: ""))
                     )
                 } catch (e: Exception) {
-                    Log.e("NyaNyaOpenURL-Native", "Error: ${e.message}")
+                    Log.e("NyaNyaWebViewLog-Native", "Error: ${e.message}")
                 }
             }
     
             override fun onNewSession(s: GeckoSession, uri: String): GeckoResult<GeckoSession>? {
-                Log.d("NyaNyaOpenURL-Native", "TabManager: onNewSession called, uri=$uri")
-                Log.d("NyaNyaOpenURL-Native", "TabManager: methodChannel hash = ${System.identityHashCode(methodChannel)}")
+                Log.d("NyaNyaWebViewLog-Native", "TabManager: onNewSession called, uri=$uri")
+                Log.d("NyaNyaWebViewLog-Native", "TabManager: methodChannel hash = ${System.identityHashCode(methodChannel)}")
                 
                 try {
                     val params = mapOf("url" to uri, "target" to "_blank")
-                    Log.d("NyaNyaOpenURL-Native", "TabManager: Preparing to invoke onOpenUrl to Flutter, params=$params")
+                    Log.d("NyaNyaWebViewLog-Native", "TabManager: Preparing to invoke onOpenUrl to Flutter, params=$params")
                     
                     // 确保在主线程上调用
                     Handler(Looper.getMainLooper()).post {
                         try {
-                            Log.d("NyaNyaOpenURL-Native", "TabManager: NOW invoking methodChannel.invokeMethod('onOpenUrl', $params)")
-                            Log.d("NyaNyaOpenURL-Native", "TabManager: methodChannel reference = $methodChannel")
-                            Log.d("NyaNyaOpenURL-Native", "TabManager: methodChannel identity hash = ${System.identityHashCode(methodChannel)}")
+                            Log.d("NyaNyaWebViewLog-Native", "TabManager: NOW invoking methodChannel.invokeMethod('onOpenUrl', $params)")
+                            Log.d("NyaNyaWebViewLog-Native", "TabManager: methodChannel reference = $methodChannel")
+                            Log.d("NyaNyaWebViewLog-Native", "TabManager: methodChannel identity hash = ${System.identityHashCode(methodChannel)}")
                             methodChannel.invokeMethod("onOpenUrl", params, object : MethodChannel.Result {
                                 override fun success(result: Any?) {
-                                    Log.d("NyaNyaOpenURL-Native", "TabManager: onOpenUrl success! result = $result")
+                                    Log.d("NyaNyaWebViewLog-Native", "TabManager: onOpenUrl success! result = $result")
                                 }
                                 override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                                    Log.e("NyaNyaOpenURL-Native", "TabManager: onOpenUrl ERROR! code=$errorCode, msg=$errorMessage, details=$errorDetails")
+                                    Log.e("NyaNyaWebViewLog-Native", "TabManager: onOpenUrl ERROR! code=$errorCode, msg=$errorMessage, details=$errorDetails")
                                 }
                                 override fun notImplemented() {
-                                    Log.e("NyaNyaOpenURL-Native", "TabManager: onOpenUrl NOT IMPLEMENTED!")
+                                    Log.e("NyaNyaWebViewLog-Native", "TabManager: onOpenUrl NOT IMPLEMENTED!")
                                 }
                             })
-                            Log.d("NyaNyaOpenURL-Native", "TabManager: invokeMethod('onOpenUrl') returned normally")
+                            Log.d("NyaNyaWebViewLog-Native", "TabManager: invokeMethod('onOpenUrl') returned normally")
                         } catch (e: Exception) {
-                            Log.e("NyaNyaOpenURL-Native", "TabManager: ERROR in invokeMethod('onOpenUrl')!", e)
+                            Log.e("NyaNyaWebViewLog-Native", "TabManager: ERROR in invokeMethod('onOpenUrl')!", e)
                             e.printStackTrace()
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e("NyaNyaOpenURL-Native", "TabManager: Error preparing to invoke onOpenUrl", e)
+                    Log.e("NyaNyaWebViewLog-Native", "TabManager: Error preparing to invoke onOpenUrl", e)
                     e.printStackTrace()
                 }
                 return null
             }
 
             override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
-                Log.d("NyaNyaOpenURL-Native", "onCanGoBack changed: $canGoBack for session")
+                Log.d("NyaNyaWebViewLog-Native", "onCanGoBack changed: $canGoBack for session")
                 currentTabCanGoBack = canGoBack
                 val index = tabStack.indexOfFirst { it.session == session }
                 if (index >= 0) {
                     val oldTab = tabStack[index]
                     tabStack[index] = oldTab.copy(canGoBack = canGoBack)
                 }
-                Log.d("NyaNyaOpenURL-Native", "currentTabCanGoBack updated to: $currentTabCanGoBack")
+                Log.d("NyaNyaWebViewLog-Native", "currentTabCanGoBack updated to: $currentTabCanGoBack")
                 notifyTabStackChanged()
             }
 
             override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
-                Log.d("NyaNyaOpenURL-Native", "onCanGoForward changed: $canGoForward for session")
+                Log.d("NyaNyaWebViewLog-Native", "onCanGoForward changed: $canGoForward for session")
                 currentTabCanGoForward = canGoForward
                 val index = tabStack.indexOfFirst { it.session == session }
                 if (index >= 0) {
@@ -416,7 +417,7 @@ class TabManager(
                 notifyTabStackChanged()
             }
         }
-        Log.d("NyaNyaOpenURL-Native", "NavigationDelegate set for session: $session")
+        Log.d("NyaNyaWebViewLog-Native", "NavigationDelegate set for session: $session")
     }
 
     private fun hasLocationPermission(): Boolean {
@@ -478,11 +479,13 @@ class TabManager(
     }
 
     private fun injectJSBridge(session: GeckoSession) {
-        Log.d("NyaNyaOpenURL-Native", "Injecting JS Bridge with serverPort: $serverPort")
+        Log.d("NyaNyaWebViewLog-Native", "Injecting JS Bridge with serverPort: $serverPort, sessionId: $sessionId")
+        val sessionIdPart = if (sessionId != null) "window.nyanyaSessionId = '$sessionId';" else ""
         val bridgeScript = """
             window.isFlutterApp = true;
             window.flutterServerPort = $serverPort;
             window.flutterServerHost = 'http://127.0.0.1:$serverPort';
+            $sessionIdPart
             if (!window.nyanyaWebView) {
                 window.nyanyaWebView = {
                     postMessage: function(message) {
@@ -534,14 +537,14 @@ class GeckoViewPlatform(
                         .configFilePath(null)
                         .build()
                     geckoRuntime = GeckoRuntime.create(context.applicationContext, settings)
-                    Log.d("NyaNyaOpenURL-Native", "GeckoRuntime created successfully")
+                    Log.d("NyaNyaWebViewLog-Native", "GeckoRuntime created successfully")
                 } catch (e: Exception) {
                     if (e.message?.contains("Only one GeckoRuntime instance is allowed") == true) {
-                        Log.w("NyaNyaOpenURL-Native", "GeckoRuntime already exists, reusing existing instance")
+                        Log.w("NyaNyaWebViewLog-Native", "GeckoRuntime already exists, reusing existing instance")
                         isRuntimeShutdown = false
                         return geckoRuntime!!
                     }
-                    Log.e("NyaNyaOpenURL-Native", "Failed to create GeckoRuntime: ${e.message}")
+                    Log.e("NyaNyaWebViewLog-Native", "Failed to create GeckoRuntime: ${e.message}")
                     throw e
                 }
             }
@@ -553,26 +556,26 @@ class GeckoViewPlatform(
                 try {
                     geckoRuntime?.shutdown()
                 } catch (e: Exception) {
-                    Log.w("NyaNyaOpenURL-Native", "Error shutting down GeckoRuntime: ${e.message}")
+                    Log.w("NyaNyaWebViewLog-Native", "Error shutting down GeckoRuntime: ${e.message}")
                 }
                 geckoRuntime = null
                 isRuntimeShutdown = true
-                Log.d("NyaNyaOpenURL-Native", "GeckoRuntime shutdown and cleaned up")
+                Log.d("NyaNyaWebViewLog-Native", "GeckoRuntime shutdown and cleaned up")
             }
         }
     }
 
     init {
-        Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform.init STARTED, id=$id")
+        Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform.init STARTED, id=$id")
         
         try {
             val channelName = "club.aiiko.gecko_view_$id"
-            Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: Creating MethodChannel with name: $channelName, id=$id")
+            Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: Creating MethodChannel with name: $channelName, id=$id")
             methodChannel = MethodChannel(messenger, channelName)
             methodChannel.setMethodCallHandler(this)
-            Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: MethodCallHandler successfully set!, channel hash=${System.identityHashCode(methodChannel)}")
+            Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: MethodCallHandler successfully set!, channel hash=${System.identityHashCode(methodChannel)}")
         } catch (e: Exception) {
-            Log.e("NyaNyaOpenURL-Native", "GeckoViewPlatform: ERROR creating MethodChannel!", e)
+            Log.e("NyaNyaWebViewLog-Native", "GeckoViewPlatform: ERROR creating MethodChannel!", e)
             throw e
         }
 
@@ -584,7 +587,10 @@ class GeckoViewPlatform(
         }
 
         serverPort = creationParams?.get("serverPort") as? Int ?: 8080
-        Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: serverPort=$serverPort")
+        Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: serverPort=$serverPort")
+        
+        val sessionId = creationParams?.get("sessionId") as? String
+        Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: sessionId=$sessionId")
 
         try {
             geckoView = GeckoViewWrapper(context).apply {
@@ -601,22 +607,22 @@ class GeckoViewPlatform(
                     false
                 }
             }
-            Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: GeckoViewWrapper created successfully")
+            Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: GeckoViewWrapper created successfully")
         } catch (e: Exception) {
-            Log.e("NyaNyaOpenURL-Native", "GeckoViewPlatform: ERROR creating GeckoViewWrapper!", e)
+            Log.e("NyaNyaWebViewLog-Native", "GeckoViewPlatform: ERROR creating GeckoViewWrapper!", e)
             throw e
         }
 
         try {
-            tabManager = TabManager(context, methodChannel, geckoView, serverPort)
-            Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: TabManager created successfully")
+            tabManager = TabManager(context, methodChannel, geckoView, serverPort, sessionId)
+            Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: TabManager created successfully")
         } catch (e: Exception) {
-            Log.e("NyaNyaOpenURL-Native", "GeckoViewPlatform: ERROR creating TabManager!", e)
+            Log.e("NyaNyaWebViewLog-Native", "GeckoViewPlatform: ERROR creating TabManager!", e)
             throw e
         }
 
         val initialUrl = creationParams?.get("url") as? String ?: "http://localhost:8080/"
-        Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: Initial URL to load: $initialUrl")
+        Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: Initial URL to load: $initialUrl")
         
         try {
             val sessionSettings = GeckoSessionSettings.Builder()
@@ -631,28 +637,28 @@ class GeckoViewPlatform(
             geckoView.setSession(session)
             session.loadUri(initialUrl)
             tabManager.notifyTabStackChanged()
-            Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: Initial session created and URL loaded!")
+            Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: Initial session created and URL loaded!")
         } catch (e: Exception) {
-            Log.e("NyaNyaOpenURL-Native", "GeckoViewPlatform: ERROR creating initial session!", e)
+            Log.e("NyaNyaWebViewLog-Native", "GeckoViewPlatform: ERROR creating initial session!", e)
             throw e
         }
 
         geckoView.setOnKeyListener { v, keyCode, event ->
             if (keyCode == android.view.KeyEvent.KEYCODE_BACK && event.action == android.view.KeyEvent.ACTION_UP) {
-                Log.d("NyaNyaOpenURL-Native", "Back button pressed")
+                Log.d("NyaNyaWebViewLog-Native", "Back button pressed")
                 val currentTab = tabManager.currentTab
                 val currentSession = tabManager.currentSession
                 val canGoBack = tabManager.currentTabCanGoBack
 
                 if (currentTab != null && currentSession != null) {
                     if (canGoBack) {
-                        Log.d("NyaNyaOpenURL-Native", "Going back in page history")
+                        Log.d("NyaNyaWebViewLog-Native", "Going back in page history")
                         currentSession.goBack()
                     } else if (tabManager.tabCount > 1) {
-                        Log.d("NyaNyaOpenURL-Native", "No history, closing current tab")
+                        Log.d("NyaNyaWebViewLog-Native", "No history, closing current tab")
                         tabManager.closeCurrentTab()
                     } else {
-                        Log.d("NyaNyaOpenURL-Native", "No history and only one tab, requesting exit")
+                        Log.d("NyaNyaWebViewLog-Native", "No history and only one tab, requesting exit")
                         tabManager.requestExitApp()
                     }
                 }
@@ -662,7 +668,7 @@ class GeckoViewPlatform(
             }
         }
         
-        Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform.init COMPLETED successfully!")
+        Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform.init COMPLETED successfully!")
     }
 
     override fun getView(): View {
@@ -680,28 +686,28 @@ class GeckoViewPlatform(
     private var lastGeolocationCallback: String? = null
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-        Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: onMethodCall called, method=${call.method}")
+        Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: onMethodCall called, method=${call.method}")
         when (call.method) {
             "testCommunication" -> {
-                Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: testCommunication received!")
+                Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: testCommunication received!")
                 // 回发消息给 Flutter
                 try {
-                    Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: Sending testNativeToFlutter to Flutter now...")
-                    Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: methodChannel hash = ${System.identityHashCode(methodChannel)}")
+                    Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: Sending testNativeToFlutter to Flutter now...")
+                    Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: methodChannel hash = ${System.identityHashCode(methodChannel)}")
                     methodChannel.invokeMethod("testNativeToFlutter", mapOf("message" to "Hello from native Gecko!"), object : MethodChannel.Result {
                         override fun success(result: Any?) {
-                            Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: testNativeToFlutter success! result = $result")
+                            Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: testNativeToFlutter success! result = $result")
                         }
                         override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
-                            Log.e("NyaNyaOpenURL-Native", "GeckoViewPlatform: testNativeToFlutter ERROR! code=$errorCode, msg=$errorMessage, details=$errorDetails")
+                            Log.e("NyaNyaWebViewLog-Native", "GeckoViewPlatform: testNativeToFlutter ERROR! code=$errorCode, msg=$errorMessage, details=$errorDetails")
                         }
                         override fun notImplemented() {
-                            Log.e("NyaNyaOpenURL-Native", "GeckoViewPlatform: testNativeToFlutter NOT IMPLEMENTED!")
+                            Log.e("NyaNyaWebViewLog-Native", "GeckoViewPlatform: testNativeToFlutter NOT IMPLEMENTED!")
                         }
                     })
-                    Log.d("NyaNyaOpenURL-Native", "GeckoViewPlatform: invokeMethod testNativeToFlutter returned normally")
+                    Log.d("NyaNyaWebViewLog-Native", "GeckoViewPlatform: invokeMethod testNativeToFlutter returned normally")
                 } catch (e: Exception) {
-                    Log.e("NyaNyaOpenURL-Native", "GeckoViewPlatform: Error sending testNativeToFlutter", e)
+                    Log.e("NyaNyaWebViewLog-Native", "GeckoViewPlatform: Error sending testNativeToFlutter", e)
                     e.printStackTrace()
                 }
                 result.success(mapOf("status" to "ok", "message" to "Hello from native Gecko!"))
@@ -827,27 +833,27 @@ class GeckoViewPlatform(
                 result.success(tabManager.getTabsInfo())
             }
             "goBack" -> {
-                Log.d("NyaNyaOpenURL-Native", "goBack called, currentSession: ${tabManager.currentSession}")
+                Log.d("NyaNyaWebViewLog-Native", "goBack called, currentSession: ${tabManager.currentSession}")
                 val currentSession = tabManager.currentSession
                 currentSession?.goBack()
                 result.success(null)
             }
             "goForward" -> {
-                Log.d("NyaNyaOpenURL-Native", "goForward called, currentSession: ${tabManager.currentSession}")
+                Log.d("NyaNyaWebViewLog-Native", "goForward called, currentSession: ${tabManager.currentSession}")
                 val currentSession = tabManager.currentSession
                 currentSession?.goForward()
                 result.success(null)
             }
             "canGoBack" -> {
-                Log.d("NyaNyaOpenURL-Native", ">>> canGoBack called, currentTabCanGoBack: ${tabManager.currentTabCanGoBack}")
+                Log.d("NyaNyaWebViewLog-Native", ">>> canGoBack called, currentTabCanGoBack: ${tabManager.currentTabCanGoBack}")
                 result.success(tabManager.currentTabCanGoBack)
             }
             "canGoForward" -> {
-                Log.d("NyaNyaOpenURL-Native", ">>> canGoForward called, currentTabCanGoForward: ${tabManager.currentTabCanGoForward}")
+                Log.d("NyaNyaWebViewLog-Native", ">>> canGoForward called, currentTabCanGoForward: ${tabManager.currentTabCanGoForward}")
                 result.success(tabManager.currentTabCanGoForward)
             }
             "reload" -> {
-                Log.d("NyaNyaOpenURL-Native", "reload called, currentSession: ${tabManager.currentSession}")
+                Log.d("NyaNyaWebViewLog-Native", "reload called, currentSession: ${tabManager.currentSession}")
                 val currentSession = tabManager.currentSession
                 currentSession?.reload()
                 result.success(null)
@@ -855,60 +861,60 @@ class GeckoViewPlatform(
             "openInBrowser" -> {
                 val url = call.argument<String>("url")
                 if (url != null) {
-                    Log.d("NyaNyaOpenURL-Native", "openInBrowser called with url: $url, context: ${context}")
+                    Log.d("NyaNyaWebViewLog-Native", "openInBrowser called with url: $url, context: ${context}")
                     try {
                         val uri = android.net.Uri.parse(url)
-                        Log.d("NyaNyaOpenURL-Native", "Parsed URI: $uri")
+                        Log.d("NyaNyaWebViewLog-Native", "Parsed URI: $uri")
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
                         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                        Log.d("NyaNyaOpenURL-Native", "Starting activity with intent: $intent")
+                        Log.d("NyaNyaWebViewLog-Native", "Starting activity with intent: $intent")
                         context.startActivity(intent)
                         result.success(null)
                     } catch (e: Exception) {
-                        Log.e("NyaNyaOpenURL-Native", "Error opening in browser: ${e.message}", e)
+                        Log.e("NyaNyaWebViewLog-Native", "Error opening in browser: ${e.message}", e)
                         result.error("OPEN_BROWSER_ERROR", e.message, null)
                     }
                 } else {
-                    Log.e("NyaNyaOpenURL-Native", "openInBrowser called with null url")
+                    Log.e("NyaNyaWebViewLog-Native", "openInBrowser called with null url")
                     result.error("INVALID_URL", "URL is null", null)
                 }
             }
             "checkSessionsHealth" -> {
-                Log.d("NyaNyaOpenURL-Native", "checkSessionsHealth called, tabCount: ${tabManager.tabCount}")
+                Log.d("NyaNyaWebViewLog-Native", "checkSessionsHealth called, tabCount: ${tabManager.tabCount}")
                 val sessionsValid = tabManager.tabStack.all { tab ->
                     try {
                         tab.session.isOpen
                     } catch (e: Exception) {
-                        Log.e("NyaNyaOpenURL-Native", "Session check failed: ${e.message}")
+                        Log.e("NyaNyaWebViewLog-Native", "Session check failed: ${e.message}")
                         false
                     }
                 }
-                Log.d("NyaNyaOpenURL-Native", "checkSessionsHealth result: $sessionsValid, tabCount: ${tabManager.tabCount}")
+                Log.d("NyaNyaWebViewLog-Native", "checkSessionsHealth result: $sessionsValid, tabCount: ${tabManager.tabCount}")
                 result.success(sessionsValid && tabManager.tabCount > 0)
             }
             "shutdownGeckoRuntime" -> {
-                Log.d("NyaNyaOpenURL-Native", "shutdownGeckoRuntime called, preparing to shutdown GeckoRuntime")
+                Log.d("NyaNyaWebViewLog-Native", "shutdownGeckoRuntime called, preparing to shutdown GeckoRuntime")
                 shutdownRuntime()
                 result.success(null)
             }
             "checkWebViewReady" -> {
-                Log.d("NyaNyaOpenURL-Native", "checkWebViewReady called")
+                Log.d("NyaNyaWebViewLog-Native", "checkWebViewReady called")
                 try {
                     val runtimeExists = geckoRuntime != null && !isRuntimeShutdown
                     val sessionExists = tabManager.currentSession != null
                     val isSessionOpen = try {
                         tabManager.currentSession?.isOpen ?: false
                     } catch (e: Exception) {
-                        Log.e("NyaNyaOpenURL-Native", "Error checking if session is open", e)
+                        Log.e("NyaNyaWebViewLog-Native", "Error checking if session is open", e)
                         false
                     }
                     val viewAttached = geckoView.isAttachedToWindow
 
                     val isReady = runtimeExists && sessionExists && isSessionOpen
-                    Log.d("NyaNyaOpenURL-Native", "GeckoView check: runtime=$runtimeExists, session=$sessionExists, open=$isSessionOpen, attached=$viewAttached, ready=$isReady")
+                    Log.d("NyaNyaWebViewLog-Native", "GeckoView check: runtime=$runtimeExists, session=$sessionExists, open=$isSessionOpen, attached=$viewAttached, ready=$isReady")
                     result.success(isReady)
                 } catch (e: Exception) {
-                    Log.e("NyaNyaOpenURL-Native", "Error checking GeckoView readiness", e)
+                    Log.e("NyaNyaWebViewLog-Native", "Error checking GeckoView readiness", e)
                     result.success(false)
                 }
             }
@@ -922,7 +928,7 @@ class GeckoViewWrapper(context: Context) : GeckoView(context) {
     private val TAG = "GeckoViewWrapper"
 
     init {
-        Log.d("NyaNyaOpenURL-Native", "GeckoViewWrapper initialized")
+        Log.d("NyaNyaWebViewLog-Native", "GeckoViewWrapper initialized")
         isFocusable = true
         isFocusableInTouchMode = true
         isClickable = true
@@ -930,34 +936,34 @@ class GeckoViewWrapper(context: Context) : GeckoView(context) {
     }
 
     override fun onCheckIsTextEditor(): Boolean {
-        Log.d("NyaNyaOpenURL-Native", "onCheckIsTextEditor called, returning true")
+        Log.d("NyaNyaWebViewLog-Native", "onCheckIsTextEditor called, returning true")
         return true
     }
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
-        Log.d("NyaNyaOpenURL-Native", "onCreateInputConnection called, delegating to super class")
+        Log.d("NyaNyaWebViewLog-Native", "onCreateInputConnection called, delegating to super class")
         return super.onCreateInputConnection(outAttrs)
     }
 
     override fun checkInputConnectionProxy(view: View?): Boolean {
-        Log.d("NyaNyaOpenURL-Native", "checkInputConnectionProxy called")
+        Log.d("NyaNyaWebViewLog-Native", "checkInputConnectionProxy called")
         return true
     }
 
     fun showSoftInput() {
-        Log.w("NyaNyaOpenURL-Native", "========== showSoftInput() called ==========")
+        Log.w("NyaNyaWebViewLog-Native", "========== showSoftInput() called ==========")
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
         if (imm != null) {
             val isActive = imm.isActive(this)
-            Log.w("NyaNyaOpenURL-Native", "hasFocus=${hasFocus()}, isFocused=${isFocused()}, isActive=$isActive")
+            Log.w("NyaNyaWebViewLog-Native", "hasFocus=${hasFocus()}, isFocused=${isFocused()}, isActive=$isActive")
 
             if (isActive) {
-                Log.w("NyaNyaOpenURL-Native", "SUCCESS: View IS active, showing soft input directly")
+                Log.w("NyaNyaWebViewLog-Native", "SUCCESS: View IS active, showing soft input directly")
                 imm.showSoftInput(this, 0)
             } else {
-                Log.w("NyaNyaOpenURL-Native", "PROBLEM: View has focus but NOT active (VirtualDisplay issue)")
+                Log.w("NyaNyaWebViewLog-Native", "PROBLEM: View has focus but NOT active (VirtualDisplay issue)")
                 try {
-                    Log.w("NyaNyaOpenURL-Native", "Attempting reflection workaround")
+                    Log.w("NyaNyaWebViewLog-Native", "Attempting reflection workaround")
                     val method = imm.javaClass.getMethod(
                         "showSoftInput",
                         android.view.View::class.java,
@@ -965,26 +971,26 @@ class GeckoViewWrapper(context: Context) : GeckoView(context) {
                         android.os.ResultReceiver::class.java
                     )
                     method.invoke(imm, this, 0, null)
-                    Log.w("NyaNyaOpenURL-Native", "Reflection call succeeded")
+                    Log.w("NyaNyaWebViewLog-Native", "Reflection call succeeded")
                 } catch (e: Exception) {
-                    Log.w("NyaNyaOpenURL-Native", "Reflection failed: ${e.message}")
+                    Log.w("NyaNyaWebViewLog-Native", "Reflection failed: ${e.message}")
                     if (hasFocus()) {
-                        Log.w("NyaNyaOpenURL-Native", "Attempting fix: clearFocus() then requestFocus()")
+                        Log.w("NyaNyaWebViewLog-Native", "Attempting fix: clearFocus() then requestFocus()")
                         clearFocus()
                         requestFocus()
                     }
                     post {
                         val newIsActive = imm.isActive(this)
-                        Log.w("NyaNyaOpenURL-Native", "After post: hasFocus=${hasFocus()}, isActive=$newIsActive")
+                        Log.w("NyaNyaWebViewLog-Native", "After post: hasFocus=${hasFocus()}, isActive=$newIsActive")
                         if (hasFocus()) {
-                            Log.w("NyaNyaOpenURL-Native", "Calling showSoftInput after post")
+                            Log.w("NyaNyaWebViewLog-Native", "Calling showSoftInput after post")
                             imm.showSoftInput(this@GeckoViewWrapper, 0)
                         }
                     }
                 }
             }
         } else {
-            Log.w("NyaNyaOpenURL-Native", "ERROR: InputMethodManager is null!")
+            Log.w("NyaNyaWebViewLog-Native", "ERROR: InputMethodManager is null!")
         }
     }
 }

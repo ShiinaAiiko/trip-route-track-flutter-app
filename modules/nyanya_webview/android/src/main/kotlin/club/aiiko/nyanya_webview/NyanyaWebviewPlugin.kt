@@ -11,24 +11,24 @@ class NyanyaWebviewPlugin : FlutterPlugin, ActivityAware {
     private var methodChannel: MethodChannel? = null
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-        Log.d("NyaNyaOpenURL", "NyanyaWebviewPlugin.onAttachedToEngine STARTED")
+        Log.d("NyaNyaWebViewLog", "NyanyaWebviewPlugin.onAttachedToEngine STARTED")
         val messenger = flutterPluginBinding.binaryMessenger
         methodChannel = MethodChannel(messenger, "nyanya_webview")
         
         // 注册 GeckoView
-        Log.d("NyaNyaOpenURL", "NyanyaWebviewPlugin: Registering GeckoViewFactory")
+        Log.d("NyaNyaWebViewLog", "NyanyaWebviewPlugin: Registering GeckoViewFactory")
         flutterPluginBinding.platformViewRegistry.registerViewFactory(
             "geckoView",
             GeckoViewFactory(messenger)
         )
         
         // 注册 SystemWebView
-        Log.d("NyaNyaOpenURL", "NyanyaWebviewPlugin: Registering SystemWebViewFactory")
+        Log.d("NyaNyaWebViewLog", "NyanyaWebviewPlugin: Registering SystemWebViewFactory")
         flutterPluginBinding.platformViewRegistry.registerViewFactory(
             "systemWebView",
             SystemWebViewFactory(messenger)
         )
-        Log.d("NyaNyaOpenURL", "NyanyaWebviewPlugin.onAttachedToEngine COMPLETED")
+        Log.d("NyaNyaWebViewLog", "NyanyaWebviewPlugin.onAttachedToEngine COMPLETED")
     }
 
     override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {

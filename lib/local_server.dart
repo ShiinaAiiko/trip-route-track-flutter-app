@@ -48,8 +48,9 @@ class LocalServer {
   bool get serverExists => _server != null;
 
   Future<void> start({bool forceRestart = false}) async {
-    print('[NYANYA-SERVER] start(): _status=$_status, _server=${_server == null ? "null" : "exists"}');
-    
+    print(
+        '[NYANYA-SERVER] start(): _status=$_status, _server=${_server == null ? "null" : "exists"}');
+
     // 如果已经运行且不需要强制重启，直接返回
     if (_status == ServerStatus.running && !forceRestart) {
       print('[NYANYA-SERVER]   already running, returning');
@@ -87,23 +88,26 @@ class LocalServer {
 
       // 启动服务器
       print('[NYANYA-SERVER]   binding to port $_port...');
-      _server = await shelf_io.serve(handler, InternetAddress.loopbackIPv4, _port);
-      print('[NYANYA-SERVER]   bound, _server: ${_server == null ? "NULL" : "exists"}');
-      
+      _server =
+          await shelf_io.serve(handler, InternetAddress.loopbackIPv4, _port);
+      print(
+          '[NYANYA-SERVER]   bound, _server: ${_server == null ? "NULL" : "exists"}');
+
       _status = ServerStatus.running;
       _restartAttempts = 0;
-      print('[NYANYA-SERVER] STARTED on http://localhost:$_port (assets: ${_allAssets.length})');
+      print(
+          '[NYANYA-SERVER] STARTED on http://localhost:$_port (assets: ${_allAssets.length})');
       _startCompleter?.complete();
-
     } catch (e) {
       _status = ServerStatus.error;
       _lastError = e.toString();
       _server = null;
       print('[NYANYA-SERVER] FAILED: $e');
-      
+
       if (_restartAttempts < _maxRestartAttempts) {
         _restartAttempts++;
-        print('[NYANYA-SERVER]   retry ${_restartAttempts}/$_maxRestartAttempts...');
+        print(
+            '[NYANYA-SERVER]   retry ${_restartAttempts}/$_maxRestartAttempts...');
         await Future.delayed(const Duration(seconds: 1));
         await start(forceRestart: true);
       } else {
@@ -121,13 +125,14 @@ class LocalServer {
   }
 
   bool checkServerHealth() {
-    print('[NYANYA-SERVER] checkServerHealth: _server=${_server == null ? "NULL" : "exists"}, _status=$_status');
-    
+    print(
+        '[NYANYA-SERVER] checkServerHealth: _server=${_server == null ? "NULL" : "exists"}, _status=$_status');
+
     if (_server == null) {
       print('[NYANYA-SERVER]   -> FALSE (server is null)');
       return false;
     }
-    
+
     try {
       final isHealthy = _status == ServerStatus.running;
       print('[NYANYA-SERVER]   -> $isHealthy');
@@ -154,22 +159,21 @@ class LocalServer {
         print('Found updated static resources in: ${staticDir.path}');
         return; // 使用本地文件系统资源，不加载 assets
       }
-      
+
       // 没有更新，加载默认 assets
       print('Loading AssetManifest.json...');
       final manifestJson = await rootBundle.loadString('AssetManifest.json');
       final manifest = json.decode(manifestJson) as Map<String, dynamic>;
 
-      _allAssets = manifest.keys
-          .where((key) => key.startsWith('assets/out/'))
-          .toList();
+      _allAssets =
+          manifest.keys.where((key) => key.startsWith('assets/out/')).toList();
 
       print('Total assets in manifest: ${manifest.length}');
       print('Assets from assets/out/: ${_allAssets.length}');
 
       // 打印一些示例
       for (int i = 0; i < _allAssets.length && i < 10; i++) {
-        print('  [${i+1}] ${_allAssets[i]}');
+        print('  [${i + 1}] ${_allAssets[i]}');
       }
       if (_allAssets.length > 10) {
         print('  ... and ${_allAssets.length - 10} more');
@@ -201,30 +205,30 @@ class LocalServer {
 
     print('Request: $path');
 
-    // 处理 bridge 请求
-    if (path == '__flutter_bridge__') {
-      final message = request.url.queryParameters['message'];
-      if (message != null) {
-        try {
-          print('Received bridge message: $message');
-          final Map<String, dynamic> json = jsonDecode(message) as Map<String, dynamic>;
-          if (json['type'] == 'url_change' && json['url'] != null) {
-            final url = json['url'] as String;
-            final title = json['title'] as String? ?? '';
-            print('URL changed to: $url, title: $title');
-            LocalServer.onUrlChange?.call(url, title);
-          } else {
-            BridgeController().handleWebMessage(message);
-          }
-        } catch (e) {
-          print('Failed to handle bridge message: $e');
-        }
-      }
-      return Response.ok('', headers: {
-        'Content-Type': 'text/plain',
-        'Access-Control-Allow-Origin': '*',
-      });
-    }
+    // // 处理 bridge 请求
+    // if (path == '__flutter_bridge__') {
+    //   final message = request.url.queryParameters['message'];
+    //   if (message != null) {
+    //     try {
+    //       print('Received bridge message: $message');
+    //       final Map<String, dynamic> json = jsonDecode(message) as Map<String, dynamic>;
+    //       if (json['type'] == 'url_change' && json['url'] != null) {
+    //         final url = json['url'] as String;
+    //         final title = json['title'] as String? ?? '';
+    //         print('URL changed to: $url, title: $title');
+    //         LocalServer.onUrlChange?.call(url, title);
+    //       } else {
+    //         BridgeController().handleWebMessage(message);
+    //       }
+    //     } catch (e) {
+    //       print('Failed to handle bridge message: $e');
+    //     }
+    //   }
+    //   return Response.ok('', headers: {
+    //     'Content-Type': 'text/plain',
+    //     'Access-Control-Allow-Origin': '*',
+    //   });
+    // }
 
     // 默认返回 index.html
     if (path.isEmpty) {
@@ -273,7 +277,7 @@ class LocalServer {
         matchedPath = tryPath;
         break;
       }
-      
+
       // 尝试模糊匹配（目录下的）
       for (final asset in _allAssets) {
         if (asset.endsWith('/$tryPath')) {

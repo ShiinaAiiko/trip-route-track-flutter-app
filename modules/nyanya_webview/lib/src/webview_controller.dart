@@ -2,9 +2,10 @@ import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 import 'webview_options.dart';
 import 'webview_bridge.dart';
-import 'gecko_webview.dart';
+import 'nyanya_webview_core.dart';
+import 'webview_communication_interface.dart';
 
-class WebViewController {
+class NyaNyaWebViewController {
   late NyaNyaWebview _webView;
   late NyaNyaWebviewController _nyaNyaController;
   late WebViewBridge _bridge;
@@ -15,21 +16,23 @@ class WebViewController {
 
   void Function(String sessionId, String message)? onMessage;
   void Function(String sessionId, dynamic channel)? onChannelCreated;
+  void Function(String sessionId, IWebViewCommunication)?
+      onCommunicationCreated;
 
   // 用于包装回调，允许在不重新创建 WebView 的情况下更新
   late void Function(String, String?) _onOpenUrlWrapper;
 
-  WebViewController(this._options, {String? sessionId})
+  NyaNyaWebViewController(this._options, {String? sessionId})
       : sessionId = sessionId ?? _generateSessionId() {
     print(
-        '[NyaNyaOpenURL] WebViewController constructor called, sessionId: $sessionId');
+        '[NyaNyaWebViewLog] NyaNyaWebViewController constructor called, sessionId: $sessionId');
     _nyaNyaController = NyaNyaWebviewController();
     _bridge = WebViewBridge(messageSender: _sendMessageToWebView);
 
     // 创建一个包装器来调用当前的回调
     _onOpenUrlWrapper = (url, target) {
       print(
-          '[NyaNyaOpenURL] WebViewController._onOpenUrlWrapper called: url=$url, target=$target, _onOpenUrl=${_onOpenUrl}');
+          '[NyaNyaWebViewLog] NyaNyaWebViewController._onOpenUrlWrapper called: url=$url, target=$target, _onOpenUrl=${_onOpenUrl}');
       _onOpenUrl?.call(url, target);
     };
 
@@ -54,6 +57,11 @@ class WebViewController {
             _nyaNyaController.setChannel(channel);
             onChannelCreated?.call(sessionId, channel);
           },
+          onCommunicationCreated: (communication) {
+            _nyaNyaController.setCommunication(communication);
+            onCommunicationCreated?.call(sessionId, communication);
+          },
+          sessionId: sessionId,
         );
         break;
     }
@@ -61,7 +69,7 @@ class WebViewController {
 
   void setOnCloseHandler(VoidCallback? handler) {
     print(
-        '[NyaNyaOpenURL] WebViewController.setOnCloseHandler called: handler=${handler}');
+        '[NyaNyaWebViewLog] NyaNyaWebViewController.setOnCloseHandler called: handler=${handler}');
     _onClose = handler;
     // 需要重新初始化 WebView 来传递新的 onClose
     _initWebView();
@@ -94,13 +102,13 @@ class WebViewController {
 
   Future<bool> canGoBack() {
     print(
-        '[DEBUG] updateNavigationState WebViewController.canGoBack() called, _nyaNyaController: $_nyaNyaController');
+        '[DEBUG] updateNavigationState NyaNyaWebViewController.canGoBack() called, _nyaNyaController: $_nyaNyaController');
     return _nyaNyaController.canGoBack();
   }
 
   Future<bool> canGoForward() {
     print(
-        '[DEBUG] updateNavigationState WebViewController.canGoForward() called, _nyaNyaController: $_nyaNyaController');
+        '[DEBUG] updateNavigationState NyaNyaWebViewController.canGoForward() called, _nyaNyaController: $_nyaNyaController');
     return _nyaNyaController.canGoForward();
   }
 
@@ -112,7 +120,7 @@ class WebViewController {
 
   Future<void> setOnOpenUrlHandler(OpenUrlHandler? handler) {
     print(
-        '[NyaNyaOpenURL] WebViewController.setOnOpenUrlHandler called: handler=${handler}');
+        '[NyaNyaWebViewLog] NyaNyaWebViewController.setOnOpenUrlHandler called: handler=${handler}');
     _onOpenUrl = handler;
     // 包装器已经会调用当前的 _onOpenUrl，所以不需要重新创建 WebView
     return Future.value();

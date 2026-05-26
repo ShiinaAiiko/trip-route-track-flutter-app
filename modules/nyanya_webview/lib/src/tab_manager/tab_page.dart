@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
 import '../webview_options.dart';
 import '../webview_controller.dart';
+import '../webview_communication_interface.dart';
 import 'tab_manager.dart';
 
-// 库内部的 i18n 实现
 class _TabPageI18n {
   static final Map<String, Map<String, String>> _translations = {
     'zh-CN': {
@@ -29,23 +28,16 @@ class _TabPageI18n {
   };
 
   static String t(String key, {String? language}) {
-    // 使用传入的语言，默认为 en-US
     final targetLanguage = language ?? 'en-US';
-
-    // 查找匹配的语言
     if (_translations.containsKey(targetLanguage)) {
       return _translations[targetLanguage]![key] ?? key;
     }
-
-    // 只匹配语言代码
     final languageOnly = targetLanguage.split('-').first;
     for (final localeKey in _translations.keys) {
       if (localeKey.startsWith('$languageOnly-')) {
         return _translations[localeKey]![key] ?? key;
       }
     }
-
-    // 默认返回英文
     return _translations['en-US']![key] ?? key;
   }
 }
@@ -61,6 +53,8 @@ class TabPage extends StatefulWidget {
   final String? language;
   final void Function(String tabId, String message)? onMessage;
   final void Function(String tabId, dynamic channel)? onChannelCreated;
+  final void Function(String tabId, IWebViewCommunication)?
+      onCommunicationCreated;
   final void Function(String tabId)? onTabClosed;
 
   const TabPage({
@@ -75,6 +69,7 @@ class TabPage extends StatefulWidget {
     this.language,
     this.onMessage,
     this.onChannelCreated,
+    this.onCommunicationCreated,
     this.onTabClosed,
   });
 
@@ -83,28 +78,30 @@ class TabPage extends StatefulWidget {
 }
 
 class _TabPageState extends State<TabPage> {
-  late WebViewController _controller;
+  late NyaNyaWebViewController _controller;
   String _currentUrl = '';
   String _currentTitle = '';
   bool _isLoading = true;
 
-  // 导航栏状态
   bool _canGoBack = false;
   bool _canGoForward = false;
+
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   @override
   void initState() {
     super.initState();
     _currentUrl = widget.url;
     _initController();
-    // 初始化导航状态
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateNavigationState();
     });
   }
 
   void _initController() {
-    _controller = WebViewController(widget.options, sessionId: widget.tabId);
+    _controller =
+        NyaNyaWebViewController(widget.options, sessionId: widget.tabId);
     _controller.setOnOpenUrlHandler((url, target) {
       widget.onOpenUrl?.call(url, target);
     });
@@ -119,6 +116,11 @@ class _TabPageState extends State<TabPage> {
     _controller.onChannelCreated = (sessionId, channel) {
       print('[TabPage] Channel created for session: $sessionId');
       widget.onChannelCreated?.call(sessionId, channel);
+    };
+
+    _controller.onCommunicationCreated = (sessionId, communication) {
+      print('[TabPage] Communication created for session: $sessionId');
+      widget.onCommunicationCreated?.call(sessionId, communication);
     };
 
     _controller.on('onTitleChange', (message) {
@@ -142,7 +144,6 @@ class _TabPageState extends State<TabPage> {
           _currentUrl = url;
         });
         widget.onUrlChanged?.call(widget.tabId, url);
-        // 更新导航状态
         _updateNavigationState();
       }
     });
@@ -168,21 +169,24 @@ class _TabPageState extends State<TabPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: _buildTitle(),
-        centerTitle: false,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
+    return ScaffoldMessenger(
+      key: _scaffoldMessengerKey,
+      child: Scaffold(
+        appBar: AppBar(
+          title: _buildTitle(),
+          centerTitle: false,
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+          actions: [
+            _buildDropdownMenu(),
+          ],
         ),
-        actions: [
-          _buildDropdownMenu(),
-        ],
+        body: _buildWebView(),
       ),
-      body: _buildWebView(),
     );
   }
 
@@ -231,7 +235,6 @@ class _TabPageState extends State<TabPage> {
         }
       },
       itemBuilder: (BuildContext context) => [
-        // 横向排列的图标按钮（返回、前进、刷新）
         PopupMenuItem<String>(
           value: 'placeholder1',
           enabled: true,
@@ -239,7 +242,6 @@ class _TabPageState extends State<TabPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // 返回按钮
               IconButton(
                 icon: const Icon(Icons.arrow_back, size: 20),
                 onPressed: _canGoBack
@@ -250,7 +252,6 @@ class _TabPageState extends State<TabPage> {
                     : null,
                 disabledColor: Colors.grey,
               ),
-              // 前进按钮
               IconButton(
                 icon: const Icon(Icons.arrow_forward, size: 20),
                 onPressed: _canGoForward
@@ -261,7 +262,6 @@ class _TabPageState extends State<TabPage> {
                     : null,
                 disabledColor: Colors.grey,
               ),
-              // 刷新按钮
               IconButton(
                 icon: const Icon(Icons.refresh, size: 20),
                 color: Colors.white,
@@ -273,16 +273,9 @@ class _TabPageState extends State<TabPage> {
             ],
           ),
         ),
-        // 分割线
         const PopupMenuDivider(),
-        // 分享按钮（使用 i18n）
         PopupMenuItem<String>(
           value: 'share',
-          onTap: () {
-            Future.delayed(Duration.zero, () {
-              _handleShare();
-            });
-          },
           child: Row(
             children: [
               const Icon(Icons.share, size: 20),
@@ -306,36 +299,52 @@ class _TabPageState extends State<TabPage> {
   }
 
   Future<void> _handleRefresh() async {
-    print('[NyaNyaOpenURL] _handleRefresh');
+    print('[NyaNyaWebViewLog] _handleRefresh');
     await _controller.reload();
   }
 
   Future<void> _handleShare() async {
-    final urlToShare = _currentUrl.isNotEmpty ? _currentUrl : widget.url;
+    var urlToShare = _currentUrl.isNotEmpty ? _currentUrl : widget.url;
     if (urlToShare.isEmpty) return;
+
+    urlToShare = widget.options.applyUrlRewrite(urlToShare);
 
     try {
       await Clipboard.setData(ClipboardData(text: urlToShare));
-      final message = _TabPageI18n.t('url_copied', language: widget.language);
       if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast(
-            title: Text(message),
-            alignment: Alignment.bottomCenter,
-            offset: const Offset(0, 50),
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(
+              _TabPageI18n.t('url_copied', language: widget.language),
+              style: const TextStyle(color: Colors.white),
+            ),
             duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 120, left: 20, right: 20),
+            backgroundColor: Colors.black87,
+            elevation: 8,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
     } catch (e) {
-      final message = _TabPageI18n.t('copy_failed', language: widget.language);
       if (mounted) {
-        ShadToaster.of(context).show(
-          ShadToast(
-            title: Text(message),
-            alignment: Alignment.bottomCenter,
-            offset: const Offset(0, 50),
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(
+              _TabPageI18n.t('copy_failed', language: widget.language),
+              style: const TextStyle(color: Colors.white),
+            ),
             duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 120, left: 20, right: 20),
+            backgroundColor: Colors.black87,
+            elevation: 8,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -366,20 +375,7 @@ class _TabPageState extends State<TabPage> {
   }
 
   String _getDisplayUrl(String url) {
-    String processedUrl = url;
-    final isInternalWebsite = url.contains('localhost:13218') ||
-        url.contains('localhost:13219') ||
-        url.contains('localhost:13220') ||
-        url.contains('127.0.0.1:13218') ||
-        url.contains('127.0.0.1:13219') ||
-        url.contains('127.0.0.1:13220');
-
-    if (isInternalWebsite) {
-      processedUrl = url.replaceAll(
-        RegExp(r'https?://(localhost|127\.0\.0\.1):(13218|13219|13220)'),
-        'https://trip.aiiko.club',
-      );
-    }
+    String processedUrl = widget.options.applyUrlRewrite(url);
     if (processedUrl.endsWith('/')) {
       processedUrl = processedUrl.substring(0, processedUrl.length - 1);
     }
@@ -422,19 +418,16 @@ void navigateToTab({
       builder: (context) => TabPage(
         tabId: tabId,
         url: url,
-        options: tabManager.buildOptions(url),
-        onOpenUrl: (newUrl, target) {
-          if (target == '_blank' || target == '_self') {
-            tabManager.openTab(newUrl);
-          } else {
-            tabManager.openTab(newUrl);
-          }
-          Navigator.of(context).pop();
-        },
-        onClose: () {
-          tabManager.closeTab(tabId);
-          Navigator.of(context).pop();
-        },
+        options: tabManager.getTabOptions(tabId) ??
+            const WebViewOptions(initialUrl: ''),
+        onTitleChanged: tabManager.onTitleChanged,
+        onUrlChanged: tabManager.onUrlChanged,
+        onOpenUrl: tabManager.onOpenUrl,
+        onClose: () => tabManager.closeTab(tabId),
+        onMessage: tabManager.onMessage,
+        onChannelCreated: tabManager.onChannelCreated,
+        onCommunicationCreated: tabManager.onCommunicationCreated,
+        onTabClosed: tabManager.onTabClosed,
       ),
     ),
   );

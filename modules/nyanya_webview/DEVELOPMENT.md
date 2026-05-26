@@ -71,7 +71,7 @@ abstract class WebViewInterface {
 
 **文件**：`lib/src/webview_options.dart`
 
-WebView 的配置类，包含引擎选择、新标签页行为等核心配置。
+WebView 的配置类，包含引擎选择、新标签页行为、URL 替换规则等核心配置。
 
 ```dart
 enum WebViewEngine {
@@ -86,16 +86,59 @@ enum NewTabBehavior {
 
 typedef OpenUrlHandler = void Function(String url, String? target);
 
+class UrlRewriteRule {
+  final RegExp pattern;     // URL 匹配正则
+  final String replacement; // 替换目标
+
+  const UrlRewriteRule({
+    required this.pattern,
+    required this.replacement,
+  });
+
+  String apply(String url) {
+    return url.replaceAll(pattern, replacement);
+  }
+}
+
 class WebViewOptions {
   final WebViewEngine engine;
   final String initialUrl;
   final bool enableJavascript;
   final bool enableGeolocation;
   final bool enableMixedContent;
-  final int serverPort;
+  final int? serverPort;
   final Map<String, String>? headers;
   final NewTabBehavior newTabBehavior;
+  final List<UrlRewriteRule>? urlRewriteRules;
+
+  String applyUrlRewrite(String url) {
+    if (urlRewriteRules == null || urlRewriteRules!.isEmpty) {
+      return url;
+    }
+    String result = url;
+    for (final rule in urlRewriteRules!) {
+      result = rule.apply(result);
+    }
+    return result;
+  }
 }
+```
+
+**配置示例**：
+
+```dart
+final options = WebViewOptions(
+  engine: WebViewEngine.gecko,
+  initialUrl: 'https://example.com',
+  serverPort: 13218,
+  newTabBehavior: NewTabBehavior.delegate,
+  urlRewriteRules: [
+    UrlRewriteRule(
+      pattern: RegExp(r'https?://(localhost|127\.0\.0\.1):13218'),
+      replacement: 'https://production.example.com',
+    ),
+  ],
+);
 ```
 
 ### 3. WebViewController - 控制器
@@ -311,10 +354,10 @@ TabManagerWidget(
 
 ### 调试 Tips
 
-- 使用 `NyaNyaOpenURL` 日志标签过滤 onOpenUrl 相关日志
-- 使用 `adb logcat | grep NyaNyaOpenURL` 查看标签页相关日志
+- 使用 `NyaNyaWebViewLog` 日志标签过滤 onOpenUrl 相关日志
+- 使用 `adb logcat | grep NyaNyaWebViewLog` 查看标签页相关日志
 - 在 `GeckoViewPlatform.kt` 和 `gecko_webview.dart` 中添加调试日志
-- 标题/URL 变化可通过日志 `[NyaNyaOpenURL-Flutter] GeckoWebview: onTitleChange received` 查看
+- 标题/URL 变化可通过日志 `[NyaNyaWebViewLog-Flutter] GeckoWebview: onTitleChange received` 查看
 
 ## 当前开发状态
 

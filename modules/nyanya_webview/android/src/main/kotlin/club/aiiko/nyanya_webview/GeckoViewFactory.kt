@@ -9,7 +9,7 @@ import io.flutter.plugin.platform.PlatformViewFactory
 
 class GeckoViewFactory(private val messenger: BinaryMessenger) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
     override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
-        Log.d("NyaNyaOpenURL", "GeckoViewFactory.create called! viewId=$viewId, args=$args")
+        Log.d("NyaNyaWebViewLog", "GeckoViewFactory.create called! viewId=$viewId, args=$args")
         return GeckoViewPlatform(context, messenger, viewId, args as Map<String, Any>?)
     }
 }

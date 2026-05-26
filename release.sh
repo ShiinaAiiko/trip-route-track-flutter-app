@@ -35,8 +35,10 @@ dev() {
 	# adb logcat | grep "message.type\|gps12"
 	# 更新 assets 目录配置
 
-	# adb logcat -c && adb logcat | grep --line-buffered -E -i "onOpenUrl|NyaNyaOpenURL" | grep --line-buffered -E -v -i "sendMessage|postMessage" | tee flutter_log.txt
+	# adb logcat -c && adb logcat | grep --line-buffered -E -i "onOpenUrl|NyaNyaWebViewLog" | grep --line-buffered -E -v -i "sendMessage|postMessage" | tee flutter_log.txt
 	# adb logcat -c && adb logcat | grep --line-buffered -E -i "onLocationChange|onTitleChange" | grep --line-buffered -E -v -i "sendMessage|postMessage" | tee flutter_log.txt
+
+	#  adb logcat -c && adb logcat | grep --line-buffered -E -i "onOpenUrl|NyaNyaWebViewLog|onLocationChange|onLocationChange|anGoBack|FlutterBridge" | grep --line-buffered -E -v -i "postMessage|location" | tee flutter_log.txt
 
 	loadEnv
 	setGoogleClientId "dev"

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../webview_options.dart';
 import '../webview_controller.dart';
+import '../webview_communication_interface.dart';
 
 class TabInfo {
   final String id;
@@ -65,6 +66,14 @@ class TabManager extends ChangeNotifier {
 
   final List<TabInfo> _tabs = [];
   int _currentIndex = -1;
+
+  void Function(String tabId, String title)? onTitleChanged;
+  void Function(String tabId, String url)? onUrlChanged;
+  void Function(String url, String? target)? onOpenUrl;
+  void Function(String tabId, String message)? onMessage;
+  void Function(String tabId, dynamic channel)? onChannelCreated;
+  void Function(String tabId, IWebViewCommunication)? onCommunicationCreated;
+  void Function(String tabId)? onTabClosed;
 
   TabManager({
     required WebViewOptions Function(String url) optionsBuilder,
@@ -189,5 +198,11 @@ class TabManager extends ChangeNotifier {
 
   WebViewOptions buildOptions(String url) {
     return _optionsBuilder(url);
+  }
+
+  WebViewOptions? getTabOptions(String tabId) {
+    final index = _tabs.indexWhere((t) => t.id == tabId);
+    if (index < 0) return null;
+    return _optionsBuilder(_tabs[index].url);
   }
 }
