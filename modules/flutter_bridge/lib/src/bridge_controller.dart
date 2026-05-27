@@ -260,11 +260,11 @@ class BridgeController {
     }
   }
 
-  void handleWebMessage(String messageString, {String? sessionId}) {
+  Future<void> handleWebMessage(String messageString, {String? sessionId}) async {
     print(
         '[FlutterBridge] handleWebMessage from session: $sessionId, message: $messageString');
 
-    _handleWebMessage(messageString, sessionId: sessionId);
+    await _handleWebMessage(messageString, sessionId: sessionId);
   }
 
   Future<void> sendMessage(String type, dynamic payload,
@@ -312,8 +312,260 @@ class BridgeController {
     // final jsonString = jsonEncode(message.toJson());
 
     // await targetChannel.invokeMethod('postMessage', {
-    //   'message': jsonString,
-    // });
+  //   'message': jsonString,
+  // });
+  }
+
+  // ============ 车辆数据统一接口处理方法 ============
+
+  /// 处理车辆数据获取请求
+  Future<void> _handleVehicleGet(String category,
+      {String? bridgeId, String? sessionId}) async {
+    print('[BridgeController] _handleVehicleGet category: $category');
+    switch (category) {
+      case 'speed':
+        final data = await _vehicleService.services.speed.get();
+        sendMessage('speed', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'statistic':
+        final data = await _vehicleService.services.statistic.get();
+        sendMessage('statistic', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'instrument':
+        final data = await _vehicleService.services.instrument.get();
+        sendMessage('instrument', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'door':
+        final data = await _vehicleService.services.door.get();
+        sendMessage('door', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'vehicleSetting':
+        final data = await _vehicleService.services.vehicleset.get();
+        sendMessage('vehicleSetting', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'engine':
+        final data = await _vehicleService.services.engine.get();
+        sendMessage('engine', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'panorama':
+        final data = await _vehicleService.services.panorama.get();
+        sendMessage('panorama', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'ac':
+        final data = await _vehicleService.services.ac.get();
+        sendMessage('ac', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'sensor':
+        final data = await _vehicleService.services.sensor.get();
+        sendMessage('sensor', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'time':
+        final data = await _vehicleService.services.time.get();
+        sendMessage('time', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'energyMode':
+        final data = await _vehicleService.services.energyMode.get();
+        sendMessage('energyMode', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'radar':
+        final data = await _vehicleService.services.radar.get();
+        sendMessage('radar', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'tyre':
+        final data = await _vehicleService.services.tyre.get();
+        sendMessage('tyre', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'airQuality':
+        final data = await _vehicleService.services.airQuality.get();
+        sendMessage('airQuality', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'charge':
+        final data = await _vehicleService.services.charge.get();
+        sendMessage('charge', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'media':
+        final data = await _vehicleService.services.media.get();
+        sendMessage('media', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'bodyStatus':
+        final data = await _vehicleService.services.bodyStatus.get();
+        sendMessage('bodyStatus', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      case 'light':
+        final data = await _vehicleService.services.light.get();
+        sendMessage('light', data.toJson(),
+            bridgeId: bridgeId, sessionId: sessionId);
+        break;
+      default:
+        print('[BridgeController] _handleVehicleGet unknown category: $category');
+    }
+  }
+
+  /// 处理车辆数据监听请求
+  Future<void> _handleVehicleEnableListener(String category, bool enabled) async {
+    print('[BridgeController] _handleVehicleEnableListener category: $category, enabled: $enabled');
+    switch (category) {
+      case 'speed':
+        await _vehicleService.services.speed.enableListener(enabled);
+        break;
+      case 'statistic':
+        await _vehicleService.services.statistic.enableListener(enabled);
+        break;
+      case 'instrument':
+        await _vehicleService.services.instrument.enableListener(enabled);
+        break;
+      case 'door':
+        await _vehicleService.services.door.enableListener(enabled);
+        break;
+      case 'vehicleSetting':
+        await _vehicleService.services.vehicleset.enableListener(enabled);
+        break;
+      case 'engine':
+        await _vehicleService.services.engine.enableListener(enabled);
+        break;
+      case 'panorama':
+        await _vehicleService.services.panorama.enableListener(enabled);
+        break;
+      case 'ac':
+        await _vehicleService.services.ac.enableListener(enabled);
+        break;
+      case 'sensor':
+        await _vehicleService.services.sensor.enableListener(enabled);
+        break;
+      case 'time':
+        await _vehicleService.services.time.enableListener(enabled);
+        break;
+      case 'energyMode':
+        await _vehicleService.services.energyMode.enableListener(enabled);
+        break;
+      case 'radar':
+        await _vehicleService.services.radar.enableListener(enabled);
+        break;
+      case 'tyre':
+        await _vehicleService.services.tyre.enableListener(enabled);
+        break;
+      case 'airQuality':
+        await _vehicleService.services.airQuality.enableListener(enabled);
+        break;
+      case 'charge':
+        await _vehicleService.services.charge.enableListener(enabled);
+        break;
+      case 'media':
+        await _vehicleService.services.media.enableListener(enabled);
+        break;
+      case 'bodyStatus':
+        await _vehicleService.services.bodyStatus.enableListener(enabled);
+        break;
+      case 'light':
+        await _vehicleService.services.light.enableListener(enabled);
+        break;
+      case 'all':
+        await _vehicleService.services.speed.enableListener(enabled);
+        await _vehicleService.services.statistic.enableListener(enabled);
+        await _vehicleService.services.instrument.enableListener(enabled);
+        await _vehicleService.services.door.enableListener(enabled);
+        await _vehicleService.services.vehicleset.enableListener(enabled);
+        await _vehicleService.services.engine.enableListener(enabled);
+        await _vehicleService.services.panorama.enableListener(enabled);
+        await _vehicleService.services.ac.enableListener(enabled);
+        await _vehicleService.services.sensor.enableListener(enabled);
+        await _vehicleService.services.time.enableListener(enabled);
+        await _vehicleService.services.energyMode.enableListener(enabled);
+        await _vehicleService.services.radar.enableListener(enabled);
+        await _vehicleService.services.tyre.enableListener(enabled);
+        await _vehicleService.services.airQuality.enableListener(enabled);
+        await _vehicleService.services.charge.enableListener(enabled);
+        await _vehicleService.services.media.enableListener(enabled);
+        await _vehicleService.services.bodyStatus.enableListener(enabled);
+        await _vehicleService.services.light.enableListener(enabled);
+        break;
+      default:
+        print('[BridgeController] _handleVehicleEnableListener unknown category: $category');
+    }
+  }
+
+  /// 处理车辆数据设置请求
+  Future<void> _handleVehicleSet(String type, String field, dynamic value,
+      {String? bridgeId, String? sessionId}) async {
+    print('[BridgeController] _handleVehicleSet type: $type, field: $field, value: $value');
+    bool success = false;
+    switch (type) {
+      case 'speed':
+        print('[BridgeController] speed 不支持 set 操作');
+        break;
+      case 'statistic':
+        print('[BridgeController] statistic 不支持 set 操作');
+        break;
+      case 'instrument':
+        success = await _vehicleService.services.instrument.set(field, value);
+        break;
+      case 'door':
+        print('[BridgeController] door 不支持 set 操作');
+        break;
+      case 'vehicleSetting':
+        success = await _vehicleService.services.vehicleset.set(field, value);
+        break;
+      case 'engine':
+        print('[BridgeController] engine 不支持 set 操作');
+        break;
+      case 'panorama':
+        print('[BridgeController] panorama 不支持 set 操作');
+        break;
+      case 'ac':
+        success = await _vehicleService.services.ac.set(field, value);
+        break;
+      case 'sensor':
+        print('[BridgeController] sensor 不支持 set 操作');
+        break;
+      case 'time':
+        success = await _vehicleService.services.time.set(field, value);
+        break;
+      case 'energyMode':
+        print('[BridgeController] energyMode 不支持 set 操作');
+        break;
+      case 'radar':
+        print('[BridgeController] radar 不支持 set 操作');
+        break;
+      case 'tyre':
+        print('[BridgeController] tyre 不支持 set 操作');
+        break;
+      case 'airQuality':
+        print('[BridgeController] airQuality 不支持 set 操作');
+        break;
+      case 'charge':
+        print('[BridgeController] charge 不支持 set 操作');
+        break;
+      case 'media':
+        success = await _vehicleService.services.media.set(field, value);
+        break;
+      case 'bodyStatus':
+        print('[BridgeController] bodyStatus 不支持 set 操作');
+        break;
+      case 'light':
+        print('[BridgeController] light 不支持 set 操作');
+        break;
+      default:
+        print('[BridgeController] _handleVehicleSet unknown type: $type');
+    }
+    sendMessage('setResult', {'success': success, 'field': field},
+        bridgeId: bridgeId, sessionId: sessionId);
   }
 
   Future<void> _handleEnableLocation(bool enable, {String? sessionId}) async {
@@ -1431,13 +1683,13 @@ class BridgeController {
         print(
             '[FlutterBridge] onWebMessage->handleWebMessage, message: ${call.arguments}');
 
-        _handleWebMessage(call.arguments as String);
+        await _handleWebMessage(call.arguments as String);
         break;
     }
     _externalHandler?.call(call);
   }
 
-  void _handleWebMessage(String messageString, {String? sessionId}) {
+  Future<void> _handleWebMessage(String messageString, {String? sessionId}) async {
     try {
       final Map<String, dynamic> json =
           jsonDecode(messageString) as Map<String, dynamic>;
@@ -1489,6 +1741,47 @@ class BridgeController {
             _backgroundStartTime =
                 DateTime.now().millisecondsSinceEpoch ~/ 1000;
             _backgroundLocationCount = 0;
+          }
+          break;
+        // ============ 车辆数据统一接口 ============
+        case 'get':
+          final getCategory = message.payload as String?;
+          if (getCategory != null) {
+            _handleVehicleGet(getCategory, bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        case 'enableListener':
+          final listenerPayload = message.payload as Map<String, dynamic>?;
+          if (listenerPayload != null) {
+            final category = listenerPayload['category'] as String?;
+            final enabled = listenerPayload['enabled'] as bool? ?? true;
+            if (category != null) {
+              _handleVehicleEnableListener(category, enabled);
+            }
+          }
+          break;
+        case 'set':
+          final setPayload = message.payload as Map<String, dynamic>?;
+          if (setPayload != null) {
+            final type = setPayload['type'] as String?;
+            final field = setPayload['field'] as String?;
+            final value = setPayload['value'];
+            if (type != null && field != null) {
+              _handleVehicleSet(type, field, value, bridgeId: bridgeId, sessionId: finalSessionId);
+            }
+          }
+          break;
+        case 'hasFeature':
+          final hasFeaturePayload = message.payload as Map<String, dynamic>?;
+          if (hasFeaturePayload != null) {
+            final category = hasFeaturePayload['category'] as String?;
+            final feature = hasFeaturePayload['feature'] as String?;
+            if (category == 'vehicleset' && feature != null) {
+              final result = await _vehicleService.services.vehicleset.hasFeature(feature);
+              final responseKey = 'hasFeature:${message.bridgeId ?? ''}';
+              sendMessage(responseKey, result,
+                  bridgeId: bridgeId, sessionId: finalSessionId);
+            }
           }
           break;
         case 'setLanguage':

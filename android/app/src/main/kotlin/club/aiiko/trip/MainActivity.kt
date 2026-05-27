@@ -200,6 +200,373 @@ class MainActivity : FlutterActivity() {
                     sendCarLog("checkBydPermissions 结果: $results")
                     result.success(results)
                 }
+                // ==================== 车速类接口 ====================
+                "getSpeedData" -> {
+                    val data = bydVehicleService?.getSpeedData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableSpeedListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableSpeedListener(enabled)
+                    result.success(null)
+                }
+                // ==================== 空调类接口 ====================
+                "getAcData" -> {
+                    val data = bydVehicleService?.getAcData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableAcListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableAcListener(enabled)
+                    result.success(null)
+                }
+                "setAcData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setAcData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 行驶数据类型接口 ====================
+                "getStatisticData" -> {
+                    val data = bydVehicleService?.getStatisticData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableStatisticListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableStatisticListener(enabled)
+                    result.success(null)
+                }
+                "setStatisticData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setStatisticData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 仪表类接口 ====================
+                "getInstrumentData" -> {
+                    val data = bydVehicleService?.getInstrumentData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableInstrumentListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableInstrumentListener(enabled)
+                    result.success(null)
+                }
+                "setInstrumentData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setInstrumentData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                "setInstrumentUnit" -> {
+                    val unitName = call.argument<Int>("unitName") ?: 0
+                    val unitValue = call.argument<Int>("unitValue") ?: 0
+                    val success = bydVehicleService?.setInstrumentUnit(unitName, unitValue) ?: false
+                    result.success(mapOf("success" to success))
+                }
+                "setMaintenanceInfo" -> {
+                    val typeName = call.argument<Int>("typeName") ?: 0
+                    val infoValue = call.argument<Int>("infoValue") ?: 0
+                    val success = bydVehicleService?.setMaintenanceInfo(typeName, infoValue) ?: false
+                    result.success(mapOf("success" to success))
+                }
+                // ==================== 门锁类接口 ====================
+                "getDoorData" -> {
+                    val data = bydVehicleService?.getDoorData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableDoorListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableDoorListener(enabled)
+                    result.success(null)
+                }
+                "setDoorData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setDoorData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 车辆设置类接口 ====================
+                "getVehicleSettingData" -> {
+                    val data = bydVehicleService?.getVehicleSettingData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableVehicleSettingListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableVehicleSettingListener(enabled)
+                    result.success(null)
+                }
+                "setVehicleSettingData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setVehicleSettingData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                "vehicleSettingHasFeature" -> {
+                    val feature = call.argument<String>("feature") ?: ""
+                    val hasFeature = bydVehicleService?.vehicleSettingHasFeature(feature) ?: false
+                    result.success(mapOf("hasFeature" to hasFeature))
+                }
+                // ==================== 发动机类接口 ====================
+                "getEngineData" -> {
+                    val data = bydVehicleService?.getEngineData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableEngineListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableEngineListener(enabled)
+                    result.success(null)
+                }
+                "setEngineData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setEngineData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 全景摄像头类接口 ====================
+                "getPanoramaData" -> {
+                    val data = bydVehicleService?.getPanoramaData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enablePanoramaListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enablePanoramaListener(enabled)
+                    result.success(null)
+                }
+                "setPanoramaData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setPanoramaData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 传感器类接口 ====================
+                "getSensorData" -> {
+                    val data = bydVehicleService?.getSensorData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableSensorListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableSensorListener(enabled)
+                    result.success(null)
+                }
+                "setSensorData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setSensorData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 时间类接口 ====================
+                "getTimeData" -> {
+                    val data = bydVehicleService?.getTimeData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableTimeListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableTimeListener(enabled)
+                    result.success(null)
+                }
+                "setTimeData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setTimeData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 能量模式类接口 ====================
+                "getEnergyModeData" -> {
+                    val data = bydVehicleService?.getEnergyModeData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableEnergyModeListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableEnergyModeListener(enabled)
+                    result.success(null)
+                }
+                "setEnergyModeData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setEnergyModeData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 雷达类接口 ====================
+                "getRadarData" -> {
+                    val data = bydVehicleService?.getRadarData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableRadarListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableRadarListener(enabled)
+                    result.success(null)
+                }
+                "setRadarData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setRadarData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 轮胎类接口 ====================
+                "getTyreData" -> {
+                    val data = bydVehicleService?.getTyreData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableTyreListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableTyreListener(enabled)
+                    result.success(null)
+                }
+                "setTyreData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setTyreData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 空气质量类接口 ====================
+                "getAirQualityData" -> {
+                    val data = bydVehicleService?.getAirQualityData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableAirQualityListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableAirQualityListener(enabled)
+                    result.success(null)
+                }
+                "setAirQualityData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setAirQualityData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 充电类接口 ====================
+                "getChargeData" -> {
+                    val data = bydVehicleService?.getChargeData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableChargeListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableChargeListener(enabled)
+                    result.success(null)
+                }
+                "setChargeData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setChargeData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 媒体中心类接口 ====================
+                "getMediaData" -> {
+                    val data = bydVehicleService?.getMediaData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableMediaListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableMediaListener(enabled)
+                    result.success(null)
+                }
+                "setMediaData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setMediaData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 车身状态类接口 ====================
+                "getBodyStatusData" -> {
+                    val data = bydVehicleService?.getBodyStatusData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableBodyStatusListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableBodyStatusListener(enabled)
+                    result.success(null)
+                }
+                "setBodyStatusData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setBodyStatusData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
+                // ==================== 车灯类接口 ====================
+                "getLightData" -> {
+                    val data = bydVehicleService?.getLightData() ?: emptyMap<String, Any?>()
+                    result.success(data)
+                }
+                "enableLightListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableLightListener(enabled)
+                    result.success(null)
+                }
+                "setLightData" -> {
+                    val field = call.argument<String>("field") ?: ""
+                    val value = call.argument<Any>("value")
+                    if (value != null) {
+                        val success = bydVehicleService?.setLightData(field, value) ?: false
+                        result.success(mapOf("success" to success))
+                    } else {
+                        result.success(mapOf("success" to false))
+                    }
+                }
                 else -> {
                     sendCarLog("未实现的方法调用: ${call.method}")
                     result.notImplemented()

@@ -1506,6 +1506,142 @@ dependency_overrides:
 
 ---
 
+## v1.0.13 更新内容（2026-05-26）
+
+### 完整的 18 个车辆数据分类接口实现
+
+**功能概述**：完成了所有 18 个车辆数据分类接口的三端（前端、Flutter、Android 原生）实现
+
+**18 个分类**：
+| 分类名称 | 英文名 | 说明 |
+|---------|--------|------|
+| 车速 | speed | 车速、加速踏板深度、刹车深度 |
+| 统计 | statistic | 总里程、EV 里程、电量、油量 |
+| 仪表 | instrument | 单位切换、充电功率 |
+| 车门 | door | 车门状态 |
+| 车辆设置 | vehicleSetting | 蓝牙、空调、能量回馈等 |
+| 发动机 | engine | 发动机状态 |
+| 全景/摄像头 | panorama | 摄像头模式 |
+| 传感器 | sensor | 环境光、温度等传感器数据 |
+| 时间 | time | 系统时间 |
+| 能量/模式 | energyMode | 能量模式 |
+| 雷达 | radar | 雷达距离 |
+| 轮胎 | tyre | 胎压数据 |
+| 空气质量 | airQuality | PM2.5、PM10 |
+| 充电 | charge | 充电状态 |
+| 媒体中心 | media | 媒体播放状态 |
+| 车身状态 | bodyStatus | 车身状态 |
+| 车灯 | light | 车灯状态 |
+| 整体数据 | carData | 包含所有 17 个分类的完整数据 |
+
+**三端实现**：
+- **前端**：TypeScript 类型定义，类型安全的 set 方法，独立的事件监听
+- **Flutter**：统一的接口，每个分类独立 service，通用的 set 方法
+- **Android 原生**：完整的反射调用框架，所有分类的 set 方法实现
+
+### 前端类型安全优化
+
+**功能概述**：将除空调和车速外的其他 16 个分类的通用 set 方法拆分为具体类型安全的函数
+
+**示例**：
+```typescript
+// 车辆设置类的 set 方法拆分为：
+async setACBTWind(value: 0 | 1): Promise<boolean>;
+async setACTunnelCycle(value: 0 | 1): Promise<boolean>;
+async setEnergyFeedback(value: number): Promise<boolean>;
+async setSOCTarget(value: number): Promise<boolean>;
+// ... 等等
+```
+
+**类型定义位置**：
+- 属于特定模块的类型定义放在对应模块内
+- 避免将所有类型集中到外部文件
+
+### 事件监听统一
+
+**功能概述**：将过度细分的事件监听统一为整体事件派发
+
+**修改内容**：
+- 移除了 `onDrivingTimeChanged` 等细分事件
+- 统一使用 `onStatisticDataChanged` 等整体事件
+- 符合三端架构一致性原则
+
+### hasFeature 方法实现
+
+**功能概述**：车辆设置类特有的功能查询方法，用于检查特定功能是否支持
+
+**类型定义**：
+```typescript
+type VehicleSettingFeature = keyof VehicleSettingData;
+```
+
+**消息类型**：在 sendMessage 的类型联合中添加了 'hasFeature'
+
+### 整体监听功能（enableCarData）
+
+**功能概述**：当调用 `enableCarData(true)` 时，Flutter 端会获取所有 18 个分类的完整数据并通过 `carData` 消息发送给前端
+
+**前端使用**：
+```typescript
+// 监听所有数据
+bridge.on('carData', (data: CarData) => {
+  console.log('完整数据', data);
+});
+
+// 或者单独监听某个分类
+bridge.on('speed', (data) => { ... });
+```
+
+### 前端车机数据模拟测试
+
+**功能概述**：在前端开发环境中模拟真实车机数据输出，无需依赖真实车辆
+
+**实现位置**：`web/plugins/nyanyaWebJsBridge/vehicle/test.ts`
+
+**使用方法**：
+```typescript
+// 启动测试
+vehicle.startTest();
+
+// 停止测试（可选）
+(window as any).stopCarTest();
+```
+
+**模拟内容**：
+- 完整的 18 个分类数据
+- 真实的驾驶行为（加速、减速、电量消耗、充电等）
+- 环境变化（光线、温度、PM2.5 等）
+- 不同频率的数据更新（高频 100ms、中频 1s、低频 3s）
+
+**默认数据**：
+- 车速：0-120 km/h
+- 电量：30-100%
+- 油量：0-100%
+- 环境温度：-10°C - 40°C
+- PM2.5：0-200 μg/m³
+
+**关键代码位置**：
+- `web/plugins/nyanyaWebJsBridge/vehicle/test.ts` - 模拟实现
+- `web/plugins/nyanyaWebJsBridge/vehicle/index.ts` - 入口集成
+
+### 关键代码位置
+
+**前端**：
+- `web/plugins/nyanyaWebJsBridge/vehicle/` - 所有车辆数据服务模块
+- `web/plugins/nyanyaWebJsBridge/nyanyaWebJsBridge.ts` - JS Bridge 核心
+- `web/plugins/nyanyaWebJsBridge/vehicle/test.ts` - 模拟测试
+
+**Flutter**：
+- `modules/flutter_bridge/lib/src/bridge_controller.dart` - 桥接控制器
+- `modules/flutter_bridge/lib/src/services/vehicle_service.dart` - 车辆服务管理
+- `modules/flutter_bridge/lib/src/services/vehicle/` - 各分类独立 service
+
+**Android**：
+- `android/app/src/main/kotlin/club/aiiko/trip/BYDAutoVehicleService.kt` - 比亚迪车辆服务
+- `android/app/src/main/kotlin/club/aiiko/trip/BydApiReflectHelper.kt` - 反射工具
+
+---
+
 ## 当前未解决的问题
 
 1. **比亚迪车机 API 数据获取**：

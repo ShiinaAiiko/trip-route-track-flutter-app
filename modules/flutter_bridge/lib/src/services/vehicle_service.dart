@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
+import 'vehicle/index.dart';
 
 class VehicleService {
   static final VehicleService _instance = VehicleService._internal();
@@ -7,6 +8,8 @@ class VehicleService {
   VehicleService._internal();
 
   static const MethodChannel _channel = MethodChannel('byd_vehicle');
+
+  final VehicleServices services = VehicleServices();
 
   Function(Map<String, dynamic>)? onCarDataChanged;
 
@@ -30,6 +33,96 @@ class VehicleService {
         final data = _parseCarData(jsonString);
         onCarDataChanged?.call(data);
         _carDataController?.add(data);
+        break;
+      case 'onSpeedDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.speed.setupListener(data);
+        break;
+      case 'onStatisticDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.statistic.setupListener(data);
+        break;
+      case 'onInstrumentDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.instrument.setupListener(data);
+        break;
+      case 'onDoorDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.door.setupListener(data);
+        break;
+      case 'onVehicleSettingDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.vehicleset.setupListener(data);
+        break;
+      case 'onEngineDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.engine.setupListener(data);
+        break;
+      case 'onPanoramaDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.panorama.setupListener(data);
+        break;
+      case 'onAcDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.ac.setupListener(data);
+        break;
+      case 'onSensorDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.sensor.setupListener(data);
+        break;
+      case 'onTimeDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.time.setupListener(data);
+        break;
+      case 'onEnergyModeDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.energyMode.setupListener(data);
+        break;
+      case 'onRadarDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.radar.setupListener(data);
+        break;
+      case 'onTyreDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.tyre.setupListener(data);
+        break;
+      case 'onAirQualityDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.airQuality.setupListener(data);
+        break;
+      case 'onChargeDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.charge.setupListener(data);
+        break;
+      case 'onMediaDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.media.setupListener(data);
+        break;
+      case 'onBodyStatusDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.bodyStatus.setupListener(data);
+        break;
+      case 'onLightDataChanged':
+        final jsonString = call.arguments as String;
+        final data = _parseCarData(jsonString);
+        services.light.setupListener(data);
         break;
     }
   }
@@ -257,5 +350,6 @@ class VehicleService {
   void dispose() {
     _carDataController?.close();
     _carDataController = null;
+    services.dispose();
   }
 }
