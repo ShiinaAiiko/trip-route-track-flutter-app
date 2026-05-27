@@ -14,9 +14,14 @@ class NotificationService {
   bool _initialized = false;
   Function? _onDownloadNotificationClick;
   bool _isDownloadComplete = false;
+  Function(Map<String, dynamic>)? _onNotificationClickWithAction;
 
   void setDownloadComplete(bool complete) {
     _isDownloadComplete = complete;
+  }
+
+  void setNotificationClickCallback(Function(Map<String, dynamic>) callback) {
+    _onNotificationClickWithAction = callback;
   }
 
   Future<void> init() async {
@@ -47,13 +52,26 @@ class NotificationService {
   }
 
   void _onNotificationClicked(NotificationResponse response) {
-    // 点击通知时，如果是下载完成通知且下载进度为100%，触发安装
     if (response.id == 1001 && _onDownloadNotificationClick != null && _isDownloadComplete) {
       _onDownloadNotificationClick!();
     } else if (response.id != 1001) {
       // 点击通知时，使用 MethodChannel 调用 Android 原生方法打开 app
       const MethodChannel channel = MethodChannel('notification_click');
       channel.invokeMethod('openApp');
+      
+      // 如果有 clickActionUrl，回调给前端
+      if (_onNotificationClickWithAction != null && response.payload != null) {
+        try {
+          final payload = Map<String, dynamic>.from(
+            Uri.splitQueryString(response.payload!).map(
+              (key, value) => MapEntry(key, value),
+            ),
+          );
+          _onNotificationClickWithAction!(payload);
+        } catch (e) {
+          // 忽略解析错误
+        }
+      }
     }
   }
 
@@ -63,9 +81,20 @@ class NotificationService {
     int id = 0,
     bool ongoing = false,
     AndroidNotificationDetails? androidDetails,
+    String? clickActionType,
+    String? clickActionUrl,
   }) async {
     if (!_initialized) {
       await init();
+    }
+
+    String? payload;
+    if (clickActionUrl != null && clickActionUrl.isNotEmpty) {
+      final queryParams = <String, String>{
+        if (clickActionType != null) 'clickActionType': clickActionType,
+        'clickActionUrl': clickActionUrl,
+      };
+      payload = Uri(queryParameters: queryParams).toString();
     }
 
     final AndroidNotificationDetails androidNotificationDetails =
@@ -91,6 +120,7 @@ class NotificationService {
       title,
       body,
       notificationDetails,
+      payload: payload,
     );
   }
 

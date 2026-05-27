@@ -210,6 +210,50 @@ class VehicleService {
     print('[VehicleService] requestCarData() completed');
   }
 
+  Future<bool> hasBydPermissions() async {
+    try {
+      print('[VehicleService] hasBydPermissions() calling native method');
+      final result = await _channel.invokeMethod<bool>('hasBydPermissions');
+      print('[VehicleService] hasBydPermissions() result: $result');
+      return result ?? false;
+    } catch (e) {
+      print('[VehicleService] hasBydPermissions() failed: $e');
+      return false;
+    }
+  }
+
+  Future<void> requestBydPermissions() async {
+    try {
+      print('[VehicleService] requestBydPermissions() calling native method');
+      await _channel.invokeMethod('requestBydPermissions');
+      print('[VehicleService] requestBydPermissions() completed');
+    } catch (e) {
+      print('[VehicleService] requestBydPermissions() failed: $e');
+    }
+  }
+
+  Future<Map<String, String>> checkBydPermissions(List<String> permissionTypes) async {
+    try {
+      print('[VehicleService] checkBydPermissions() calling native method for: $permissionTypes');
+      final Map<String, bool>? result = await _channel.invokeMethod<Map<String, bool>>('checkBydPermissions', permissionTypes);
+      final Map<String, String> mappedResult = {};
+      if (result != null) {
+        for (final entry in result.entries) {
+          mappedResult[entry.key] = entry.value ? 'granted' : 'denied';
+        }
+      }
+      print('[VehicleService] checkBydPermissions() result: $mappedResult');
+      return mappedResult;
+    } catch (e) {
+      print('[VehicleService] checkBydPermissions() failed: $e');
+      final Map<String, String> errorResult = {};
+      for (final type in permissionTypes) {
+        errorResult[type] = 'denied';
+      }
+      return errorResult;
+    }
+  }
+
   void dispose() {
     _carDataController?.close();
     _carDataController = null;

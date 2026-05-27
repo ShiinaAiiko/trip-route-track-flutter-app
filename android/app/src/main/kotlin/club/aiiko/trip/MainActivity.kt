@@ -185,6 +185,21 @@ class MainActivity : FlutterActivity() {
                     requestBydAutoPermissions()
                     result.success(null)
                 }
+                "checkBydPermissions" -> {
+                    val permissionTypes = call.arguments as? List<String> ?: emptyList()
+                    val results = mutableMapOf<String, Boolean>()
+                    val allBydPermissions = bydVehicleService?.getRequiredPermissions() ?: emptyArray()
+                    
+                    for (type in permissionTypes) {
+                        val fullPermissionName = mapToBydPermissionString(type)
+                        val hasPermission = allBydPermissions.contains(fullPermissionName) && 
+                            checkSelfPermission(fullPermissionName) == PackageManager.PERMISSION_GRANTED
+                        results[type] = hasPermission
+                    }
+                    
+                    sendCarLog("checkBydPermissions 结果: $results")
+                    result.success(results)
+                }
                 else -> {
                     sendCarLog("未实现的方法调用: ${call.method}")
                     result.notImplemented()
@@ -429,6 +444,26 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             sendLog("app", "updateAppTitle 失败: ${e.message}")
             sendLog("app", "异常堆栈: ${e.stackTraceToString()}")
+        }
+    }
+
+    private fun mapToBydPermissionString(type: String): String {
+        return when (type) {
+            "bydAcCommon" -> "android.permission.BYDAUTO_AC_COMMON"
+            "bydBodyworkCommon" -> "android.permission.BYDAUTO_BODYWORK_COMMON"
+            "bydEngineCommon" -> "android.permission.BYDAUTO_ENGINE_COMMON"
+            "bydTyreCommon" -> "android.permission.BYDAUTO_TYRE_COMMON"
+            "bydInstrumentCommon" -> "android.permission.BYDAUTO_INSTRUMENT_COMMON"
+            "bydDoorlockCommon" -> "android.permission.BYDAUTO_DOORLOCK_COMMON"
+            "bydPanoramaCommon" -> "android.permission.BYDAUTO_PANORAMA_COMMON"
+            "bydVehiclesetCommon" -> "android.permission.BYDAUTO_VEHICLESET_COMMON"
+            "bydSpeedGet" -> "android.permission.BYDAUTO_SPEED_GET"
+            "bydStatisticGet" -> "android.permission.BYDAUTO_STATISTIC_GET"
+            "bydTyreGet" -> "android.permission.BYDAUTO_TYRE_GET"
+            "bydEngineGet" -> "android.permission.BYDAUTO_ENGINE_GET"
+            "bydEnergyGet" -> "android.permission.BYDAUTO_ENERGY_GET"
+            "bydChargeGet" -> "android.permission.BYDAUTO_CHARGE_GET"
+            else -> type
         }
     }
 

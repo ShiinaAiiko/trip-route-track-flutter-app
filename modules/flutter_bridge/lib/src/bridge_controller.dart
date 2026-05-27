@@ -99,6 +99,23 @@ class BridgeController {
     await _updateService.init();
     await _logService.init();
     _setupCarDataListener();
+    _setupNotificationClickCallback();
+  }
+
+  void _setupNotificationClickCallback() {
+    NotificationService().setNotificationClickCallback((payload) {
+      final clickActionType = payload['clickActionType'];
+      final clickActionUrl = payload['clickActionUrl'];
+      if (clickActionUrl != null && clickActionUrl.isNotEmpty) {
+        sendMessage(
+          'notificationClickAction',
+          {
+            'clickActionType': clickActionType ?? '',
+            'clickActionUrl': clickActionUrl,
+          },
+        );
+      }
+    });
   }
 
   Future<void> _checkAndResetResourcesOnUpdate() async {
@@ -416,9 +433,7 @@ class BridgeController {
       }
 
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const AndroidSettings(
-          accuracy: LocationAccuracy.high,
-        ),
+        desiredAccuracy: LocationAccuracy.high,
       );
 
       sendMessage(
@@ -448,6 +463,228 @@ class BridgeController {
           },
           bridgeId: bridgeId,
           sessionId: sessionId);
+    }
+  }
+
+  bool _isBydPermissionType(String type) {
+    return type.startsWith('byd');
+  }
+
+  String _mapToBydPermissionString(String type) {
+    switch (type) {
+      case 'bydAcCommon':
+        return 'android.permission.BYDAUTO_AC_COMMON';
+      case 'bydBodyworkCommon':
+        return 'android.permission.BYDAUTO_BODYWORK_COMMON';
+      case 'bydEngineCommon':
+        return 'android.permission.BYDAUTO_ENGINE_COMMON';
+      case 'bydTyreCommon':
+        return 'android.permission.BYDAUTO_TYRE_COMMON';
+      case 'bydInstrumentCommon':
+        return 'android.permission.BYDAUTO_INSTRUMENT_COMMON';
+      case 'bydDoorlockCommon':
+        return 'android.permission.BYDAUTO_DOORLOCK_COMMON';
+      case 'bydPanoramaCommon':
+        return 'android.permission.BYDAUTO_PANORAMA_COMMON';
+      case 'bydVehiclesetCommon':
+        return 'android.permission.BYDAUTO_VEHICLESET_COMMON';
+      case 'bydSpeedGet':
+        return 'android.permission.BYDAUTO_SPEED_GET';
+      case 'bydStatisticGet':
+        return 'android.permission.BYDAUTO_STATISTIC_GET';
+      case 'bydTyreGet':
+        return 'android.permission.BYDAUTO_TYRE_GET';
+      case 'bydEngineGet':
+        return 'android.permission.BYDAUTO_ENGINE_GET';
+      case 'bydEnergyGet':
+        return 'android.permission.BYDAUTO_ENERGY_GET';
+      case 'bydChargeGet':
+        return 'android.permission.BYDAUTO_CHARGE_GET';
+      default:
+        return type;
+    }
+  }
+
+  Permission _mapPermissionType(String type) {
+    switch (type) {
+      case 'location':
+        return Permission.locationWhenInUse;
+      case 'locationAlways':
+        return Permission.locationAlways;
+      case 'notification':
+        return Permission.notification;
+      case 'storage':
+        return Permission.storage;
+      case 'camera':
+        return Permission.camera;
+      case 'microphone':
+        return Permission.microphone;
+      case 'photos':
+        return Permission.photos;
+      case 'contacts':
+        return Permission.contacts;
+      case 'calendar':
+        return Permission.calendar;
+      case 'sensors':
+        return Permission.sensors;
+      case 'sms':
+        return Permission.sms;
+      case 'phone':
+        return Permission.phone;
+      case 'bluetooth':
+        return Permission.bluetooth;
+      case 'activityRecognition':
+        return Permission.activityRecognition;
+      case 'mediaLibrary':
+        return Permission.mediaLibrary;
+      case 'systemAlertWindow':
+        return Permission.systemAlertWindow;
+      default:
+        throw ArgumentError('Unknown permission type: $type');
+    }
+  }
+
+  String _mapPermissionStatus(PermissionStatus status) {
+    if (status.isGranted) return 'granted';
+    if (status.isDenied) return 'denied';
+    if (status.isPermanentlyDenied) return 'permanentlyDenied';
+    if (status.isRestricted) return 'restricted';
+    if (status.isLimited) return 'limited';
+    if (status.isProvisional) return 'provisional';
+    return 'denied';
+  }
+
+  Future<void> _handleCheckPermissions(dynamic permissions,
+      {String? bridgeId, String? sessionId}) async {
+    try {
+      final List<String> permissionTypes =
+          (permissions as List<dynamic>).cast<String>();
+      final Map<String, String> results = {};
+
+      final List<String> standardPermissions = [];
+      final List<String> bydPermissions = [];
+
+      for (final type in permissionTypes) {
+        if (_isBydPermissionType(type)) {
+          bydPermissions.add(type);
+        } else {
+          standardPermissions.add(type);
+        }
+      }
+
+      // 处理标准权限
+      for (final type in standardPermissions) {
+        try {
+          final permission = _mapPermissionType(type);
+          final status = await permission.status;
+          results[type] = _mapPermissionStatus(status);
+        } catch (e) {
+          results[type] = 'denied';
+        }
+      }
+
+      // 处理BYD权限
+      if (bydPermissions.isNotEmpty) {
+        try {
+          final bydResults = await _vehicleService.checkBydPermissions(bydPermissions);
+          results.addAll(bydResults);
+        } catch (e) {
+          for (final type in bydPermissions) {
+            results[type] = 'denied';
+          }
+        }
+      }
+
+      sendMessage('checkPermissions', results,
+          bridgeId: bridgeId, sessionId: sessionId);
+    } catch (e) {
+      sendMessage('checkPermissions', {},
+          bridgeId: bridgeId, sessionId: sessionId);
+    }
+  }
+
+  Future<void> _handleRequestPermissions(dynamic permissions,
+      {String? bridgeId, String? sessionId}) async {
+    try {
+      final List<String> permissionTypes =
+          (permissions as List<dynamic>).cast<String>();
+      final Map<String, String> results = {};
+      bool allGranted = true;
+
+      final List<String> standardPermissions = [];
+      final List<String> bydPermissions = [];
+
+      for (final type in permissionTypes) {
+        if (_isBydPermissionType(type)) {
+          bydPermissions.add(type);
+        } else {
+          standardPermissions.add(type);
+        }
+      }
+
+      // 处理标准权限
+      if (standardPermissions.isNotEmpty) {
+        final List<Permission> validPermissions = [];
+        final List<String> validPermissionTypes = [];
+        
+        // 先收集有效的权限
+        for (final type in standardPermissions) {
+          try {
+            validPermissions.add(_mapPermissionType(type));
+            validPermissionTypes.add(type);
+          } catch (e) {
+            results[type] = 'denied';
+            allGranted = false;
+          }
+        }
+        
+        // 请求有效的权限
+        if (validPermissions.isNotEmpty) {
+          final requestResults = await validPermissions.request();
+          for (int i = 0; i < validPermissionTypes.length; i++) {
+            final type = validPermissionTypes[i];
+            final permission = validPermissions[i];
+            if (requestResults.containsKey(permission)) {
+              final status = requestResults[permission]!;
+              final statusStr = _mapPermissionStatus(status);
+              results[type] = statusStr;
+              if (statusStr != 'granted') {
+                allGranted = false;
+              }
+            }
+          }
+        }
+      }
+
+      // 处理BYD权限
+      if (bydPermissions.isNotEmpty) {
+        try {
+          await _vehicleService.requestBydPermissions();
+          // 请求后再次检查权限状态
+          final bydResults = await _vehicleService.checkBydPermissions(bydPermissions);
+          results.addAll(bydResults);
+          // 检查BYD权限是否全部授予
+          for (final entry in bydResults.entries) {
+            if (entry.value != 'granted') {
+              allGranted = false;
+              break;
+            }
+          }
+        } catch (e) {
+          for (final type in bydPermissions) {
+            results[type] = 'denied';
+            allGranted = false;
+          }
+        }
+      }
+
+      sendMessage('requestPermissions',
+          {'success': allGranted, 'results': results},
+          bridgeId: bridgeId, sessionId: sessionId);
+    } catch (e) {
+      sendMessage('requestPermissions',
+          {'success': false, 'results': <String, String>{}},
+          bridgeId: bridgeId, sessionId: sessionId);
     }
   }
 
@@ -1126,6 +1363,8 @@ class BridgeController {
         id: id,
         ongoing: ongoing,
         androidDetails: androidNotificationDetails,
+        clickActionType: clickActionType,
+        clickActionUrl: clickActionUrl,
       );
 
       // 设置新的自动关闭定时器
@@ -1345,6 +1584,14 @@ class BridgeController {
             _handleAppStorage(message.payload as Map<String, dynamic>,
                 bridgeId: bridgeId, sessionId: finalSessionId);
           }
+          break;
+        case 'checkPermissions':
+          _handleCheckPermissions(message.payload,
+              bridgeId: bridgeId, sessionId: finalSessionId);
+          break;
+        case 'requestPermissions':
+          _handleRequestPermissions(message.payload,
+              bridgeId: bridgeId, sessionId: finalSessionId);
           break;
         // default 不需要特殊处理，shouldDispatch 保持 true
       }
