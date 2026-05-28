@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.12+461
+version: 1.0.12+462
 
 environment:
   sdk: '>=3.4.0 <4.0.0'
@@ -53,20 +53,20 @@ flutter:
   assets:
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/3OQ-V-WYHAe55MbKiJ3Xg/
+    - assets/out/_next/81rRFrg35RKw9Et-226hb/
     - assets/out/_next/data/
-    - assets/out/_next/data/3OQ-V-WYHAe55MbKiJ3Xg/
-    - assets/out/_next/data/3OQ-V-WYHAe55MbKiJ3Xg/en-US/
-    - assets/out/_next/data/3OQ-V-WYHAe55MbKiJ3Xg/en-US/journeyMemories/
-    - assets/out/_next/data/3OQ-V-WYHAe55MbKiJ3Xg/en-US/trip/
-    - assets/out/_next/data/3OQ-V-WYHAe55MbKiJ3Xg/zh-CN/
-    - assets/out/_next/data/3OQ-V-WYHAe55MbKiJ3Xg/zh-CN/journeyMemories/
-    - assets/out/_next/data/3OQ-V-WYHAe55MbKiJ3Xg/zh-CN/trip/
-    - assets/out/_next/data/3OQ-V-WYHAe55MbKiJ3Xg/zh-TW/
-    - assets/out/_next/data/3OQ-V-WYHAe55MbKiJ3Xg/zh-TW/journeyMemories/
-    - assets/out/_next/data/3OQ-V-WYHAe55MbKiJ3Xg/zh-TW/trip/
+    - assets/out/_next/data/81rRFrg35RKw9Et-226hb/
+    - assets/out/_next/data/81rRFrg35RKw9Et-226hb/en-US/
+    - assets/out/_next/data/81rRFrg35RKw9Et-226hb/en-US/journeyMemories/
+    - assets/out/_next/data/81rRFrg35RKw9Et-226hb/en-US/trip/
+    - assets/out/_next/data/81rRFrg35RKw9Et-226hb/zh-CN/
+    - assets/out/_next/data/81rRFrg35RKw9Et-226hb/zh-CN/journeyMemories/
+    - assets/out/_next/data/81rRFrg35RKw9Et-226hb/zh-CN/trip/
+    - assets/out/_next/data/81rRFrg35RKw9Et-226hb/zh-TW/
+    - assets/out/_next/data/81rRFrg35RKw9Et-226hb/zh-TW/journeyMemories/
+    - assets/out/_next/data/81rRFrg35RKw9Et-226hb/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/3OQ-V-WYHAe55MbKiJ3Xg/
+    - assets/out/_next/static/81rRFrg35RKw9Et-226hb/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/

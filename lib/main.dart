@@ -303,6 +303,10 @@ class _WebViewContainerState extends State<WebViewContainer>
   Timer? _loadTimeoutTimer;
   Timer? _exitAppTimer;
   Timer? _tabStackChangedTimer;
+  Timer? _healthCheckPollTimer;
+  int _healthCheckCount = 0;
+  static const int _maxHealthChecks = 8;
+  static const int _healthCheckIntervalMs = 500;
   bool _exitAppRequested = false;
 
   late void Function(BridgeMessage) _closeLoadingHandler;
@@ -935,8 +939,9 @@ class _WebViewContainerState extends State<WebViewContainer>
   ///
   /// 核心原则：
   /// 1. 每次从后台返回都检测
-  /// 2. 只有服务真的挂了才恢复
-  /// 3. 页面加载成功过才考虑恢复
+  /// 2. 立即检查一次，然后轮询检查
+  /// 3. 只有服务真的挂了才恢复
+  /// 4. 页面加载成功过才考虑恢复
   Future<void> _checkAndRecoverState() async {
     print('[NYANYA-CHECK] === Checking app state on resume ===');
     print('[NYANYA-CHECK]   _lastBackgroundTime: $_lastBackgroundTime');
@@ -962,6 +967,40 @@ class _WebViewContainerState extends State<WebViewContainer>
       return;
     }
 
+    // 先取消之前可能存在的轮询
+    _healthCheckPollTimer?.cancel();
+    _healthCheckCount = 0;
+
+    // 立即执行第一次检查
+    print('[NYANYA-CHECK] Performing immediate health check...');
+    final shouldStop = await _performSingleHealthCheck();
+
+    if (shouldStop) {
+      return;
+    }
+
+    // 启动轮询检查
+    print('[NYANYA-CHECK] Starting poll health checks (interval: ${_healthCheckIntervalMs}ms)...');
+    _healthCheckPollTimer = Timer.periodic(
+      const Duration(milliseconds: _healthCheckIntervalMs),
+      (timer) async {
+        _healthCheckCount++;
+        print('[NYANYA-CHECK] Poll check $_healthCheckCount/$_maxHealthChecks...');
+
+        final stopPoll = await _performSingleHealthCheck();
+
+        if (stopPoll || _healthCheckCount >= _maxHealthChecks) {
+          print('[NYANYA-CHECK] Stopping health check poll');
+          timer.cancel();
+          _healthCheckPollTimer = null;
+        }
+      },
+    );
+  }
+
+  /// 执行单次健康检查
+  /// 返回 true 表示应该停止轮询
+  Future<bool> _performSingleHealthCheck() async {
     final serverHealthy = LocalServer.instance.checkServerHealth();
     print('[NYANYA-CHECK] Server health: $serverHealthy');
 
@@ -969,11 +1008,12 @@ class _WebViewContainerState extends State<WebViewContainer>
     print('[NYANYA-CHECK] Kernel health: $kernelHealthy');
 
     if (!serverHealthy || !kernelHealthy) {
-      print('[NYANYA-RECOVERY] Starting recovery...');
+      print('[NYANYA-RECOVERY] Found unhealthy state, starting recovery...');
       await _performRecovery();
-    } else {
-      print('[NYANYA-CHECK] Server and Kernel healthy, preserved');
+      return true; // 停止轮询
     }
+
+    return false; // 继续轮询
   }
 
   /// 检测 WebView 内核是否健康
@@ -1185,6 +1225,7 @@ class _WebViewContainerState extends State<WebViewContainer>
     _sensorTimer?.cancel();
     _loadTimeoutTimer?.cancel();
     _tabStackChangedTimer?.cancel();
+    _healthCheckPollTimer?.cancel();
     BridgeController().off('closeLoading', _closeLoadingHandler);
     super.dispose();
   }
