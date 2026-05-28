@@ -28,6 +28,10 @@ class MainActivity : FlutterActivity() {
     private val FLUTTER_BRIDGE_CHANNEL = "flutter_bridge"
     private val LOG_CHANNEL = "log_service"
     private val WEBVIEW_CHANNEL = "nyanya/webview"
+    private val DEEP_LINK_CHANNEL = "deep_link"
+    
+    private var deepLinkChannel: MethodChannel? = null
+    private var initialDeepLink: String? = null
 
     private val REQUEST_CODE_BYDAUTO_PERMISSIONS = 1001
     private val INSTALL_PERMISSION_REQUEST_CODE = 1002
@@ -594,6 +598,26 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+
+        // Deep Link Channel
+        deepLinkChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEEP_LINK_CHANNEL)
+        deepLinkChannel?.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getInitialLink" -> {
+                    result.success(initialDeepLink)
+                    initialDeepLink = null
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+        
+        // 如果有初始 deep link，发送给 Flutter
+        initialDeepLink?.let {
+            deepLinkChannel?.invokeMethod("onDeepLink", it)
+            initialDeepLink = null
+        }
     }
 
     private fun getSystemWebViewVersion(): String {
@@ -877,6 +901,28 @@ class MainActivity : FlutterActivity() {
         }
 
         window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN)
+        
+        // 处理 deep link
+        handleDeepLink(intent)
+    }
+    
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleDeepLink(intent)
+    }
+    
+    private fun handleDeepLink(intent: Intent?) {
+        intent?.data?.let { uri ->
+            val url = uri.toString()
+            sendLog("app", "Deep link received: $url")
+            
+            if (deepLinkChannel == null) {
+                initialDeepLink = url
+                sendLog("app", "Deep link saved for later: $url")
+            } else {
+                deepLinkChannel?.invokeMethod("onDeepLink", url)
+            }
+        }
     }
 
     override fun onResume() {

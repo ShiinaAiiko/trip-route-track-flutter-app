@@ -14,6 +14,7 @@ import 'package:archive/archive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:nyanya_webview/nyanya_webview.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import 'bridge_message.dart';
 import 'services/keep_awake_service.dart';
 import 'services/background_service.dart';
@@ -23,6 +24,7 @@ import 'services/vehicle_service.dart';
 import 'services/update_service.dart';
 import 'services/log_service.dart';
 import 'services/engine_manager.dart';
+import 'services/deep_link_service.dart';
 
 typedef MessageHandler = void Function(BridgeMessage message);
 typedef FlutterMethodCallHandler = void Function(MethodCall call);
@@ -100,6 +102,7 @@ class BridgeController {
     await _logService.init();
     _setupCarDataListener();
     _setupNotificationClickCallback();
+    _setupDeepLinkListener();
   }
 
   void _setupNotificationClickCallback() {
@@ -112,6 +115,26 @@ class BridgeController {
           {
             'clickActionType': clickActionType ?? '',
             'clickActionUrl': clickActionUrl,
+          },
+        );
+      }
+    });
+  }
+
+  void _setupDeepLinkListener() {
+    DeepLinkService().init(callback: (data) {
+      print('[Bridge] Deep link received: $data');
+      
+      // 提取 OAuth 回调参数
+      final url = data['url'] as String?;
+      final queryParameters = data['queryParameters'] as Map<String, dynamic>?;
+      
+      if (url != null) {
+        sendMessage(
+          'deepLink',
+          {
+            'url': url,
+            'queryParameters': queryParameters ?? {},
           },
         );
       }
@@ -1209,6 +1232,7 @@ class BridgeController {
         'sessionId': sessionId,
         'webViewVersion': webViewVersion,
         'availableEngines': availableEngines,
+        'packageName': packageInfo.packageName, // 包名（应用ID）
       });
     } catch (e) {
       sendMessage('appConfig', {
@@ -1220,6 +1244,7 @@ class BridgeController {
         'sessionId': sessionId,
         'webViewVersion': 0,
         'availableEngines': ['gecko'], // 默认只提供 gecko 作为备选
+        'packageName': 'unknown',
       });
     }
   }
@@ -1707,7 +1732,7 @@ class BridgeController {
       // 提取 bridgeId
       final bridgeId = message.bridgeId;
 
-      print('message.type ${message.type}, sessionId: ${message.sessionId}');
+      print('NyaNyaOpenURL message.type ${message.type}, sessionId: ${message.sessionId}');
       // 标记是否需要分发消息（默认需要，除了特殊情况）
       bool shouldDispatch = true;
 
@@ -1859,6 +1884,13 @@ class BridgeController {
           final type = message.payload as String?;
           if (type != null) {
             _handleThirdPartyLogin(type,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        case 'openInBrowser':
+          final url = message.payload as String?;
+          if (url != null) {
+            _handleOpenInBrowser(url,
                 bridgeId: bridgeId, sessionId: finalSessionId);
           }
           break;
@@ -2019,6 +2051,59 @@ class BridgeController {
   static const String loginTypeGoogle = 'google';
   static const String loginTypeQq = 'qq';
   static const String loginTypeGithub = 'github';
+
+  // 打开浏览器处理
+  Future<void> _handleOpenInBrowser(String url,
+      {String? bridgeId, String? sessionId}) async {
+    print('[NyaNyaOpenURL Bridge] Open in browser requested: $url');
+
+    try {
+      // 清理 URL：移除首尾的反引号、空格、引号等无效字符
+      String cleanedUrl = url.trim();
+      
+      cleanedUrl = cleanedUrl.replaceAll(RegExp(r'`'), '');
+      
+      print('[NyaNyaOpenURL Bridge] Cleaned URL: $cleanedUrl');
+      
+      if (cleanedUrl.isEmpty) {
+        throw Exception('URL is empty after cleaning');
+      }
+      
+      if (await canLaunchUrlString(cleanedUrl)) {
+        await launchUrlString(cleanedUrl, mode: LaunchMode.externalApplication);
+        
+        sendMessage(
+            'openInBrowser',
+            {
+              'success': true,
+              'url': cleanedUrl,
+            },
+            bridgeId: bridgeId,
+            sessionId: sessionId);
+      } else {
+        sendMessage(
+            'openInBrowser',
+            {
+              'success': false,
+              'error': 'Cannot launch URL',
+              'url': cleanedUrl,
+            },
+            bridgeId: bridgeId,
+            sessionId: sessionId);
+      }
+    } catch (e) {
+      print('[Bridge] Error opening in browser: $e');
+      sendMessage(
+          'openInBrowser',
+          {
+            'success': false,
+            'error': e.toString(),
+            'url': url,
+          },
+          bridgeId: bridgeId,
+          sessionId: sessionId);
+    }
+  }
 
   // 第三方登录处理
   Future<void> _handleThirdPartyLogin(String type,

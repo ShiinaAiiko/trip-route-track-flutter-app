@@ -94,11 +94,13 @@ android {
             versionNameSuffix "-dev"
             buildConfigField "String", "GOOGLE_CLIENT_ID", "\"${getEnvValue("GOOGLE_CLIENT_ID_DEV", "YOUR_DEV_GOOGLE_CLIENT_ID")}\""
             buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", "\"${getEnvValue("GOOGLE_WEB_CLIENT_ID", "YOUR_WEB_CLIENT_ID")}\""
+            manifestPlaceholders = [oauthScheme: "tripappdev"]
         }
         prod {
             dimension "environment"
             buildConfigField "String", "GOOGLE_CLIENT_ID", "\"${getEnvValue("GOOGLE_CLIENT_ID_PROD", "YOUR_PROD_GOOGLE_CLIENT_ID")}\""
             buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", "\"${getEnvValue("GOOGLE_WEB_CLIENT_ID", "YOUR_WEB_CLIENT_ID")}\""
+            manifestPlaceholders = [oauthScheme: "tripapp"]
         }
     }
 

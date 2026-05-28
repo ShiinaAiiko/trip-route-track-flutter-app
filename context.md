@@ -1592,56 +1592,6 @@ bridge.on('carData', (data: CarData) => {
 bridge.on('speed', (data) => { ... });
 ```
 
-### 前端车机数据模拟测试
-
-**功能概述**：在前端开发环境中模拟真实车机数据输出，无需依赖真实车辆
-
-**实现位置**：`web/plugins/nyanyaWebJsBridge/vehicle/test.ts`
-
-**使用方法**：
-```typescript
-// 启动测试
-vehicle.startTest();
-
-// 停止测试（可选）
-(window as any).stopCarTest();
-```
-
-**模拟内容**：
-- 完整的 18 个分类数据
-- 真实的驾驶行为（加速、减速、电量消耗、充电等）
-- 环境变化（光线、温度、PM2.5 等）
-- 不同频率的数据更新（高频 100ms、中频 1s、低频 3s）
-
-**默认数据**：
-- 车速：0-120 km/h
-- 电量：30-100%
-- 油量：0-100%
-- 环境温度：-10°C - 40°C
-- PM2.5：0-200 μg/m³
-
-**关键代码位置**：
-- `web/plugins/nyanyaWebJsBridge/vehicle/test.ts` - 模拟实现
-- `web/plugins/nyanyaWebJsBridge/vehicle/index.ts` - 入口集成
-
-### 关键代码位置
-
-**前端**：
-- `web/plugins/nyanyaWebJsBridge/vehicle/` - 所有车辆数据服务模块
-- `web/plugins/nyanyaWebJsBridge/nyanyaWebJsBridge.ts` - JS Bridge 核心
-- `web/plugins/nyanyaWebJsBridge/vehicle/test.ts` - 模拟测试
-
-**Flutter**：
-- `modules/flutter_bridge/lib/src/bridge_controller.dart` - 桥接控制器
-- `modules/flutter_bridge/lib/src/services/vehicle_service.dart` - 车辆服务管理
-- `modules/flutter_bridge/lib/src/services/vehicle/` - 各分类独立 service
-
-**Android**：
-- `android/app/src/main/kotlin/club/aiiko/trip/BYDAutoVehicleService.kt` - 比亚迪车辆服务
-- `android/app/src/main/kotlin/club/aiiko/trip/BydApiReflectHelper.kt` - 反射工具
-
----
-
 ## 当前未解决的问题
 
 1. **比亚迪车机 API 数据获取**：
