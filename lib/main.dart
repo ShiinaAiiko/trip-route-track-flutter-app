@@ -11,6 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 // import 'package:flutter_foreground_task/flutter_foreground_task.dart'; // 暂时禁用
 import 'local_server.dart';
 import 'components/components.dart';
@@ -115,6 +116,9 @@ Future<void> _showNotification(String title, String body) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 加载环境变量（从 assets 中读取）
+  await dotenv.load(fileName: '.env');
 
   // await FileLogService().init();
 

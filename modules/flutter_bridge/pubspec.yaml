@@ -21,7 +21,7 @@ dependencies:
   permission_handler: ^11.3.1
   nyanya_webview:
     path: ../../../../../lib/nyanya-webview
-
+  tencent_kit: ^6.2.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

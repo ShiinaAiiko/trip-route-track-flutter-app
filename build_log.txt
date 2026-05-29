@@ -1,0 +1,19 @@
+Flutter assets will be downloaded from https://storage.flutter-io.cn. Make sure you trust this source!
+
+Running Gradle task 'assembleDevDebug'...                       
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:processDevDebugMainManifest'.
+> com.android.manifmerger.ManifestMerger2$MergeFailureException: Error parsing /home/shiina_aiiko/Code/ShiinaAiikoDevWorkspace/OpenSourceProject/nyanya/nyanya-trip-route-track/trip-route-track-flutter-app/android/app/src/main/AndroidManifest.xml
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 2s
+Running Gradle task 'assembleDevDebug'...                        2,388ms
+Gradle task assembleDevDebug failed with exit code 1

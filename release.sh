@@ -7,7 +7,7 @@ version="v1.0.13"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
-allowMethods=("addVersion build:new build:old install adb dev run stop protos start build buildDev setVersion")
+allowMethods=("addVersion build:new build:old install adb dev run stop protos start build buildDev setVersion profile profileDev")
 
 # 加载环境变量
 loadEnv() {
@@ -205,6 +205,44 @@ buildDev() {
 	loadEnv
 	setGoogleClientId "dev"
 	_build "dev"
+}
+
+profile() {
+	echo "-> 启动生产环境性能测试模式"
+	loadEnv
+	setGoogleClientId "prod"
+	setVersion
+	_runProfile "prod"
+}
+
+profileDev() {
+	echo "-> 启动开发环境性能测试模式"
+	loadEnv
+	setGoogleClientId "dev"
+	setVersion
+	_runProfile "dev"
+}
+
+_runProfile() {
+	flavor="$1"
+	echo "-> 更新 pubspec.yaml 的 assets 配置..."
+	"$DIR/update_flutter_assets.sh"
+
+	AUTO_DEVICE=$(flutter devices | grep "mobile" | awk -F '•' '{print $2}' | tr -d ' ')
+
+	echo "-> 性能测试模式已启动！"
+	echo "提示：打开 DevTools 分析性能数据"
+	echo "      快捷键: Ctrl+Shift+P (VS Code) 或访问 http://localhost:9100"
+	echo "      启动后查看终端输出获取完整 DevTools 地址"
+	echo ""
+
+	if [ -z "$AUTO_DEVICE" ]; then
+		echo "警告：没发现安卓手机，将尝试默认模式..."
+		flutter run --profile --flavor "$flavor"
+	else
+		echo "发现真机：$AUTO_DEVICE，启动性能测试模式..."
+		flutter run -d "$AUTO_DEVICE" --profile --flavor "$flavor" --no-dds
+	fi
 }
 
 _build() {

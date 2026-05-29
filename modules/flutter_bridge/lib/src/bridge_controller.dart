@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -15,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:nyanya_webview/nyanya_webview.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import 'package:tencent_kit/tencent_kit.dart';
 import 'bridge_message.dart';
 import 'services/keep_awake_service.dart';
 import 'services/background_service.dart';
@@ -2111,30 +2113,116 @@ class BridgeController {
     print('[Bridge] Third party login requested: $type');
 
     try {
-      const MethodChannel channel = MethodChannel('flutter_bridge');
-      final result =
-          await channel.invokeMethod('thirdPartyLogin', {'type': type});
+      if (type == 'qq') {
+        await _handleQQLogin(bridgeId: bridgeId, sessionId: sessionId);
+      } else {
+        const MethodChannel channel = MethodChannel('flutter_bridge');
+        final result =
+            await channel.invokeMethod('thirdPartyLogin', {'type': type});
 
-      print('[Bridge] Third party login result: $result');
+        print('[Bridge] Third party login result: $result');
 
-      final Map<String, dynamic> resultMap =
-          Map<String, dynamic>.from(result as Map);
-      final bool success = resultMap['success'] as bool;
+        final Map<String, dynamic> resultMap =
+            Map<String, dynamic>.from(result as Map);
+        final bool success = resultMap['success'] as bool;
 
-      if (success) {
+        if (success) {
+          sendMessage(
+              'thirdPartyLogin',
+              {
+                'success': true,
+                'data': {
+                  'type': type,
+                  'idToken': resultMap['idToken'],
+                  'accessToken': resultMap['accessToken'],
+                  'user': {
+                    'id': resultMap['userId'],
+                    'name': resultMap['userName'],
+                    'email': resultMap['userEmail'],
+                    'avatar': resultMap['userAvatar'],
+                  },
+                },
+              },
+              bridgeId: bridgeId,
+              sessionId: sessionId);
+        } else {
+          sendMessage(
+              'thirdPartyLogin',
+              {
+                'success': false,
+                'error': resultMap['error'] as String? ?? 'Login failed',
+              },
+              bridgeId: bridgeId,
+              sessionId: sessionId);
+        }
+      }
+    } catch (e) {
+      print('[Bridge] Third party login error: $e');
+      sendMessage(
+          'thirdPartyLogin',
+          {
+            'success': false,
+            'error': e.toString(),
+          },
+          bridgeId: bridgeId,
+          sessionId: sessionId);
+    }
+  }
+
+  // QQ 登录处理（Flutter端实现）
+  Future<void> _handleQQLogin({String? bridgeId, String? sessionId}) async {
+    print('[Bridge] QQ login requested');
+
+    try {
+      final String? qqAppId = dotenv.env['QQ_APP_ID'];
+      final String? qqUniversalLink = dotenv.env['QQ_UNIVERSAL_LINK'];
+
+      if (qqAppId == null || qqAppId.isEmpty || qqAppId == 'your_qq_app_id_here') {
+        throw Exception('QQ_APP_ID not configured');
+      }
+
+      await TencentKitPlatform.instance.registerApp(
+        appId: qqAppId,
+        universalLink: qqUniversalLink?.isNotEmpty == true ? qqUniversalLink : null,
+      );
+
+      final Completer<TencentLoginResp> loginCompleter = Completer<TencentLoginResp>();
+
+      StreamSubscription<TencentResp>? subscription;
+      subscription = TencentKitPlatform.instance.respStream().listen((resp) {
+        if (resp is TencentLoginResp) {
+          subscription?.cancel();
+          if (!loginCompleter.isCompleted) {
+            loginCompleter.complete(resp);
+          }
+        }
+      });
+
+      await TencentKitPlatform.instance.login(
+        scope: <String>[TencentScope.kGetSimpleUserInfo],
+      );
+
+      final TencentLoginResp loginRespResult = await loginCompleter.future.timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw Exception('QQ login timeout'),
+      );
+
+      print('[Bridge] QQ login result: ${loginRespResult.ret}');
+
+      if (loginRespResult.isSuccessful == true) {
         sendMessage(
             'thirdPartyLogin',
             {
               'success': true,
               'data': {
-                'type': type,
-                'idToken': resultMap['idToken'],
-                'accessToken': resultMap['accessToken'],
+                'type': 'qq',
+                'idToken': loginRespResult.openid,
+                'accessToken': loginRespResult.accessToken,
                 'user': {
-                  'id': resultMap['userId'],
-                  'name': resultMap['userName'],
-                  'email': resultMap['userEmail'],
-                  'avatar': resultMap['userAvatar'],
+                  'id': loginRespResult.openid,
+                  'name': '',
+                  'email': '',
+                  'avatar': '',
                 },
               },
             },
@@ -2145,13 +2233,13 @@ class BridgeController {
             'thirdPartyLogin',
             {
               'success': false,
-              'error': resultMap['error'] as String? ?? 'Login failed',
+              'error': loginRespResult.msg ?? 'QQ login failed',
             },
             bridgeId: bridgeId,
             sessionId: sessionId);
       }
     } catch (e) {
-      print('[Bridge] Third party login error: $e');
+      print('[Bridge] QQ login error: $e');
       sendMessage(
           'thirdPartyLogin',
           {

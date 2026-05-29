@@ -94,13 +94,17 @@ android {
             versionNameSuffix "-dev"
             buildConfigField "String", "GOOGLE_CLIENT_ID", "\"${getEnvValue("GOOGLE_CLIENT_ID_DEV", "YOUR_DEV_GOOGLE_CLIENT_ID")}\""
             buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", "\"${getEnvValue("GOOGLE_WEB_CLIENT_ID", "YOUR_WEB_CLIENT_ID")}\""
-            manifestPlaceholders = [oauthScheme: "tripappdev"]
+            buildConfigField "String", "QQ_APP_ID", "\"${getEnvValue("QQ_APP_ID", "YOUR_QQ_APP_ID")}\""
+            buildConfigField "String", "QQ_APP_KEY", "\"${getEnvValue("QQ_APP_KEY", "YOUR_QQ_APP_KEY")}\""
+            manifestPlaceholders = [oauthScheme: "tripappdev", qqAppId: getEnvValue("QQ_APP_ID", "YOUR_QQ_APP_ID")]
         }
         prod {
             dimension "environment"
             buildConfigField "String", "GOOGLE_CLIENT_ID", "\"${getEnvValue("GOOGLE_CLIENT_ID_PROD", "YOUR_PROD_GOOGLE_CLIENT_ID")}\""
             buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", "\"${getEnvValue("GOOGLE_WEB_CLIENT_ID", "YOUR_WEB_CLIENT_ID")}\""
-            manifestPlaceholders = [oauthScheme: "tripapp"]
+            buildConfigField "String", "QQ_APP_ID", "\"${getEnvValue("QQ_APP_ID", "YOUR_QQ_APP_ID")}\""
+            buildConfigField "String", "QQ_APP_KEY", "\"${getEnvValue("QQ_APP_KEY", "YOUR_QQ_APP_KEY")}\""
+            manifestPlaceholders = [oauthScheme: "tripapp", qqAppId: getEnvValue("QQ_APP_ID", "YOUR_QQ_APP_ID")]
         }
     }
 

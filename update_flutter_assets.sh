@@ -14,6 +14,8 @@ update_assets() {
     dirs=$(find "assets/out" -type d | sort)
 
     new_assets_section="  assets:"
+    # 保留 .env 文件配置（用于 flutter_dotenv）
+    new_assets_section+=$'\n'"    - .env"
 
     while IFS= read -r dir; do
         asset_path=$(echo "$dir" | sed 's|$|/|')
