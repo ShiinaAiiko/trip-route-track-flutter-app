@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.13+483
+version: 1.0.13+486
 
 tencent_kit:
   app_id: 1904094302
@@ -58,20 +58,20 @@ flutter:
     - .env
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/HpLATCO6mJZU7gVWV9MCQ/
+    - assets/out/_next/7bbchfQyUG_0mcR7Uxp0r/
     - assets/out/_next/data/
-    - assets/out/_next/data/HpLATCO6mJZU7gVWV9MCQ/
-    - assets/out/_next/data/HpLATCO6mJZU7gVWV9MCQ/en-US/
-    - assets/out/_next/data/HpLATCO6mJZU7gVWV9MCQ/en-US/journeyMemories/
-    - assets/out/_next/data/HpLATCO6mJZU7gVWV9MCQ/en-US/trip/
-    - assets/out/_next/data/HpLATCO6mJZU7gVWV9MCQ/zh-CN/
-    - assets/out/_next/data/HpLATCO6mJZU7gVWV9MCQ/zh-CN/journeyMemories/
-    - assets/out/_next/data/HpLATCO6mJZU7gVWV9MCQ/zh-CN/trip/
-    - assets/out/_next/data/HpLATCO6mJZU7gVWV9MCQ/zh-TW/
-    - assets/out/_next/data/HpLATCO6mJZU7gVWV9MCQ/zh-TW/journeyMemories/
-    - assets/out/_next/data/HpLATCO6mJZU7gVWV9MCQ/zh-TW/trip/
+    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/
+    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/en-US/
+    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/en-US/journeyMemories/
+    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/en-US/trip/
+    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-CN/
+    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-CN/journeyMemories/
+    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-CN/trip/
+    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-TW/
+    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-TW/journeyMemories/
+    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/HpLATCO6mJZU7gVWV9MCQ/
+    - assets/out/_next/static/7bbchfQyUG_0mcR7Uxp0r/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/

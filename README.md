@@ -2,6 +2,11 @@
 
 这是一个使用 Flutter 开发的行程路线轨迹记录应用，主要功能是加载本地静态网页，提供 GPS 定位、车辆数据获取、热更新等功能。
 
+## 🌐 在线体验
+
+- **Web 应用**：https://trip.aiiko.club/
+- **App 下载**：https://trip.aiiko.club/download
+
 ## 当前版本
 
 **v1.0.13** (2026-05-26)
@@ -177,3 +182,14 @@
 |----------|----------|
 | 开发环境 | Dev 行程路线轨迹 |
 | 生产环境 | 行程路线轨迹 |
+
+## 🔗 相关链接
+
+- [在线体验](https://trip.aiiko.club/)
+- [App 下载](https://trip.aiiko.club/download)
+- [Web 前端](../trip-route-track-web)
+- [后端服务](../trip-route-track-server)
+
+## 📄 License
+
+MIT

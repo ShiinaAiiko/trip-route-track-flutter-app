@@ -126,11 +126,11 @@ class BridgeController {
   void _setupDeepLinkListener() {
     DeepLinkService().init(callback: (data) {
       print('[Bridge] Deep link received: $data');
-      
+
       // 提取 OAuth 回调参数
       final url = data['url'] as String?;
       final queryParameters = data['queryParameters'] as Map<String, dynamic>?;
-      
+
       if (url != null) {
         sendMessage(
           'deepLink',
@@ -285,7 +285,8 @@ class BridgeController {
     }
   }
 
-  Future<void> handleWebMessage(String messageString, {String? sessionId}) async {
+  Future<void> handleWebMessage(String messageString,
+      {String? sessionId}) async {
     print(
         '[FlutterBridge] handleWebMessage from session: $sessionId, message: $messageString');
 
@@ -337,8 +338,8 @@ class BridgeController {
     // final jsonString = jsonEncode(message.toJson());
 
     // await targetChannel.invokeMethod('postMessage', {
-  //   'message': jsonString,
-  // });
+    //   'message': jsonString,
+    // });
   }
 
   // ============ 车辆数据统一接口处理方法 ============
@@ -439,13 +440,16 @@ class BridgeController {
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       default:
-        print('[BridgeController] _handleVehicleGet unknown category: $category');
+        print(
+            '[BridgeController] _handleVehicleGet unknown category: $category');
     }
   }
 
   /// 处理车辆数据监听请求
-  Future<void> _handleVehicleEnableListener(String category, bool enabled) async {
-    print('[BridgeController] _handleVehicleEnableListener category: $category, enabled: $enabled');
+  Future<void> _handleVehicleEnableListener(
+      String category, bool enabled) async {
+    print(
+        '[BridgeController] _handleVehicleEnableListener category: $category, enabled: $enabled');
     switch (category) {
       case 'speed':
         await _vehicleService.services.speed.enableListener(enabled);
@@ -522,14 +526,16 @@ class BridgeController {
         await _vehicleService.services.light.enableListener(enabled);
         break;
       default:
-        print('[BridgeController] _handleVehicleEnableListener unknown category: $category');
+        print(
+            '[BridgeController] _handleVehicleEnableListener unknown category: $category');
     }
   }
 
   /// 处理车辆数据设置请求
   Future<void> _handleVehicleSet(String type, String field, dynamic value,
       {String? bridgeId, String? sessionId}) async {
-    print('[BridgeController] _handleVehicleSet type: $type, field: $field, value: $value');
+    print(
+        '[BridgeController] _handleVehicleSet type: $type, field: $field, value: $value');
     bool success = false;
     switch (type) {
       case 'speed':
@@ -863,7 +869,8 @@ class BridgeController {
       // 处理BYD权限
       if (bydPermissions.isNotEmpty) {
         try {
-          final bydResults = await _vehicleService.checkBydPermissions(bydPermissions);
+          final bydResults =
+              await _vehicleService.checkBydPermissions(bydPermissions);
           results.addAll(bydResults);
         } catch (e) {
           for (final type in bydPermissions) {
@@ -903,7 +910,7 @@ class BridgeController {
       if (standardPermissions.isNotEmpty) {
         final List<Permission> validPermissions = [];
         final List<String> validPermissionTypes = [];
-        
+
         // 先收集有效的权限
         for (final type in standardPermissions) {
           try {
@@ -914,7 +921,7 @@ class BridgeController {
             allGranted = false;
           }
         }
-        
+
         // 请求有效的权限
         if (validPermissions.isNotEmpty) {
           final requestResults = await validPermissions.request();
@@ -938,7 +945,8 @@ class BridgeController {
         try {
           await _vehicleService.requestBydPermissions();
           // 请求后再次检查权限状态
-          final bydResults = await _vehicleService.checkBydPermissions(bydPermissions);
+          final bydResults =
+              await _vehicleService.checkBydPermissions(bydPermissions);
           results.addAll(bydResults);
           // 检查BYD权限是否全部授予
           for (final entry in bydResults.entries) {
@@ -955,8 +963,8 @@ class BridgeController {
         }
       }
 
-      sendMessage('requestPermissions',
-          {'success': allGranted, 'results': results},
+      sendMessage(
+          'requestPermissions', {'success': allGranted, 'results': results},
           bridgeId: bridgeId, sessionId: sessionId);
     } catch (e) {
       sendMessage('requestPermissions',
@@ -1716,7 +1724,8 @@ class BridgeController {
     _externalHandler?.call(call);
   }
 
-  Future<void> _handleWebMessage(String messageString, {String? sessionId}) async {
+  Future<void> _handleWebMessage(String messageString,
+      {String? sessionId}) async {
     try {
       final Map<String, dynamic> json =
           jsonDecode(messageString) as Map<String, dynamic>;
@@ -1734,7 +1743,8 @@ class BridgeController {
       // 提取 bridgeId
       final bridgeId = message.bridgeId;
 
-      print('NyaNyaOpenURL message.type ${message.type}, sessionId: ${message.sessionId}');
+      print(
+          'NyaNyaOpenURL message.type ${message.type}, sessionId: ${message.sessionId}');
       // 标记是否需要分发消息（默认需要，除了特殊情况）
       bool shouldDispatch = true;
 
@@ -1774,7 +1784,8 @@ class BridgeController {
         case 'get':
           final getCategory = message.payload as String?;
           if (getCategory != null) {
-            _handleVehicleGet(getCategory, bridgeId: bridgeId, sessionId: finalSessionId);
+            _handleVehicleGet(getCategory,
+                bridgeId: bridgeId, sessionId: finalSessionId);
           }
           break;
         case 'enableListener':
@@ -1794,7 +1805,8 @@ class BridgeController {
             final field = setPayload['field'] as String?;
             final value = setPayload['value'];
             if (type != null && field != null) {
-              _handleVehicleSet(type, field, value, bridgeId: bridgeId, sessionId: finalSessionId);
+              _handleVehicleSet(type, field, value,
+                  bridgeId: bridgeId, sessionId: finalSessionId);
             }
           }
           break;
@@ -1804,7 +1816,8 @@ class BridgeController {
             final category = hasFeaturePayload['category'] as String?;
             final feature = hasFeaturePayload['feature'] as String?;
             if (category == 'vehicleset' && feature != null) {
-              final result = await _vehicleService.services.vehicleset.hasFeature(feature);
+              final result =
+                  await _vehicleService.services.vehicleset.hasFeature(feature);
               final responseKey = 'hasFeature:${message.bridgeId ?? ''}';
               sendMessage(responseKey, result,
                   bridgeId: bridgeId, sessionId: finalSessionId);
@@ -2062,18 +2075,18 @@ class BridgeController {
     try {
       // 清理 URL：移除首尾的反引号、空格、引号等无效字符
       String cleanedUrl = url.trim();
-      
+
       cleanedUrl = cleanedUrl.replaceAll(RegExp(r'`'), '');
-      
+
       print('[NyaNyaOpenURL Bridge] Cleaned URL: $cleanedUrl');
-      
+
       if (cleanedUrl.isEmpty) {
         throw Exception('URL is empty after cleaning');
       }
-      
+
       if (await canLaunchUrlString(cleanedUrl)) {
         await launchUrlString(cleanedUrl, mode: LaunchMode.externalApplication);
-        
+
         sendMessage(
             'openInBrowser',
             {
@@ -2177,16 +2190,20 @@ class BridgeController {
       final String? qqAppId = dotenv.env['QQ_APP_ID'];
       final String? qqUniversalLink = dotenv.env['QQ_UNIVERSAL_LINK'];
 
-      if (qqAppId == null || qqAppId.isEmpty || qqAppId == 'your_qq_app_id_here') {
+      if (qqAppId == null ||
+          qqAppId.isEmpty ||
+          qqAppId == 'your_qq_app_id_here') {
         throw Exception('QQ_APP_ID not configured');
       }
 
       await TencentKitPlatform.instance.registerApp(
         appId: qqAppId,
-        universalLink: qqUniversalLink?.isNotEmpty == true ? qqUniversalLink : null,
+        universalLink:
+            qqUniversalLink?.isNotEmpty == true ? qqUniversalLink : null,
       );
 
-      final Completer<TencentLoginResp> loginCompleter = Completer<TencentLoginResp>();
+      final Completer<TencentLoginResp> loginCompleter =
+          Completer<TencentLoginResp>();
 
       StreamSubscription<TencentResp>? subscription;
       subscription = TencentKitPlatform.instance.respStream().listen((resp) {
@@ -2202,7 +2219,8 @@ class BridgeController {
         scope: <String>[TencentScope.kGetSimpleUserInfo],
       );
 
-      final TencentLoginResp loginRespResult = await loginCompleter.future.timeout(
+      final TencentLoginResp loginRespResult =
+          await loginCompleter.future.timeout(
         const Duration(seconds: 30),
         onTimeout: () => throw Exception('QQ login timeout'),
       );
