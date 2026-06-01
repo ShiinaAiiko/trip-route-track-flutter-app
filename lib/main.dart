@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:path_provider/path_provider.dart';
 // import 'package:flutter_foreground_task/flutter_foreground_task.dart'; // 暂时禁用
 import 'local_server.dart';
 import 'components/components.dart';
@@ -22,6 +24,7 @@ import 'package:flutter_bridge/src/services/file_log_service.dart';
 import 'package:i18n/i18n.dart';
 import 'package:nyanya_webview/nyanya_webview.dart';
 import 'package:flutter_bridge/src/services/engine_manager.dart';
+import 'package:app_update/app_update.dart' as app_update;
 
 String? _initialUrl;
 String _appTitle = '';
@@ -632,20 +635,30 @@ class _WebViewContainerState extends State<WebViewContainer>
     BridgeController().on('closeLoading', _closeLoadingHandler);
 
     BridgeController().setUpdateCheckingCallback(() {
-      _showCheckingUpdateDialog();
+      app_update.UpdateDialogManager.showCheckingUpdateDialog(context, BridgeController().i18nService);
     });
 
     BridgeController().setUpdateCheckCallback(
         (versionInfo, currentVersion, showCheckingNotification) {
       if (showCheckingNotification) {
-        _closeCheckingUpdateDialog();
+        app_update.UpdateDialogManager.closeCheckingUpdateDialog(context);
       }
       if (versionInfo != null) {
-        _showUpdateAvailableDialog(
-            versionInfo.version, versionInfo.downloadUrl);
+        app_update.UpdateDialogManager.showUpdateAvailableDialog(
+          context: context,
+          i18n: BridgeController().i18nService,
+          version: versionInfo.version,
+          downloadUrl: versionInfo.downloadUrl,
+          onSkip: () {
+            BridgeController().skipUpdate(versionInfo.version);
+          },
+          onUpdateNow: () {
+            _startAppUpdate(versionInfo.downloadUrl, versionInfo.version);
+          },
+        );
       } else {
         if (showCheckingNotification) {
-          _showNoUpdateDialog(currentVersion);
+          app_update.UpdateDialogManager.showNoUpdateDialog(context, BridgeController().i18nService, currentVersion);
         }
       }
     });
@@ -661,8 +674,6 @@ class _WebViewContainerState extends State<WebViewContainer>
       _closeLocalWebResourcesUpdateDialog();
     });
   }
-
-  bool _isCheckingUpdateDialogOpen = false;
 
   bool _isLocalWebResourcesUpdateDialogOpen = false;
   final ValueNotifier<int> _localWebResourcesUpdateProgress = ValueNotifier(0);
@@ -782,80 +793,254 @@ class _WebViewContainerState extends State<WebViewContainer>
     }
   }
 
-  void _showCheckingUpdateDialog() {
-    if (_isCheckingUpdateDialogOpen) return;
-    _isCheckingUpdateDialogOpen = true;
-    final i18n = BridgeController().i18nService;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Text(i18n.t('update_checking_title')),
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: 16),
-            Text(i18n.t('update_checking')),
-          ],
-        ),
-      ),
-    );
-  }
+  // 在 State 类中保存当前更新的上下文信息
+  String? _currentDownloadUrl;
+  String? _currentDownloadVersion;
+  bool? _currentDownloadHasExistingApk;
+  
+  // 静态持久化变量
+  static String? _staticCurrentDownloadUrl;
+  static String? _staticCurrentDownloadVersion;
+  static bool? _staticCurrentDownloadHasExistingApk;
+  
+  VoidCallback? _cachedNotificationTappedCallback; // 缓存通知点击回调
+  VoidCallback? _cachedInstallNotificationTappedCallback; // 缓存安装通知点击回调
 
-  void _closeCheckingUpdateDialog() {
-    if (_isCheckingUpdateDialogOpen) {
-      Navigator.of(context, rootNavigator: true).pop();
-      _isCheckingUpdateDialogOpen = false;
+  // 检查是否有完整APK的辅助函数
+  Future<File?> _checkExistingApkForVersion(String version) async {
+    try {
+      Directory? dir;
+      try {
+        dir = await getExternalStorageDirectory();
+      } catch (e) {
+        dir = await getApplicationDocumentsDirectory();
+      }
+      if (dir == null) return null;
+      
+      final apkPath = '${dir.path}/trip-route-track_$version.apk';
+      final file = File(apkPath);
+      if (await file.exists()) {
+        return file;
+      }
+      return null;
+    } catch (e) {
+      print('[AppUpdate] Failed to check existing APK: $e');
+      return null;
     }
   }
 
-  void _showUpdateAvailableDialog(String version, String downloadUrl) {
+  void _startAppUpdate(String downloadUrl, String version) async {
+    final appUpdateService = BridgeController().appUpdateService;
     final i18n = BridgeController().i18nService;
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(i18n.t('update_available', {'version': version})),
-        content: Text(i18n.t('update_available_content')),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              BridgeController().skipUpdate(version);
-            },
-            child: Text(i18n.t('update_skip')),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              BridgeController().startUpdate(downloadUrl, version);
-            },
-            child: Text(i18n.t('update_now')),
-          ),
-        ],
-      ),
-    );
-  }
 
-  void _showNoUpdateDialog(String currentVersion) {
-    final i18n = BridgeController().i18nService;
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(i18n.t('update_no_new_version_title')),
-        content: Text(i18n
-            .t('update_no_new_version_content', {'version': currentVersion})),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(i18n.t('confirm')),
-          ),
-        ],
-      ),
+    // 保存当前的下载信息（同时保存成员变量和静态变量）
+    _currentDownloadUrl = downloadUrl;
+    _currentDownloadVersion = version;
+    _staticCurrentDownloadUrl = downloadUrl;
+    _staticCurrentDownloadVersion = version;
+
+    // 先检查是否有完整APK
+    final existingApk = await _checkExistingApkForVersion(version);
+    final hasExistingApk = existingApk != null;
+    _currentDownloadHasExistingApk = hasExistingApk;
+    _staticCurrentDownloadHasExistingApk = hasExistingApk;
+    // 保存 APK 长度
+    int? existingApkLength = hasExistingApk ? existingApk!.lengthSync() : null;
+
+    // 设置下载进度通知点击回调 - 打开进度弹窗
+    _cachedNotificationTappedCallback = () {
+      print('[AppUpdate] Download progress notification tapped');
+      if (!app_update.UpdateDialogManager.isUpdateProgressDialogOpen) {
+        // 重新设置进度回调
+        appUpdateService.setProgressCallback((progress, receivedBytes, totalBytes) {
+          if (progress == 100) {
+            app_update.UpdateDialogManager.setDownloadComplete(totalBytes);
+          } else {
+            app_update.UpdateDialogManager.updateProgressValue(progress, receivedBytes, totalBytes);
+          }
+        });
+        
+        // 重新设置通知回调
+        appUpdateService.setNotificationTappedCallback(_cachedNotificationTappedCallback!);
+        
+        // 显示进度弹窗
+        app_update.UpdateDialogManager.showUpdateProgressDialog(
+          context: context,
+          i18n: i18n,
+          onBackgroundDownload: () {
+            // 后台下载，不清空进度回调
+          },
+          onStopUpdate: () async {
+            await appUpdateService.stopUpdate();
+          },
+          onInstallNow: () async {
+            await appUpdateService.installUpdate(i18n);
+          },
+          onLater: () {
+            // 下次再说
+            _currentDownloadUrl = null;
+            _currentDownloadVersion = null;
+            appUpdateService.clearProgressCallback();
+            appUpdateService.clearInstallRequestCallback();
+            appUpdateService.clearCompleteCallback();
+          },
+        );
+      }
+    };
+    appUpdateService.setNotificationTappedCallback(_cachedNotificationTappedCallback!);
+    
+    // 设置安装提示通知点击回调 - 打开安装弹窗
+    _cachedInstallNotificationTappedCallback = () async {
+      print('[AppUpdate] Install prompt notification tapped');
+      if (!app_update.UpdateDialogManager.isUpdateProgressDialogOpen) {
+        // 优先使用静态变量，然后使用成员变量
+        final versionToCheck = _staticCurrentDownloadVersion ?? _currentDownloadVersion;
+        
+        // 重新检查是否有完整APK（避免状态过期）
+        final freshExistingApk = versionToCheck != null
+            ? await _checkExistingApkForVersion(versionToCheck!)
+            : null;
+        final freshHasExistingApk = freshExistingApk != null;
+        final freshApkLength = freshHasExistingApk ? freshExistingApk!.lengthSync() : null;
+        
+        // 确保状态是下载完成
+        if (freshHasExistingApk && freshApkLength != null) {
+          print('[AppUpdate] Setting download complete from fresh APK (length: $freshApkLength)');
+          app_update.UpdateDialogManager.setDownloadComplete(freshApkLength);
+        } else {
+          print('[AppUpdate] Marking download complete');
+          app_update.UpdateDialogManager.markDownloadComplete();
+        }
+        
+        // 重新设置安装通知回调
+        appUpdateService.setInstallNotificationTappedCallback(_cachedInstallNotificationTappedCallback!);
+        
+        // 显示安装弹窗
+        app_update.UpdateDialogManager.showUpdateProgressDialog(
+          context: context,
+          i18n: i18n,
+          onBackgroundDownload: () {},
+          onStopUpdate: () async {},
+          onInstallNow: () async {
+            await appUpdateService.installUpdate(i18n);
+          },
+          onLater: () {
+            // 下次再说 - 不清除安装通知回调，不清除静态变量！
+            _currentDownloadUrl = null;
+            _currentDownloadVersion = null;
+            // 注意：不设置静态变量为 null！保留它们以便通知点击时使用
+            appUpdateService.clearProgressCallback();
+            appUpdateService.clearInstallRequestCallback();
+            appUpdateService.clearCompleteCallback();
+            // 注意：不调用 clearInstallNotificationTappedCallback，保留通知点击功能
+          },
+          resetState: false,
+        );
+      }
+    };
+    appUpdateService.setInstallNotificationTappedCallback(_cachedInstallNotificationTappedCallback!);
+
+    // 设置进度回调
+    appUpdateService.setProgressCallback((progress, receivedBytes, totalBytes) {
+      if (progress == 100) {
+        app_update.UpdateDialogManager.setDownloadComplete(totalBytes);
+      } else {
+        app_update.UpdateDialogManager.updateProgressValue(progress, receivedBytes, totalBytes);
+      }
+    });
+
+    // 设置安装请求回调
+    appUpdateService.setInstallRequestCallback(() {
+      // 下载完成，设置状态并重新显示弹框
+      final totalBytes = app_update.UpdateDialogManager.updateTotalBytes.value > 0 
+          ? app_update.UpdateDialogManager.updateTotalBytes.value 
+          : (existingApk != null ? existingApk.lengthSync() : 0);
+      app_update.UpdateDialogManager.setDownloadComplete(totalBytes);
+      
+      // 检查弹框是否关闭，如果关闭则重新打开
+      if (!app_update.UpdateDialogManager.isUpdateProgressDialogOpen) {
+        app_update.UpdateDialogManager.showUpdateProgressDialog(
+          context: context,
+          i18n: i18n,
+          onBackgroundDownload: () {},
+          onStopUpdate: () async {},
+          onInstallNow: () async {
+            await appUpdateService.installUpdate(i18n);
+          },
+          onLater: () {
+            // 下次再说 - 不清除安装通知回调，不清除静态变量！
+            _currentDownloadUrl = null;
+            _currentDownloadVersion = null;
+            // 注意：不设置静态变量为 null！保留它们以便通知点击时使用
+            appUpdateService.clearProgressCallback();
+            appUpdateService.clearInstallRequestCallback();
+            appUpdateService.clearCompleteCallback();
+            // 注意：不调用 clearInstallNotificationTappedCallback，保留通知点击功能
+          },
+          resetState: false,
+        );
+      }
+    });
+
+    // 设置完成回调
+    appUpdateService.setCompleteCallback((success, error) {
+      if (!success) {
+        app_update.UpdateDialogManager.closeUpdateProgressDialog(context);
+      }
+    });
+
+    // 先根据是否有完整APK决定怎么显示对话框
+    if (hasExistingApk) {
+      // 有完整APK，直接显示下载完成状态
+      final fileSize = existingApk!.lengthSync();
+      app_update.UpdateDialogManager.setDownloadComplete(fileSize);
+      app_update.UpdateDialogManager.showUpdateProgressDialog(
+        context: context,
+        i18n: i18n,
+        onBackgroundDownload: () {},
+        onStopUpdate: () async {},
+        onInstallNow: () async {
+          await appUpdateService.installUpdate(i18n);
+        },
+        onLater: () {
+          // 下次再说
+          _currentDownloadUrl = null;
+          _currentDownloadVersion = null;
+          appUpdateService.clearProgressCallback();
+          appUpdateService.clearInstallRequestCallback();
+          appUpdateService.clearCompleteCallback();
+        },
+        resetState: false,
+      );
+    } else {
+      // 没有完整APK，显示正常下载对话框并开始下载
+      app_update.UpdateDialogManager.showUpdateProgressDialog(
+        context: context,
+        i18n: i18n,
+        onBackgroundDownload: () {},
+        onStopUpdate: () async {
+          await appUpdateService.stopUpdate();
+        },
+        onInstallNow: () async {
+          await appUpdateService.installUpdate(i18n);
+        },
+        onLater: () {
+          // 下次再说
+          _currentDownloadUrl = null;
+          _currentDownloadVersion = null;
+          appUpdateService.clearProgressCallback();
+          appUpdateService.clearInstallRequestCallback();
+          appUpdateService.clearCompleteCallback();
+        },
+      );
+    }
+
+    // 开始下载
+    appUpdateService.startDownload(
+      downloadUrl: downloadUrl,
+      version: version,
+      i18nService: i18n,
+      autoInstall: false,
     );
   }
 

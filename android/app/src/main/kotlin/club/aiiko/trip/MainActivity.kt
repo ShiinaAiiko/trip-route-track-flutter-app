@@ -29,6 +29,7 @@ class MainActivity : FlutterActivity() {
     private val LOG_CHANNEL = "log_service"
     private val WEBVIEW_CHANNEL = "nyanya/webview"
     private val DEEP_LINK_CHANNEL = "deep_link"
+    private val QQ_CHANNEL = "qq_login"
     
     private var deepLinkChannel: MethodChannel? = null
     private var initialDeepLink: String? = null
@@ -131,6 +132,29 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> {
                     sendLog("app", "未实现的方法调用 (flutter_bridge): ${call.method}")
+                    result.notImplemented()
+                }
+            }
+        }
+
+        // QQ 登录权限授权
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, QQ_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "setPermissionGranted" -> {
+                    try {
+                        // 使用反射调用 QQ SDK 的 setIsPermissionGranted 方法
+                        val tencentClass = Class.forName("com.tencent.tauth.Tencent")
+                        val method = tencentClass.getMethod("setIsPermissionGranted", Boolean::class.javaPrimitiveType, String::class.java)
+                        method.invoke(null, true, Build.MODEL)
+                        sendLog("app", "QQ权限已授权: ${Build.MODEL}")
+                        result.success(true)
+                    } catch (e: Exception) {
+                        sendLog("app", "QQ权限授权失败: ${e.message}")
+                        result.success(false)
+                    }
+                }
+                else -> {
+                    sendLog("app", "未实现的QQ方法调用: ${call.method}")
                     result.notImplemented()
                 }
             }

@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.13+486
+version: 1.0.13+547
 
 tencent_kit:
   app_id: 1904094302
@@ -34,6 +34,8 @@ dependencies:
     path: modules/flutter_bridge
   i18n:
     path: modules/i18n
+  app_update:
+    path: modules/app_update
   nyanya_webview:
     git:
       url: https://github.com/ShiinaAiiko/nyanya-webview.git
@@ -58,20 +60,18 @@ flutter:
     - .env
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/7bbchfQyUG_0mcR7Uxp0r/
     - assets/out/_next/data/
-    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/
-    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/en-US/
-    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/en-US/journeyMemories/
-    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/en-US/trip/
-    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-CN/
-    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-CN/journeyMemories/
-    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-CN/trip/
-    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-TW/
-    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-TW/journeyMemories/
-    - assets/out/_next/data/7bbchfQyUG_0mcR7Uxp0r/zh-TW/trip/
+    - assets/out/_next/data/vH7rTMp1dXVOsj18XCsfF/
+    - assets/out/_next/data/vH7rTMp1dXVOsj18XCsfF/en-US/
+    - assets/out/_next/data/vH7rTMp1dXVOsj18XCsfF/en-US/journeyMemories/
+    - assets/out/_next/data/vH7rTMp1dXVOsj18XCsfF/en-US/trip/
+    - assets/out/_next/data/vH7rTMp1dXVOsj18XCsfF/zh-CN/
+    - assets/out/_next/data/vH7rTMp1dXVOsj18XCsfF/zh-CN/journeyMemories/
+    - assets/out/_next/data/vH7rTMp1dXVOsj18XCsfF/zh-CN/trip/
+    - assets/out/_next/data/vH7rTMp1dXVOsj18XCsfF/zh-TW/
+    - assets/out/_next/data/vH7rTMp1dXVOsj18XCsfF/zh-TW/journeyMemories/
+    - assets/out/_next/data/vH7rTMp1dXVOsj18XCsfF/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/7bbchfQyUG_0mcR7Uxp0r/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/
@@ -80,6 +80,8 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
+    - assets/out/_next/static/vH7rTMp1dXVOsj18XCsfF/
+    - assets/out/_next/vH7rTMp1dXVOsj18XCsfF/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/

@@ -6,5 +6,4 @@ export 'src/services/keep_awake_service.dart';
 export 'src/services/background_service.dart';
 export 'src/services/language_service.dart';
 export 'src/services/vehicle_service.dart';
-export 'src/services/update_service.dart';
 export 'src/services/notification_service.dart';

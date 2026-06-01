@@ -15,6 +15,12 @@ class NotificationService {
   Function? _onDownloadNotificationClick;
   bool _isDownloadComplete = false;
   Function(Map<String, dynamic>)? _onNotificationClickWithAction;
+  
+  // 通用通知点击回调映射（key: notificationId, value: callback）
+  final Map<int, VoidCallback> _notificationClickCallbacks = {};
+
+  // 进度通知点击配置存储（key: notificationId, value: {clickActionType, clickActionUrl}）
+  final Map<int, Map<String, String?>> _progressNotificationConfig = {};
 
   void setDownloadComplete(bool complete) {
     _isDownloadComplete = complete;
@@ -22,6 +28,16 @@ class NotificationService {
 
   void setNotificationClickCallback(Function(Map<String, dynamic>) callback) {
     _onNotificationClickWithAction = callback;
+  }
+
+  /// 注册特定通知ID的点击回调
+  void registerNotificationClickCallback(int notificationId, VoidCallback callback) {
+    _notificationClickCallbacks[notificationId] = callback;
+  }
+
+  /// 取消注册特定通知ID的点击回调
+  void unregisterNotificationClickCallback(int notificationId) {
+    _notificationClickCallbacks.remove(notificationId);
   }
 
   Future<void> init() async {
@@ -52,27 +68,37 @@ class NotificationService {
   }
 
   void _onNotificationClicked(NotificationResponse response) {
+    print('[NotificationService] Notification tapped - id: ${response.id}');
+    
+    // 优先查找特定通知ID的回调
+    final specificCallback = _notificationClickCallbacks[response.id];
+    if (specificCallback != null) {
+      print('[NotificationService] Found specific callback for notification id: ${response.id}');
+      specificCallback();
+    }
+    
+    // 原有下载通知处理（ID: 1001）
     if (response.id == 1001 && _onDownloadNotificationClick != null && _isDownloadComplete) {
       _onDownloadNotificationClick!();
-    } else if (response.id != 1001) {
-      // 点击通知时，使用 MethodChannel 调用 Android 原生方法打开 app
-      const MethodChannel channel = MethodChannel('notification_click');
-      channel.invokeMethod('openApp');
-      
-      // 如果有 clickActionUrl，回调给前端
-      if (_onNotificationClickWithAction != null && response.payload != null) {
-        try {
-          final payload = Map<String, dynamic>.from(
-            Uri.splitQueryString(response.payload!).map(
-              (key, value) => MapEntry(key, value),
-            ),
-          );
-          _onNotificationClickWithAction!(payload);
-        } catch (e) {
-          // 忽略解析错误
-        }
+    }
+    
+    // 如果有 clickActionUrl，回调给前端（所有通知都可以触发）
+    if (_onNotificationClickWithAction != null && response.payload != null) {
+      try {
+        final payload = Map<String, dynamic>.from(
+          Uri.splitQueryString(response.payload!).map(
+            (key, value) => MapEntry(key, value),
+          ),
+        );
+        _onNotificationClickWithAction!(payload);
+      } catch (e) {
+        // 忽略解析错误
       }
     }
+    
+    // 点击通知时，使用 MethodChannel 调用 Android 原生方法打开 app
+    const MethodChannel channel = MethodChannel('notification_click');
+    channel.invokeMethod('openApp');
   }
 
   Future<void> showNotification({
@@ -122,6 +148,13 @@ class NotificationService {
       notificationDetails,
       payload: payload,
     );
+
+    if (clickActionType != null || clickActionUrl != null) {
+      _progressNotificationConfig[id] = {
+        'clickActionType': clickActionType,
+        'clickActionUrl': clickActionUrl,
+      };
+    }
   }
 
   Future<void> showProgressNotification({
@@ -132,9 +165,20 @@ class NotificationService {
     String channelId = 'trip_route_channel',
     String channelName = 'Trip Route',
     String channelDescription = 'Trip Route Track Notifications',
+    String? clickActionType,
+    String? clickActionUrl,
   }) async {
     if (!_initialized) {
       await init();
+    }
+
+    String? payload;
+    if (clickActionUrl != null && clickActionUrl.isNotEmpty) {
+      final queryParams = <String, String>{
+        if (clickActionType != null) 'clickActionType': clickActionType,
+        'clickActionUrl': clickActionUrl,
+      };
+      payload = Uri(queryParameters: queryParams).toString();
     }
 
     final AndroidNotificationDetails androidNotificationDetails =
@@ -162,7 +206,15 @@ class NotificationService {
       title,
       body,
       notificationDetails,
+      payload: payload,
     );
+
+    if (clickActionType != null || clickActionUrl != null) {
+      _progressNotificationConfig[id] = {
+        'clickActionType': clickActionType,
+        'clickActionUrl': clickActionUrl,
+      };
+    }
   }
 
   Future<void> showNotificationWithAutoClose({
@@ -175,6 +227,57 @@ class NotificationService {
     Future.delayed(Duration(milliseconds: autoCloseDelayMs), () {
       cancelNotification(id);
     });
+  }
+
+  Future<void> updateProgressNotification({
+    required int id,
+    required int progress,
+    String? body,
+  }) async {
+    if (!_initialized) {
+      await init();
+    }
+
+    final config = _progressNotificationConfig[id];
+    final clickActionType = config?['clickActionType'];
+    final clickActionUrl = config?['clickActionUrl'];
+
+    String? payload;
+    if (clickActionUrl != null && clickActionUrl.isNotEmpty) {
+      final queryParams = <String, String>{
+        if (clickActionType != null) 'clickActionType': clickActionType,
+        'clickActionUrl': clickActionUrl,
+      };
+      payload = Uri(queryParameters: queryParams).toString();
+    }
+
+    final AndroidNotificationDetails androidNotificationDetails =
+        AndroidNotificationDetails(
+      'trip_route_channel',
+      'Trip Route',
+      channelDescription: 'Trip Route Track Notifications',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      ticker: 'ticker',
+      ongoing: true,
+      autoCancel: false,
+      channelShowBadge: true,
+      onlyAlertOnce: true,
+      showProgress: true,
+      maxProgress: 100,
+      progress: progress,
+    );
+
+    final NotificationDetails notificationDetails =
+        NotificationDetails(android: androidNotificationDetails);
+
+    await _notificationsPlugin.show(
+      id,
+      '',
+      body ?? '',
+      notificationDetails,
+      payload: payload,
+    );
   }
 
   Future<void> cancelNotification(int id) async {

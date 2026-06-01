@@ -17,13 +17,13 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:nyanya_webview/nyanya_webview.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:tencent_kit/tencent_kit.dart';
+import 'package:app_update/app_update.dart' as app_update;
 import 'bridge_message.dart';
 import 'services/keep_awake_service.dart';
 import 'services/background_service.dart';
 import 'services/language_service.dart';
 import 'services/notification_service.dart';
 import 'services/vehicle_service.dart';
-import 'services/update_service.dart';
 import 'services/log_service.dart';
 import 'services/engine_manager.dart';
 import 'services/deep_link_service.dart';
@@ -31,7 +31,7 @@ import 'services/deep_link_service.dart';
 typedef MessageHandler = void Function(BridgeMessage message);
 typedef FlutterMethodCallHandler = void Function(MethodCall call);
 typedef StatusBarChangeHandler = void Function(String type);
-typedef UpdateCheckCallback = void Function(VersionInfo? versionInfo,
+typedef UpdateCheckCallback = void Function(app_update.VersionInfo? versionInfo,
     String currentVersion, bool showCheckingNotification);
 typedef UpdateCheckingCallback = void Function();
 typedef LocalWebResourcesUpdateProgressCallback = void Function(
@@ -50,8 +50,9 @@ class BridgeController {
   final LanguageService _languageService = LanguageService();
   final VehicleService _vehicleService = VehicleService();
   final I18nService _i18nService = I18nService();
-  final UpdateService _updateService = UpdateService();
+  final app_update.UpdateService _appUpdateService = app_update.UpdateService();
   final LogService _logService = LogService();
+  final NotificationService _notificationService = NotificationService();
 
   String? _pendingUpdateVersion;
 
@@ -92,15 +93,16 @@ class BridgeController {
   LanguageService get languageService => _languageService;
   VehicleService get vehicleService => _vehicleService;
   I18nService get i18nService => _i18nService;
-  UpdateService get updateService => _updateService;
+  app_update.UpdateService get appUpdateService => _appUpdateService;
   LogService get logService => _logService;
+  NotificationService get notificationService => _notificationService;
 
   Future<void> init() async {
     await _checkAndResetResourcesOnUpdate();
     await _i18nService.init();
     await _languageService.init();
     await _vehicleService.init();
-    await _updateService.init();
+    await _appUpdateService.init();
     await _logService.init();
     _setupCarDataListener();
     _setupNotificationClickCallback();
@@ -1385,62 +1387,68 @@ class BridgeController {
       {bool showCheckingNotification = true, String? sessionId}) async {
     print(
         'Starting checkNewVersion... (showCheckingNotification: $showCheckingNotification)');
-    if (showCheckingNotification) {
-      _updateCheckingCallback?.call();
-    }
-    final versionInfo = await _updateService.checkNewVersion();
-    print('versionInfo: $versionInfo');
+    _appUpdateService.setUpdateCheckingCallback(() {
+      if (showCheckingNotification) {
+        _updateCheckingCallback?.call();
+      }
+    });
+    _appUpdateService.setUpdateCheckCallback((versionInfo, currentVersion, shouldShowChecking) {
+      print('versionInfo: $versionInfo');
 
-    if (versionInfo != null) {
-      _pendingUpdateVersion = versionInfo.version;
-      print('Sending updateAvailable message');
+      if (versionInfo != null) {
+        _pendingUpdateVersion = versionInfo.version;
+        print('Sending updateAvailable message');
 
-      sendMessage(
-          'updateAvailable',
-          {
-            'version': versionInfo.version,
-            'downloadUrl': versionInfo.downloadUrl,
-          },
-          sessionId: sessionId);
+        sendMessage(
+            'updateAvailable',
+            {
+              'version': versionInfo.version,
+              'downloadUrl': versionInfo.downloadUrl,
+            },
+            sessionId: sessionId);
 
-      _updateCheckCallback?.call(versionInfo,
-          _updateService.currentVersion ?? 'unknown', showCheckingNotification);
-    } else {
-      print('Sending updateNotAvailable message');
-      sendMessage(
-          'updateNotAvailable',
-          {
-            'currentVersion': _updateService.currentVersion ?? 'unknown',
-          },
-          sessionId: sessionId);
+        _updateCheckCallback?.call(versionInfo,
+            currentVersion, shouldShowChecking);
+      } else {
+        print('Sending updateNotAvailable message');
+        sendMessage(
+            'updateNotAvailable',
+            {
+              'currentVersion': currentVersion,
+            },
+            sessionId: sessionId);
 
-      _updateCheckCallback?.call(null,
-          _updateService.currentVersion ?? 'unknown', showCheckingNotification);
-    }
+        _updateCheckCallback?.call(null,
+            currentVersion, shouldShowChecking);
+      }
+    });
+    await _appUpdateService.checkNewVersion(showCheckingNotification: showCheckingNotification);
   }
 
   void startUpdate(String downloadUrl, String version) {
-    _updateService.downloadAndInstall(
-      downloadUrl: downloadUrl,
-      version: version,
-      i18nService: _i18nService,
-      onProgress: (received, total) {
-        sendMessage('updateProgress', {
-          'received': received,
-          'total': total,
-          'progress': total > 0 ? ((received / total) * 100).round() : 0,
-        });
-      },
-      onComplete: () {
+    _appUpdateService.setProgressCallback((progress, receivedBytes, totalBytes) {
+      sendMessage('updateProgress', {
+        'received': receivedBytes,
+        'total': totalBytes,
+        'progress': progress,
+      });
+    });
+    _appUpdateService.setCompleteCallback((success, error) {
+      if (success) {
         sendMessage('updateComplete', {
           'version': version,
         });
-      },
-      onError: (error) {
+      } else if (error != null) {
         sendMessage('updateError', {
           'error': error,
         });
-      },
+      }
+    });
+    _appUpdateService.startDownload(
+      downloadUrl: downloadUrl,
+      version: version,
+      i18nService: _i18nService,
+      autoInstall: false,
     );
   }
 
@@ -1600,10 +1608,16 @@ class BridgeController {
   Future<void> _handleSendNotification(Map<String, dynamic> payload,
       {String? bridgeId, String? sessionId}) async {
     try {
-      final id = payload['id'] is int
-          ? payload['id']
-          : (payload['id'] is String ? int.tryParse(payload['id']) : null) ??
-              _notificationIdCounter++;
+      int id;
+      if (payload['id'] is int) {
+        id = payload['id'];
+      } else if (payload['id'] is String) {
+        final stringId = payload['id'] as String;
+        // 尝试解析为数字，如果失败则使用字符串哈希值（与取消方法保持一致）
+        id = int.tryParse(stringId) ?? stringId.hashCode;
+      } else {
+        id = _notificationIdCounter++;
+      }
       final title = payload['title']?.toString() ?? '';
       final body = payload['body']?.toString() ?? '';
       final ongoing = payload['ongoing'] as bool? ?? false;
@@ -1689,25 +1703,105 @@ class BridgeController {
   Future<void> _handleCancelNotification(dynamic id,
       {String? bridgeId, String? sessionId}) async {
     try {
-      int? notificationId;
+      int notificationId;
       if (id is int) {
         notificationId = id;
       } else if (id is String) {
-        notificationId = int.tryParse(id);
-      }
-
-      if (notificationId != null) {
-        await NotificationService().cancelNotification(notificationId);
-        sendMessage('cancelNotification', {'success': true},
-            bridgeId: bridgeId, sessionId: sessionId);
+        final stringId = id as String;
+        // 尝试解析为数字，如果失败则使用字符串哈希值（与创建/更新保持一致）
+        notificationId = int.tryParse(stringId) ?? stringId.hashCode;
       } else {
         sendMessage('cancelNotification',
             {'success': false, 'error': 'Invalid notification ID'},
             bridgeId: bridgeId, sessionId: sessionId);
+        return;
       }
+
+      await NotificationService().cancelNotification(notificationId);
+      sendMessage('cancelNotification', {'success': true},
+          bridgeId: bridgeId, sessionId: sessionId);
     } catch (e) {
       sendMessage(
           'cancelNotification', {'success': false, 'error': e.toString()},
+          bridgeId: bridgeId, sessionId: sessionId);
+    }
+  }
+
+  Future<void> _handleSendProgressNotification(Map<String, dynamic> payload,
+      {String? bridgeId, String? sessionId}) async {
+    try {
+      int id;
+      if (payload['id'] is int) {
+        id = payload['id'];
+      } else if (payload['id'] is String) {
+        final stringId = payload['id'] as String;
+        // 尝试解析为数字，如果失败则使用字符串哈希值
+        id = int.tryParse(stringId) ?? stringId.hashCode;
+      } else {
+        id = _notificationIdCounter++;
+      }
+      final title = payload['title']?.toString() ?? '';
+      final body = payload['body']?.toString() ?? '';
+      final progress = payload['progress'] as int? ?? 0;
+      final channelId =
+          payload['channelId']?.toString() ?? 'trip_route_channel';
+      final channelName = payload['channelName']?.toString() ?? 'Trip Route';
+      final channelDescription = payload['channelDescription']?.toString() ??
+          'Trip Route Track Notifications';
+      final clickActionType = payload['clickActionType']?.toString();
+      final clickActionUrl = payload['clickActionUrl']?.toString();
+
+      await NotificationService().showProgressNotification(
+        title: title,
+        body: body,
+        progress: progress,
+        id: id,
+        channelId: channelId,
+        channelName: channelName,
+        channelDescription: channelDescription,
+        clickActionType: clickActionType,
+        clickActionUrl: clickActionUrl,
+      );
+
+      sendMessage('sendProgressNotification', {'success': true, 'id': id},
+          bridgeId: bridgeId, sessionId: sessionId);
+    } catch (e) {
+      sendMessage('sendProgressNotification',
+          {'success': false, 'error': e.toString()},
+          bridgeId: bridgeId, sessionId: sessionId);
+    }
+  }
+
+  Future<void> _handleUpdateProgressNotification(Map<String, dynamic> payload,
+      {String? bridgeId, String? sessionId}) async {
+    try {
+      int id;
+      if (payload['id'] is int) {
+        id = payload['id'];
+      } else if (payload['id'] is String) {
+        final stringId = payload['id'] as String;
+        id = int.tryParse(stringId) ?? stringId.hashCode;
+      } else {
+        sendMessage('updateProgressNotification',
+            {'success': false, 'error': 'Invalid notification ID'},
+            bridgeId: bridgeId, sessionId: sessionId);
+        return;
+      }
+
+      final progress = payload['progress'] as int? ?? 0;
+      final body = payload['body']?.toString();
+
+      await NotificationService().updateProgressNotification(
+        id: id,
+        progress: progress,
+        body: body,
+      );
+
+      sendMessage('updateProgressNotification', {'success': true, 'id': id, 'progress': progress},
+          bridgeId: bridgeId, sessionId: sessionId);
+    } catch (e) {
+      sendMessage('updateProgressNotification',
+          {'success': false, 'error': e.toString()},
           bridgeId: bridgeId, sessionId: sessionId);
     }
   }
@@ -1894,6 +1988,18 @@ class BridgeController {
           final cancelId = message.payload;
           _handleCancelNotification(cancelId,
               bridgeId: bridgeId, sessionId: finalSessionId);
+          break;
+        case 'sendProgressNotification':
+          if (message.payload is Map) {
+            _handleSendProgressNotification(message.payload as Map<String, dynamic>,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        case 'updateProgressNotification':
+          if (message.payload is Map) {
+            _handleUpdateProgressNotification(message.payload as Map<String, dynamic>,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
           break;
         case 'thirdPartyLogin':
           final type = message.payload as String?;
@@ -2202,6 +2308,15 @@ class BridgeController {
             qqUniversalLink?.isNotEmpty == true ? qqUniversalLink : null,
       );
 
+      // QQ SDK 3.5.7+ 需要先授权设备信息权限
+      try {
+        const MethodChannel qqChannel = MethodChannel('qq_login');
+        await qqChannel.invokeMethod('setPermissionGranted');
+        print('[Bridge] QQ permission granted successfully');
+      } catch (e) {
+        print('[Bridge] Failed to grant QQ permission: $e');
+      }
+
       final Completer<TencentLoginResp> loginCompleter =
           Completer<TencentLoginResp>();
 
@@ -2228,19 +2343,69 @@ class BridgeController {
       print('[Bridge] QQ login result: ${loginRespResult.ret}');
 
       if (loginRespResult.isSuccessful == true) {
+        // 调用 QQ UnionID 接口获取 unionid
+        String? unionid;
+        try {
+          final response = await http.get(Uri.parse(
+              'https://graph.qq.com/oauth2.0/me?access_token=${loginRespResult.accessToken}&unionid=1&fmt=json'));
+          if (response.statusCode == 200) {
+            final jsonData = json.decode(response.body);
+            unionid = jsonData['unionid'] as String?;
+            print('[Bridge] QQ unionid obtained: $unionid');
+          }
+        } catch (e) {
+          print('[Bridge] Failed to get QQ unionid: $e');
+        }
+
+        // 调用 QQ 用户信息接口获取用户资料
+        String userNickname = '';
+        String userAvatar = '';
+        String userAvatarBig = '';
+        String userGender = '';
+        String userCity = '';
+        try {
+          final userInfoResponse = await http.get(Uri.parse(
+              'https://graph.qq.com/user/get_user_info?access_token=${loginRespResult.accessToken}&oauth_consumer_key=$qqAppId&openid=${loginRespResult.openid}'));
+          if (userInfoResponse.statusCode == 200) {
+            final userInfoData = json.decode(userInfoResponse.body);
+            if (userInfoData['ret'] == 0) {
+              userNickname = userInfoData['nickname']?.toString() ?? '';
+              userAvatar = userInfoData['figureurl']?.toString() ?? '';
+              userAvatarBig = userInfoData['figureurl_qq_2']?.toString() ??
+                  userInfoData['figureurl_qq_1']?.toString() ?? '';
+              userGender = userInfoData['gender']?.toString() ?? '';
+              userCity = userInfoData['city']?.toString() ?? '';
+              print('[Bridge] QQ user info obtained: $userNickname, $userAvatar');
+            } else {
+              print('[Bridge] QQ user info error: ${userInfoData['msg']}');
+            }
+          }
+        } catch (e) {
+          print('[Bridge] Failed to get QQ user info: $e');
+        }
+
         sendMessage(
             'thirdPartyLogin',
             {
               'success': true,
               'data': {
+                // 通用字段（谷歌和QQ都有）
                 'type': 'qq',
-                'idToken': loginRespResult.openid,
                 'accessToken': loginRespResult.accessToken,
+                // QQ 专属字段
+                'openid': loginRespResult.openid,
+                'unionid': unionid,
                 'user': {
                   'id': loginRespResult.openid,
-                  'name': '',
+                  // 通用字段（谷歌和QQ都有）
+                  'name': userNickname,
+                  'avatar': userAvatar,
+                  // QQ 专属字段
+                  'avatarBig': userAvatarBig,
+                  'gender': userGender,
+                  'city': userCity,
+                  // Google 专属字段
                   'email': '',
-                  'avatar': '',
                 },
               },
             },

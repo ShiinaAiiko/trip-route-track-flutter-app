@@ -49,6 +49,7 @@ app.*.map.json
 
 /tmp
 logcat.txt
+*log.txt
 
 # Environment variables
 .env
