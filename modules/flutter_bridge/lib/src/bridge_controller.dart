@@ -8,6 +8,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:i18n/i18n.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -1806,6 +1807,141 @@ class BridgeController {
     }
   }
 
+  Future<void> _handleSaveFile(Map<String, dynamic> payload,
+      {String? bridgeId, String? sessionId}) async {
+    try {
+      final base64Data = payload['base64Data'] as String?;
+      final fileName = payload['fileName'] as String?;
+      final filePath = payload['filePath'] as String?;
+
+      if (base64Data == null || base64Data.isEmpty) {
+        sendMessage('saveFile', {'success': false, 'error': 'Base64 data is required'},
+            bridgeId: bridgeId, sessionId: sessionId);
+        return;
+      }
+
+      if (fileName == null || fileName.isEmpty) {
+        sendMessage('saveFile', {'success': false, 'error': 'File name is required'},
+            bridgeId: bridgeId, sessionId: sessionId);
+        return;
+      }
+
+      final hasPermission = await _checkAndRequestStoragePermission();
+      if (!hasPermission) {
+        sendMessage('saveFile', {'success': false, 'error': 'Storage permission denied'},
+            bridgeId: bridgeId, sessionId: sessionId);
+        return;
+      }
+
+      final bytes = base64Decode(base64Data);
+
+      String fullPath;
+
+      if (filePath != null && filePath.isNotEmpty) {
+        fullPath = filePath;
+      } else {
+        const publicDownloadDir = '/storage/emulated/0/Download';
+        final targetDir = Directory('$publicDownloadDir/trip-route-track');
+        await targetDir.create(recursive: true);
+        fullPath = '${targetDir.path}/$fileName';
+      }
+
+      final file = File(fullPath);
+      await file.writeAsBytes(bytes);
+
+      sendMessage('saveFile', {'success': true, 'path': fullPath},
+          bridgeId: bridgeId, sessionId: sessionId);
+    } catch (e) {
+      sendMessage('saveFile', {'success': false, 'error': e.toString()},
+          bridgeId: bridgeId, sessionId: sessionId);
+    }
+  }
+
+  Future<void> _handleReadFile(String filePath,
+      {String? bridgeId, String? sessionId}) async {
+    try {
+      if (filePath.isEmpty) {
+        sendMessage('readFile', {'success': false, 'error': 'File path is required'},
+            bridgeId: bridgeId, sessionId: sessionId);
+        return;
+      }
+
+      final hasPermission = await _checkAndRequestStoragePermission();
+      if (!hasPermission) {
+        sendMessage('readFile', {'success': false, 'error': 'Storage permission denied'},
+            bridgeId: bridgeId, sessionId: sessionId);
+        return;
+      }
+
+      final file = File(filePath);
+      if (!await file.exists()) {
+        sendMessage('readFile', {'success': false, 'error': 'File not found'},
+            bridgeId: bridgeId, sessionId: sessionId);
+        return;
+      }
+
+      final bytes = await file.readAsBytes();
+      final base64Data = base64Encode(bytes);
+
+      sendMessage('readFile', {'success': true, 'base64Data': base64Data},
+          bridgeId: bridgeId, sessionId: sessionId);
+    } catch (e) {
+      sendMessage('readFile', {'success': false, 'error': e.toString()},
+          bridgeId: bridgeId, sessionId: sessionId);
+    }
+  }
+
+  Future<bool> _checkAndRequestStoragePermission() async {
+    try {
+      if (Platform.isAndroid) {
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        final sdkVersion = androidInfo.version.sdkInt;
+        
+        if (sdkVersion >= 33) {
+          return await _requestAndroid13StoragePermission();
+        }
+      }
+      
+      final status = await Permission.storage.status;
+      print('[Bridge] Storage permission status: $status');
+      
+      if (status.isGranted) {
+        return true;
+      }
+
+      print('[Bridge] Requesting storage permission...');
+      final result = await Permission.storage.request();
+      print('[Bridge] Storage permission request result: $result');
+      
+      return result.isGranted;
+    } catch (e) {
+      print('[Bridge] Error checking storage permission: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _requestAndroid13StoragePermission() async {
+    try {
+      print('[Bridge] Android 13+: Checking MANAGE_EXTERNAL_STORAGE permission');
+      
+      final manageStatus = await Permission.manageExternalStorage.status;
+      print('[Bridge] MANAGE_EXTERNAL_STORAGE status: $manageStatus');
+      
+      if (manageStatus.isGranted) {
+        return true;
+      }
+
+      print('[Bridge] Requesting MANAGE_EXTERNAL_STORAGE permission...');
+      final result = await Permission.manageExternalStorage.request();
+      print('[Bridge] MANAGE_EXTERNAL_STORAGE request result: $result');
+      
+      return result.isGranted;
+    } catch (e) {
+      print('[Bridge] Error requesting Android 13 storage permission: $e');
+      return false;
+    }
+  }
+
   Future<dynamic> _handleMethodCall(MethodCall call) async {
     switch (call.method) {
       case 'onWebMessage':
@@ -2038,6 +2174,19 @@ class BridgeController {
         case 'requestPermissions':
           _handleRequestPermissions(message.payload,
               bridgeId: bridgeId, sessionId: finalSessionId);
+          break;
+        case 'saveFile':
+          if (message.payload is Map) {
+            _handleSaveFile(message.payload as Map<String, dynamic>,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        case 'readFile':
+          final filePath = message.payload as String?;
+          if (filePath != null) {
+            _handleReadFile(filePath,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
           break;
         // default 不需要特殊处理，shouldDispatch 保持 true
       }

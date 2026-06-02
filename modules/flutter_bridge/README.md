@@ -2,7 +2,7 @@
 
 ## 概述
 
-FlutterBridge 是一个用于 Flutter 应用与 WebView 网站之间通信的 SDK，提供了类似 React Native JSBridge 的功能，支持定位、屏幕常亮、后台任务和语言设置等功能。
+FlutterBridge 是一个用于 Flutter 应用与 WebView 网站之间通信的 SDK，提供了类似 React Native JSBridge 的功能，支持定位、屏幕常亮、后台任务、文件操作和语言设置等功能。
 
 ## 功能特性
 
@@ -10,6 +10,13 @@ FlutterBridge 是一个用于 Flutter 应用与 WebView 网站之间通信的 SD
 2. **屏幕常亮** - 控制屏幕保持常亮状态
 3. **后台任务** - 支持后台持续定位
 4. **语言设置** - 支持多语言切换，通过网址参数切换语言
+5. **文件操作** - 支持文件保存（saveFile）和读取（readFile）
+6. **车辆数据** - 支持车辆传感器数据获取
+7. **版本更新** - 支持应用版本检查和更新
+8. **权限管理** - 支持权限检查和请求
+9. **通知管理** - 支持发送和管理通知
+10. **第三方登录** - 支持腾讯等第三方登录
+11. **引擎切换** - 支持 GeckoView 和 SystemWebView 切换
 
 ## 项目结构
 
@@ -23,7 +30,12 @@ modules/flutter_bridge/
 │       └── services/
 │           ├── keep_awake_service.dart      # 屏幕常亮服务
 │           ├── background_service.dart       # 后台任务服务
-│           └── language_service.dart       # 语言设置服务
+│           ├── language_service.dart       # 语言设置服务
+│           ├── vehicle_service.dart        # 车辆数据服务
+│           ├── notification_service.dart   # 通知服务
+│           ├── log_service.dart           # 日志服务
+│           ├── engine_manager.dart        # 引擎管理
+│           └── deep_link_service.dart     # 深度链接服务
 ```
 
 ## Flutter 端使用方法
@@ -38,6 +50,10 @@ dependencies:
     sdk: flutter
   shared_preferences: ^2.2.2
   geolocator: ^12.0.0
+  path_provider: ^2.1.0
+  permission_handler: ^11.0.0
+  package_info_plus: ^4.0.0
+  flutter_local_notifications: ^17.0.0
 ```
 
 ### 2. 初始化 Bridge
@@ -52,7 +68,7 @@ class MyWidget extends StatefulWidget {
 
 class _MyWidgetState extends State<MyWidget> {
   final BridgeController _bridge = BridgeController();
-  MethodChannel? _channel;
+  IWebViewCommunication? _communication;
 
   @override
   void initState() {
@@ -92,17 +108,10 @@ class _MyWidgetState extends State<MyWidget> {
 ### 3. 连接到 WebView
 
 ```dart
-// 在创建 PlatformView 时设置 channel
+// 在创建 PlatformView 时设置 communication
 controller.addOnPlatformViewCreatedListener((int id) {
-  _channel = MethodChannel('gecko_view_$id');
-  _bridge.setChannel(_channel);
-  
-  // 设置 MethodCallHandler
-  _channel?.setMethodCallHandler((call) async {
-    if (call.method == 'onWebMessage') {
-      // 消息会自动由 bridge 处理
-    }
-  });
+  _communication = IWebViewCommunication('gecko_view_$id');
+  _bridge.setCommunication(_communication!);
 });
 ```
 
@@ -156,6 +165,19 @@ _bridge.updateBackgroundNotification(
   taskTitle: '正在后台定位',
   taskDesc: '行程已持续 1h 30m',
 );
+```
+
+### 7. 文件操作
+
+```dart
+// 保存文件
+await _bridge.sendMessage('saveFile', {
+  'base64Data': 'iVBORw0KGgo...',
+  'fileName': 'test.png',
+});
+
+// 读取文件
+await _bridge.sendMessage('readFile', '/storage/emulated/0/Download/test.png');
 ```
 
 ## 前端网站对接说明
@@ -238,6 +260,24 @@ window.sendToFlutter('setLanguage', 'zh-CN');
 |------|----------|------|
 | `location` | `{ coords: {...}, timestamp: number }` | 位置数据 |
 | `appConfig` | `{ version: string, system: string }` | 应用配置 |
+| `speed` | `{ value: number, unit: string }` | 速度数据 |
+| `statistic` | `{ ... }` | 统计数据 |
+| `instrument` | `{ ... }` | 仪表数据 |
+| `door` | `{ ... }` | 车门状态 |
+| `vehicleSetting` | `{ ... }` | 车辆设置 |
+| `engine` | `{ ... }` | 发动机状态 |
+| `panorama` | `{ ... }` | 全景数据 |
+| `ac` | `{ ... }` | 空调状态 |
+| `sensor` | `{ ... }` | 传感器数据 |
+| `time` | `{ ... }` | 时间数据 |
+| `energyMode` | `{ ... }` | 能量模式 |
+| `radar` | `{ ... }` | 雷达数据 |
+| `tyre` | `{ ... }` | 轮胎状态 |
+| `airQuality` | `{ ... }` | 空气质量 |
+| `charge` | `{ ... }` | 充电状态 |
+| `media` | `{ ... }` | 媒体状态 |
+| `bodyStatus` | `{ ... }` | 车身状态 |
+| `light` | `{ ... }` | 灯光状态 |
 
 ### 网站 → Flutter 的消息类型
 
@@ -247,6 +287,82 @@ window.sendToFlutter('setLanguage', 'zh-CN');
 | `keepScreenOn` | `boolean` | 保持屏幕常亮 |
 | `enableBackgroundTasks` | `boolean` | 启用后台任务 |
 | `setLanguage` | `string` | 设置语言（如 'zh-CN', 'en-US'） |
+| `enableCar` | `boolean` | 启用车辆数据监听 |
+| `getCarData` | `null` | 请求车辆数据 |
+| `setStatusBar` | `string` | 设置状态栏样式 |
+| `getStatusBarData` | `null` | 获取状态栏数据 |
+| `getThemeColor` | `null` | 获取主题颜色 |
+| `checkNewVersion` | `{ showCheckingNotification?: boolean }` | 检查新版本 |
+| `switchResources` | `string` | 切换资源服务器 |
+| `updateLocalWebResources` | `string` | 更新本地 Web 资源 |
+| `restartApp` | `null` | 重启应用 |
+| `quitApp` | `null` | 退出应用 |
+| `sendNotification` | `{ title: string, body: string, id?: number }` | 发送通知 |
+| `cancelNotification` | `number` | 取消通知 |
+| `sendProgressNotification` | `{ title: string, progress: number, id?: number }` | 发送进度通知 |
+| `updateProgressNotification` | `{ progress: number, id: number }` | 更新进度通知 |
+| `thirdPartyLogin` | `string` | 第三方登录（如 'qq'） |
+| `openInBrowser` | `string` | 在浏览器中打开 URL |
+| `openAppSettings` | `null` | 打开应用设置 |
+| `switchEngine` | `string` | 切换 WebView 引擎（'gecko' 或 'system'） |
+| `appStorage` | `{ action: string, key: string, value?: any }` | 应用存储操作 |
+| `checkPermissions` | `string[]` | 检查权限 |
+| `requestPermissions` | `string[]` | 请求权限 |
+| `saveFile` | `{ base64Data: string, fileName: string, filePath?: string }` | 保存文件 |
+| `readFile` | `string` | 读取文件（文件路径） |
+
+## 文件操作接口
+
+### saveFile - 保存文件
+
+**请求参数**：
+```typescript
+{
+  base64Data: string;    // 必填，文件的 Base64 编码数据
+  fileName: string;      // 必填，文件名
+  filePath?: string;     // 可选，完整保存路径，不填则保存到下载目录
+}
+```
+
+**响应参数**：
+```typescript
+{
+  success: boolean;
+  path?: string;    // 成功时返回文件路径
+  error?: string;   // 失败时返回错误信息
+}
+```
+
+**使用示例**：
+```javascript
+const result = await window.sendToFlutter('saveFile', {
+  base64Data: 'iVBORw0KGgo...',
+  fileName: 'test.png'
+});
+// 返回: { success: true, path: '/storage/emulated/0/Download/trip-route-track/test.png' }
+```
+
+### readFile - 读取文件
+
+**请求参数**：
+```typescript
+string  // 文件路径（必填）
+```
+
+**响应参数**：
+```typescript
+{
+  success: boolean;
+  base64Data?: string;  // 成功时返回文件的 Base64 编码
+  error?: string;       // 失败时返回错误信息
+}
+```
+
+**使用示例**：
+```javascript
+const result = await window.sendToFlutter('readFile', '/storage/emulated/0/Download/test.png');
+// 返回: { success: true, base64Data: 'iVBORw0KGgo...' }
+```
 
 ## 位置数据格式
 
@@ -307,6 +423,8 @@ Android 端需要在 `AndroidManifest.xml` 中添加以下权限：
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 <uses-permission android:name="android.permission.WAKE_LOCK"/>
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
 ```
 
 ## 注意事项
@@ -316,6 +434,8 @@ Android 端需要在 `AndroidManifest.xml` 中添加以下权限：
 3. **语言设置**：语言设置会持久化存储，重启应用后保持
 4. **消息格式**：所有消息必须是 JSON 格式
 5. **线程安全**：BridgeController 是单例模式，线程安全
+6. **文件权限**：保存文件到公共目录需要存储权限
+7. **文件大小**：读取大文件时需注意内存限制
 
 ## 迁移指南
 
