@@ -178,13 +178,21 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     if (isBydServiceAvailable && bydVehicleService != null) {
-                        if (bydVehicleService?.hasRequiredPermissions() == true) {
-                            sendCarLog("权限检查通过，启动车机数据监听")
+                        val hasAllPerms = bydVehicleService?.hasRequiredPermissions() == true
+                        if (hasAllPerms) {
+                            sendCarLog("权限检查通过 (全部权限)，启动车机数据监听")
                             bydVehicleService?.start()
                         } else {
-                            sendCarLog("权限检查失败，准备申请权限")
-                            pendingStartCarData = true
-                            requestBydAutoPermissions()
+                            // 部分权限被拒绝，但仍尝试启动服务（有反射降级逻辑）
+                            val hasAnyPerms = bydVehicleService?.hasAnyPermission() == true
+                            if (hasAnyPerms) {
+                                sendCarLog("权限检查: 部分权限通过，尝试启动车机数据监听")
+                                bydVehicleService?.start()
+                            } else {
+                                sendCarLog("权限检查失败 (无任何权限)，准备申请权限")
+                                pendingStartCarData = true
+                                requestBydAutoPermissions()
+                            }
                         }
                     }
                     result.success(null)
@@ -696,12 +704,18 @@ class MainActivity : FlutterActivity() {
             val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
             sendCarLog("权限是否全部授予: $allGranted")
             
-            if (allGranted && pendingStartCarData) {
-                sendCarLog("权限授予成功，启动车机数据监听")
+            if (pendingStartCarData) {
+                // 即使部分权限被拒绝，也尝试启动服务
+                // BYDAutoVehicleService 有反射降级逻辑，可以处理部分权限缺失的情况
+                val grantedCount = grantResults.count { it == PackageManager.PERMISSION_GRANTED }
+                val totalCount = grantResults.size
+                if (allGranted) {
+                    sendCarLog("权限授予成功，启动车机数据监听 (全部 $totalCount 个权限)")
+                } else {
+                    sendCarLog("部分权限被拒绝 ($grantedCount/$totalCount)，但仍尝试启动车机数据监听")
+                }
                 bydVehicleService?.start()
                 pendingStartCarData = false
-            } else if (!allGranted) {
-                sendCarLog("部分权限被拒绝")
             }
         }
     }

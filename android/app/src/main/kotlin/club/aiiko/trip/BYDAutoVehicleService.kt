@@ -146,21 +146,7 @@ class BYDAutoVehicleService(private val context: Context) {
     }
 
     fun hasRequiredPermissions(): Boolean {
-        val requiredPermissions = listOf(
-            "android.permission.BYDAUTO_AC_COMMON",
-            "android.permission.BYDAUTO_BODYWORK_COMMON",
-            "android.permission.BYDAUTO_TYRE_COMMON",
-            "android.permission.BYDAUTO_INSTRUMENT_COMMON",
-            "android.permission.BYDAUTO_DOORLOCK_COMMON",
-            "android.permission.BYDAUTO_PANORAMA_COMMON",
-            "android.permission.BYDAUTO_VEHICLESET_COMMON",
-            "android.permission.BYDAUTO_SPEED_GET",
-            "android.permission.BYDAUTO_STATISTIC_GET",
-            "android.permission.BYDAUTO_TYRE_GET",
-            "android.permission.BYDAUTO_ENGINE_GET",
-            "android.permission.BYDAUTO_ENERGY_GET",
-            "android.permission.BYDAUTO_CHARGE_GET"
-        )
+        val requiredPermissions = getRequiredPermissions().toList()
 
         sendCarLog("权限检查结果:")
         var allGranted = true
@@ -171,6 +157,18 @@ class BYDAutoVehicleService(private val context: Context) {
         }
 
         return allGranted
+    }
+
+    /**
+     * 检查是否有至少一个权限通过
+     * 用于判断是否应该尝试启动服务（有反射降级逻辑）
+     */
+    fun hasAnyPermission(): Boolean {
+        val requiredPermissions = getRequiredPermissions()
+        
+        return requiredPermissions.any { permission ->
+            context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+        }
     }
 
     fun getRequiredPermissions(): Array<String> {
