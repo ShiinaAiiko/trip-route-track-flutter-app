@@ -3,7 +3,7 @@ name="trip-route-track"
 runName="$name-flutter-app"
 port=23204
 branch="main"
-version="v1.0.14"
+version="v1.0.16"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
@@ -41,6 +41,8 @@ dev() {
 	#  adb logcat -c && adb logcat | grep --line-buffered -E -i "onOpenUrl|NyaNyaWebViewLog|onLocationChange|onLocationChange|anGoBack|FlutterBridge" | grep --line-buffered -E -v -i "postMessage|location" | tee flutter_log.txt
 
 	# adb logcat -c && adb logcat | grep --line-buffered -E -i "NyaNyaWebViewLog" | grep --line-buffered -E -v -i "postMessage|location" | tee flutter_log.txt
+
+	# adb logcat -c && adb logcat | grep --line-buffered -E -i "" | grep --line-buffered -E -v -i "postMessage|location" | tee flutter_log.txt
 
 	loadEnv
 	setGoogleClientId "dev"

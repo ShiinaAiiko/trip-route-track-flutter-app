@@ -80,7 +80,7 @@ android {
 
     defaultConfig {
         applicationId = "club.aiiko.trip"
-        minSdk = 24
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
