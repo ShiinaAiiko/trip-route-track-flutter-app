@@ -37,7 +37,7 @@ class DoorService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableDoorListener', enabled);
+      await _channel.invokeMethod('enableDoorListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[DoorService] enableListener() failed: $e');

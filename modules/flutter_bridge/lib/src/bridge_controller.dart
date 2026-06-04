@@ -106,6 +106,7 @@ class BridgeController {
     await _appUpdateService.init();
     await _logService.init();
     _setupCarDataListener();
+    _setupVehicleDataListeners();
     _setupNotificationClickCallback();
     _setupDeepLinkListener();
   }
@@ -185,6 +186,129 @@ class BridgeController {
     _carDataSubscription = _vehicleService.carDataStream?.listen((data) {
       sendMessage('carData', data);
     });
+  }
+
+  /// 订阅列表，用于管理单个分类的数据监听
+  List<StreamSubscription<dynamic>> _vehicleDataSubscriptions = [];
+
+  /// 设置单个分类数据监听，将数据转发给前端
+  void _setupVehicleDataListeners() {
+    // 车速
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.speed.speedDataStream.listen((data) {
+        sendMessage('carSpeed', data.toJson());
+      })
+    );
+    // 行驶数据
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.statistic.statisticDataStream.listen((data) {
+        sendMessage('carStatistic', data.toJson());
+      })
+    );
+    // 仪表
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.instrument.instrumentDataStream.listen((data) {
+        sendMessage('carInstrument', data.toJson());
+      })
+    );
+    // 门锁
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.door.doorDataStream.listen((data) {
+        sendMessage('carDoor', data.toJson());
+      })
+    );
+    // 车辆设置
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.vehicleset.vehicleSettingDataStream.listen((data) {
+        sendMessage('carVehicleSet', data.toJson());
+      })
+    );
+    // 发动机
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.engine.engineDataStream.listen((data) {
+        sendMessage('carEngine', data.toJson());
+      })
+    );
+    // 全景摄像头
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.panorama.panoramaDataStream.listen((data) {
+        sendMessage('carPanorama', data.toJson());
+      })
+    );
+    // 空调
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.ac.acDataStream.listen((data) {
+        sendMessage('carAc', data.toJson());
+      })
+    );
+    // 传感器
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.sensor.sensorDataStream.listen((data) {
+        sendMessage('carSensor', data.toJson());
+      })
+    );
+    // 时间
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.time.timeDataStream.listen((data) {
+        sendMessage('carTime', data.toJson());
+      })
+    );
+    // 能量模式
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.energyMode.energyModeDataStream.listen((data) {
+        sendMessage('carEnergyMode', data.toJson());
+      })
+    );
+    // 雷达
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.radar.radarDataStream.listen((data) {
+        sendMessage('carRadar', data.toJson());
+      })
+    );
+    // 轮胎
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.tyre.tyreDataStream.listen((data) {
+        sendMessage('carTyre', data.toJson());
+      })
+    );
+    // 空气质量
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.airQuality.airQualityDataStream.listen((data) {
+        sendMessage('carAirQuality', data.toJson());
+      })
+    );
+    // 充电
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.charge.chargeDataStream.listen((data) {
+        sendMessage('carCharge', data.toJson());
+      })
+    );
+    // 媒体
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.media.mediaDataStream.listen((data) {
+        sendMessage('carMedia', data.toJson());
+      })
+    );
+    // 车身状态
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.bodyStatus.bodyStatusDataStream.listen((data) {
+        sendMessage('carBodyStatus', data.toJson());
+      })
+    );
+    // 车灯
+    _vehicleDataSubscriptions.add(
+      _vehicleService.services.light.lightDataStream.listen((data) {
+        sendMessage('carLight', data.toJson());
+      })
+    );
+  }
+
+  /// 取消所有单个分类数据监听
+  void _disposeVehicleDataListeners() {
+    for (var subscription in _vehicleDataSubscriptions) {
+      subscription.cancel();
+    }
+    _vehicleDataSubscriptions.clear();
   }
 
 // void setChannel(MethodChannel? channel, {String? sessionId}) {
@@ -354,92 +478,92 @@ class BridgeController {
     switch (category) {
       case 'speed':
         final data = await _vehicleService.services.speed.get();
-        sendMessage('speed', data.toJson(),
+        sendMessage('carSpeed', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'statistic':
         final data = await _vehicleService.services.statistic.get();
-        sendMessage('statistic', data.toJson(),
+        sendMessage('carStatistic', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'instrument':
         final data = await _vehicleService.services.instrument.get();
-        sendMessage('instrument', data.toJson(),
+        sendMessage('carInstrument', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'door':
         final data = await _vehicleService.services.door.get();
-        sendMessage('door', data.toJson(),
+        sendMessage('carDoor', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'vehicleSetting':
         final data = await _vehicleService.services.vehicleset.get();
-        sendMessage('vehicleSetting', data.toJson(),
+        sendMessage('carVehicleSet', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'engine':
         final data = await _vehicleService.services.engine.get();
-        sendMessage('engine', data.toJson(),
+        sendMessage('carEngine', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'panorama':
         final data = await _vehicleService.services.panorama.get();
-        sendMessage('panorama', data.toJson(),
+        sendMessage('carPanorama', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'ac':
         final data = await _vehicleService.services.ac.get();
-        sendMessage('ac', data.toJson(),
+        sendMessage('carAc', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'sensor':
         final data = await _vehicleService.services.sensor.get();
-        sendMessage('sensor', data.toJson(),
+        sendMessage('carSensor', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'time':
         final data = await _vehicleService.services.time.get();
-        sendMessage('time', data.toJson(),
+        sendMessage('carTime', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'energyMode':
         final data = await _vehicleService.services.energyMode.get();
-        sendMessage('energyMode', data.toJson(),
+        sendMessage('carEnergyMode', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'radar':
         final data = await _vehicleService.services.radar.get();
-        sendMessage('radar', data.toJson(),
+        sendMessage('carRadar', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'tyre':
         final data = await _vehicleService.services.tyre.get();
-        sendMessage('tyre', data.toJson(),
+        sendMessage('carTyre', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'airQuality':
         final data = await _vehicleService.services.airQuality.get();
-        sendMessage('airQuality', data.toJson(),
+        sendMessage('carAirQuality', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'charge':
         final data = await _vehicleService.services.charge.get();
-        sendMessage('charge', data.toJson(),
+        sendMessage('carCharge', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'media':
         final data = await _vehicleService.services.media.get();
-        sendMessage('media', data.toJson(),
+        sendMessage('carMedia', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'bodyStatus':
         final data = await _vehicleService.services.bodyStatus.get();
-        sendMessage('bodyStatus', data.toJson(),
+        sendMessage('carBodyStatus', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       case 'light':
         final data = await _vehicleService.services.light.get();
-        sendMessage('light', data.toJson(),
+        sendMessage('carLight', data.toJson(),
             bridgeId: bridgeId, sessionId: sessionId);
         break;
       default:
@@ -2084,14 +2208,14 @@ class BridgeController {
           }
           break;
         // ============ 车辆数据统一接口 ============
-        case 'get':
+        case 'carGet':
           final getCategory = message.payload as String?;
           if (getCategory != null) {
             _handleVehicleGet(getCategory,
                 bridgeId: bridgeId, sessionId: finalSessionId);
           }
           break;
-        case 'enableListener':
+        case 'carEnableListener':
           final listenerPayload = message.payload as Map<String, dynamic>?;
           if (listenerPayload != null) {
             final category = listenerPayload['category'] as String?;
@@ -2101,7 +2225,7 @@ class BridgeController {
             }
           }
           break;
-        case 'set':
+        case 'carSet':
           final setPayload = message.payload as Map<String, dynamic>?;
           if (setPayload != null) {
             final type = setPayload['type'] as String?;
@@ -2816,6 +2940,7 @@ class BridgeController {
   void dispose() {
     _positionSubscription?.cancel();
     _carDataSubscription?.cancel();
+    _disposeVehicleDataListeners();
     _vehicleService.dispose();
     _messageHandlers.clear();
   }

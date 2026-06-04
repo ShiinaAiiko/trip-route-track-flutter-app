@@ -1079,8 +1079,8 @@ class BodyStatusData {
   final int sunshadePercent;
   final int batteryVoltageLevel;
   final int powerLevel;
-  final int steeringWheelAngle;
-  final int steeringWheelSpeed;
+  final double steeringWheelAngle;
+  final double steeringWheelSpeed;
   final int fuelElecLowPower;
   final int alarmState;
   final int moonRoofConfig;
@@ -1156,8 +1156,8 @@ class BodyStatusData {
       sunshadePercent: json['sunshadePercent'] ?? 0,
       batteryVoltageLevel: json['batteryVoltageLevel'] ?? 0,
       powerLevel: json['powerLevel'] ?? 0,
-      steeringWheelAngle: json['steeringWheelAngle'] ?? 0,
-      steeringWheelSpeed: json['steeringWheelSpeed'] ?? 0,
+      steeringWheelAngle: (json['steeringWheelAngle'] ?? 0.0) as double,
+      steeringWheelSpeed: (json['steeringWheelSpeed'] ?? 0.0) as double,
       fuelElecLowPower: json['fuelElecLowPower'] ?? 0,
       alarmState: json['alarmState'] ?? 0,
       moonRoofConfig: json['moonRoofConfig'] ?? 0,
@@ -1172,7 +1172,7 @@ class BodyStatusData {
       windowStateLf: 0, windowStateRf: 0, windowStateLr: 0, windowStateRr: 0,
       moonRoofPercent: 0, sunshadePercent: 0,
       batteryVoltageLevel: 0, powerLevel: 0,
-      steeringWheelAngle: 0, steeringWheelSpeed: 0,
+      steeringWheelAngle: 0.0, steeringWheelSpeed: 0.0,
       fuelElecLowPower: 0, alarmState: 0, moonRoofConfig: 0,
     );
   }
@@ -1243,45 +1243,112 @@ class LightData {
 }
 
 class CarData {
-  final SpeedData speedData;
-  final StatisticData statisticData;
-  final InstrumentData instrumentData;
-  final TyrePressure tyrePressure;
-  final int chargeStatus;
-  final int chargePower;
-  final int timestamp;
+  final SpeedData speed;
+  final StatisticData statistic;
+  final InstrumentData instrument;
+  final DoorData door;
+  final VehicleSettingData vehicleSetting;
+  final EngineData engine;
+  final PanoramaData panorama;
+  final AcData ac;
+  final SensorData sensor;
+  final TimeData time;
+  final EnergyModeData energyMode;
+  final RadarData radar;
+  final TyreData tyre;
+  final AirQualityData airQuality;
+  final ChargeData charge;
+  final MediaData media;
+  final BodyStatusData bodyStatus;
+  final LightData light;
 
   CarData({
-    required this.speedData,
-    required this.statisticData,
-    required this.instrumentData,
-    required this.tyrePressure,
-    required this.chargeStatus,
-    required this.chargePower,
-    required this.timestamp,
+    required this.speed,
+    required this.statistic,
+    required this.instrument,
+    required this.door,
+    required this.vehicleSetting,
+    required this.engine,
+    required this.panorama,
+    required this.ac,
+    required this.sensor,
+    required this.time,
+    required this.energyMode,
+    required this.radar,
+    required this.tyre,
+    required this.airQuality,
+    required this.charge,
+    required this.media,
+    required this.bodyStatus,
+    required this.light,
   });
 
   Map<String, dynamic> toJson() {
     return {
-      ...speedData.toJson(),
-      ...statisticData.toJson(),
-      ...instrumentData.toJson(),
-      'tyrePressure': tyrePressure.toJson(),
-      'chargeStatus': chargeStatus,
-      'chargePower': chargePower,
-      'timestamp': timestamp,
+      'speed': speed.toJson(),
+      'statistic': statistic.toJson(),
+      'instrument': instrument.toJson(),
+      'door': door.toJson(),
+      'vehicleSetting': vehicleSetting.toJson(),
+      'engine': engine.toJson(),
+      'panorama': panorama.toJson(),
+      'ac': ac.toJson(),
+      'sensor': sensor.toJson(),
+      'time': time.toJson(),
+      'energyMode': energyMode.toJson(),
+      'radar': radar.toJson(),
+      'tyre': tyre.toJson(),
+      'airQuality': airQuality.toJson(),
+      'charge': charge.toJson(),
+      'media': media.toJson(),
+      'bodyStatus': bodyStatus.toJson(),
+      'light': light.toJson(),
     };
   }
 
   factory CarData.fromJson(Map<String, dynamic> json) {
     return CarData(
-      speedData: SpeedData.fromJson(json),
-      statisticData: StatisticData.fromJson(json),
-      instrumentData: InstrumentData.fromJson(json),
-      tyrePressure: TyrePressure.fromJson(json['tyrePressure'] ?? {}),
-      chargeStatus: json['chargeStatus'] ?? 0,
-      chargePower: json['chargePower'] ?? 0,
-      timestamp: json['timestamp'] ?? DateTime.now().millisecondsSinceEpoch,
+      speed: SpeedData.fromJson(json['speed'] ?? {}),
+      statistic: StatisticData.fromJson(json['statistic'] ?? {}),
+      instrument: InstrumentData.fromJson(json['instrument'] ?? {}),
+      door: DoorData.fromJson(json['door'] ?? {}),
+      vehicleSetting: VehicleSettingData.fromJson(json['vehicleSetting'] ?? {}),
+      engine: EngineData.fromJson(json['engine'] ?? {}),
+      panorama: PanoramaData.fromJson(json['panorama'] ?? {}),
+      ac: AcData.fromJson(json['ac'] ?? {}),
+      sensor: SensorData.fromJson(json['sensor'] ?? {}),
+      time: TimeData.fromJson(json['time'] ?? {}),
+      energyMode: EnergyModeData.fromJson(json['energyMode'] ?? {}),
+      radar: RadarData.fromJson(json['radar'] ?? {}),
+      tyre: TyreData.fromJson(json['tyre'] ?? {}),
+      airQuality: AirQualityData.fromJson(json['airQuality'] ?? {}),
+      charge: ChargeData.fromJson(json['charge'] ?? {}),
+      media: MediaData.fromJson(json['media'] ?? {}),
+      bodyStatus: BodyStatusData.fromJson(json['bodyStatus'] ?? {}),
+      light: LightData.fromJson(json['light'] ?? {}),
+    );
+  }
+
+  factory CarData.defaultData() {
+    return CarData(
+      speed: SpeedData.fromJson({}),
+      statistic: StatisticData.fromJson({}),
+      instrument: InstrumentData.defaultData(),
+      door: DoorData.defaultData(),
+      vehicleSetting: VehicleSettingData.defaultData(),
+      engine: EngineData.defaultData(),
+      panorama: PanoramaData.defaultData(),
+      ac: AcData.defaultData(),
+      sensor: SensorData.defaultData(),
+      time: TimeData.defaultData(),
+      energyMode: EnergyModeData.defaultData(),
+      radar: RadarData.defaultData(),
+      tyre: TyreData.defaultData(),
+      airQuality: AirQualityData.defaultData(),
+      charge: ChargeData.defaultData(),
+      media: MediaData.defaultData(),
+      bodyStatus: BodyStatusData.defaultData(),
+      light: LightData.defaultData(),
     );
   }
 }

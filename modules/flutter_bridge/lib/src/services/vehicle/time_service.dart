@@ -37,7 +37,7 @@ class TimeService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableTimeListener', enabled);
+      await _channel.invokeMethod('enableTimeListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[TimeService] enableListener() failed: $e');

@@ -37,7 +37,7 @@ class TyreService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableTyreListener', enabled);
+      await _channel.invokeMethod('enableTyreListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[TyreService] enableListener() failed: $e');

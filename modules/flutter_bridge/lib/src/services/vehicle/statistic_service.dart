@@ -67,7 +67,7 @@ class StatisticService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableStatisticListener', enabled);
+      await _channel.invokeMethod('enableStatisticListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[StatisticService] enableListener() failed: $e');

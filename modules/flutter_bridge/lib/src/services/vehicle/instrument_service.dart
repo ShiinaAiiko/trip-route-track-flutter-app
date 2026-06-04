@@ -37,7 +37,7 @@ class InstrumentService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableInstrumentListener', enabled);
+      await _channel.invokeMethod('enableInstrumentListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[InstrumentService] enableListener() failed: $e');

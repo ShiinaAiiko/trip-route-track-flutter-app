@@ -37,7 +37,7 @@ class EnergyModeService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableEnergyModeListener', enabled);
+      await _channel.invokeMethod('enableEnergyModeListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[EnergyModeService] enableListener() failed: $e');

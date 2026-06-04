@@ -37,7 +37,7 @@ class AirQualityService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableAirQualityListener', enabled);
+      await _channel.invokeMethod('enableAirQualityListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[AirQualityService] enableListener() failed: $e');

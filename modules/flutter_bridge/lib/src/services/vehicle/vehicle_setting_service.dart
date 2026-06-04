@@ -37,7 +37,7 @@ class VehicleSettingService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableVehicleSettingListener', enabled);
+      await _channel.invokeMethod('enableVehicleSettingListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[VehicleSettingService] enableListener() failed: $e');

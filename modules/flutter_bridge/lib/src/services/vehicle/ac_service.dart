@@ -42,7 +42,7 @@ class AcService {
   /// @param enabled 是否启用监听
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableAcListener', enabled);
+      await _channel.invokeMethod('enableAcListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[AcService] enableListener() failed: $e');

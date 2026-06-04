@@ -42,7 +42,7 @@ class SpeedService {
   /// @param enabled 是否启用监听
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableSpeedListener', enabled);
+      await _channel.invokeMethod('enableSpeedListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[SpeedService] enableListener() failed: $e');

@@ -37,7 +37,7 @@ class PanoramaService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enablePanoramaListener', enabled);
+      await _channel.invokeMethod('enablePanoramaListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[PanoramaService] enableListener() failed: $e');

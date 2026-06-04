@@ -37,7 +37,7 @@ class SensorService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableSensorListener', enabled);
+      await _channel.invokeMethod('enableSensorListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[SensorService] enableListener() failed: $e');

@@ -37,7 +37,7 @@ class BodyStatusService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableBodyStatusListener', enabled);
+      await _channel.invokeMethod('enableBodyStatusListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[BodyStatusService] enableListener() failed: $e');

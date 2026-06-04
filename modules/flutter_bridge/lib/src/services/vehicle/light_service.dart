@@ -37,7 +37,7 @@ class LightService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableLightListener', enabled);
+      await _channel.invokeMethod('enableLightListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[LightService] enableListener() failed: $e');

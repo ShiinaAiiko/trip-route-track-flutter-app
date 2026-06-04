@@ -37,7 +37,7 @@ class RadarService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableRadarListener', enabled);
+      await _channel.invokeMethod('enableRadarListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[RadarService] enableListener() failed: $e');

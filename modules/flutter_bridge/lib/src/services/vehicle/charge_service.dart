@@ -37,7 +37,7 @@ class ChargeService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableChargeListener', enabled);
+      await _channel.invokeMethod('enableChargeListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[ChargeService] enableListener() failed: $e');

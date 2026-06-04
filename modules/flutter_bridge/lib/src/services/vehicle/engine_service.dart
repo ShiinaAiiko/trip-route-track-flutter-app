@@ -37,7 +37,7 @@ class EngineService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableEngineListener', enabled);
+      await _channel.invokeMethod('enableEngineListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[EngineService] enableListener() failed: $e');

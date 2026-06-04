@@ -37,7 +37,7 @@ class MediaService {
 
   Future<void> enableListener(bool enabled) async {
     try {
-      await _channel.invokeMethod('enableMediaListener', enabled);
+      await _channel.invokeMethod('enableMediaListener', {'enabled': enabled});
       _isListening = enabled;
     } catch (e) {
       print('[MediaService] enableListener() failed: $e');
