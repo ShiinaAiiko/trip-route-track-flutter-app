@@ -718,25 +718,98 @@ class BridgeController {
         }
       }
 
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+      // 先尝试获取最后已知位置（快速响应）
+      try {
+        final lastKnownPosition = await Geolocator.getLastKnownPosition();
+        if (lastKnownPosition != null) {
+          // 立即返回缓存位置，快速响应前端
+          sendMessage(
+              'getCurrentLocation',
+              {
+                'coords': {
+                  'latitude': lastKnownPosition.latitude,
+                  'longitude': lastKnownPosition.longitude,
+                  'altitude': lastKnownPosition.altitude,
+                  'accuracy': lastKnownPosition.accuracy,
+                  'heading': lastKnownPosition.heading,
+                  'speed': lastKnownPosition.speed,
+                },
+                'timestamp': lastKnownPosition.timestamp.millisecondsSinceEpoch,
+                'isCached': true, // 标记为缓存位置
+              },
+              bridgeId: bridgeId,
+              sessionId: sessionId);
+        }
+      } catch (e) {
+        print('[Bridge] getLastKnownPosition failed: $e');
+      }
 
-      sendMessage(
-          'getCurrentLocation',
-          {
-            'coords': {
-              'latitude': position.latitude,
-              'longitude': position.longitude,
-              'altitude': position.altitude,
-              'accuracy': position.accuracy,
-              'heading': position.heading,
-              'speed': position.speed,
+      // 然后异步获取精确位置（更新前端）
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+        ).timeout(Duration(seconds: 10));
+
+        sendMessage(
+            'getCurrentLocation',
+            {
+              'coords': {
+                'latitude': position.latitude,
+                'longitude': position.longitude,
+                'altitude': position.altitude,
+                'accuracy': position.accuracy,
+                'heading': position.heading,
+                'speed': position.speed,
+              },
+              'timestamp': position.timestamp.millisecondsSinceEpoch,
+              'isCached': false, // 标记为精确位置
             },
-            'timestamp': position.timestamp.millisecondsSinceEpoch,
-          },
-          bridgeId: bridgeId,
-          sessionId: sessionId);
+            bridgeId: bridgeId,
+            sessionId: sessionId);
+      } on TimeoutException {
+        // 高精度定位超时，尝试使用中等精度
+        print('[Bridge] High accuracy location timeout, trying medium accuracy');
+        try {
+          final position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.medium,
+          ).timeout(Duration(seconds: 5));
+
+          sendMessage(
+              'getCurrentLocation',
+              {
+                'coords': {
+                  'latitude': position.latitude,
+                  'longitude': position.longitude,
+                  'altitude': position.altitude,
+                  'accuracy': position.accuracy,
+                  'heading': position.heading,
+                  'speed': position.speed,
+                },
+                'timestamp': position.timestamp.millisecondsSinceEpoch,
+                'isCached': false,
+              },
+              bridgeId: bridgeId,
+              sessionId: sessionId);
+        } catch (e) {
+          print('[Bridge] Medium accuracy location also failed: $e');
+          // 如果之前已经返回了缓存位置，这里不需要再发送错误
+          // 如果没有缓存位置，才发送错误
+          final lastKnown = await Geolocator.getLastKnownPosition();
+          if (lastKnown == null) {
+            sendMessage(
+                'gpsError',
+                {
+                  'title': _i18nService.t('gps_error'),
+                  'message': 'getCurrentLocation timeout and no cached location',
+                  'type': 'error',
+                  'notification': true,
+                  'module': 'location',
+                },
+                bridgeId: bridgeId,
+                sessionId: sessionId);
+          }
+        }
+      }
     } catch (e) {
       sendMessage(
           'gpsError',
