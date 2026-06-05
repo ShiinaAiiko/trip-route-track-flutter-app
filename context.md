@@ -117,6 +117,7 @@ trip-route-track-flutter-app/
 | `switchEngine` | 切换 WebView 内核 |
 | `thirdPartyLogin` | 第三方登录 |
 | `enableCarData` / `getCarData` | 车辆数据控制 |
+| `setCarDataListenerDebounceDelay` | 车机数据防抖延迟设置 |
 
 ---
 
@@ -200,6 +201,19 @@ trip-route-track-flutter-app/
 - 通过 `bydLog` 消息发送调试日志
 - 非比亚迪设备返回全 0 数据
 
+**防抖机制**：
+- `setCarDataListenerDebounceDelay(delayMs)` 方法设置防抖延迟
+- `delayMs = 0`：不防抖（比亚迪服务默认）
+- `delayMs > 0`：启用防抖（测试服务默认 100ms）
+- 100ms 间隔内只发送一次数据
+- 支持动态切换防抖延迟
+
+**测试服务**：
+- `TestBYDAutoVehicleService`：独立测试服务，不依赖真实 BYD API
+- `testCarData(true)`：启动模拟数据
+- `testCarData(false)`：停止模拟数据
+- 默认 100ms 间隔发送完整车机数据
+
 ---
 
 ### 第三方登录
@@ -280,6 +294,7 @@ trip-route-track-flutter-app/
 | GeckoView 平台 | `android/app/src/main/kotlin/club/aiiko/trip/GeckoViewPlatform.kt` |
 | 主 Activity | `android/app/src/main/kotlin/club/aiiko/trip/MainActivity.kt` |
 | 比亚迪车机服务 | `android/app/src/main/kotlin/club/aiiko/trip/BYDAutoVehicleService.kt` |
+| 测试车机服务 | `android/app/src/main/kotlin/club/aiiko/trip/TestBYDAutoVehicleService.kt` |
 
 ---
 

@@ -1261,6 +1261,7 @@ class CarData {
   final MediaData media;
   final BodyStatusData bodyStatus;
   final LightData light;
+  final int timestamp;
 
   CarData({
     required this.speed,
@@ -1281,6 +1282,7 @@ class CarData {
     required this.media,
     required this.bodyStatus,
     required this.light,
+    required this.timestamp,
   });
 
   Map<String, dynamic> toJson() {
@@ -1303,6 +1305,7 @@ class CarData {
       'media': media.toJson(),
       'bodyStatus': bodyStatus.toJson(),
       'light': light.toJson(),
+      'timestamp': timestamp,
     };
   }
 
@@ -1326,6 +1329,7 @@ class CarData {
       media: MediaData.fromJson(json['media'] ?? {}),
       bodyStatus: BodyStatusData.fromJson(json['bodyStatus'] ?? {}),
       light: LightData.fromJson(json['light'] ?? {}),
+      timestamp: json['timestamp'] ?? 0,
     );
   }
 
@@ -1349,6 +1353,7 @@ class CarData {
       media: MediaData.defaultData(),
       bodyStatus: BodyStatusData.defaultData(),
       light: LightData.defaultData(),
+      timestamp: 0,
     );
   }
 }

@@ -66,6 +66,10 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private var methodChannel: MethodChannel? = null
     private var isStarted = false
+    private var enableCarDataListener = false
+    private var lastSendTime = 0L
+    private var debounceDelayMs = 0
+
 
     // 数据缓存
     private var lastSpeed: Double = 0.0
@@ -82,6 +86,17 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastChargeStatus: Int = 0
     private var lastChargePower: Int = 0
     private var lastExternalChargingPower: Double = 0.0
+    // 数据缓存 - 统计类
+    private var lastDrivingTime: Double = 0.0
+    private var lastElecDrivingRange: Int = 0
+    private var lastFuelDrivingRange: Int = 0
+    private var lastLastElecConPHM: Double = 0.0
+    private var lastLastFuelConPHM: Double = 0.0
+    private var lastTotalElecConPHM: Double = 0.0
+    private var lastTotalFuelCon: Double = 0.0
+    private var lastTotalElecCon: Double = 0.0
+    private var lastTotalFuelConPHM: Double = 0.0
+    private var lastKeyBatteryLevel: Int = 0
 
     // 数据缓存 - 空调类
     private var lastAcCompressorMode: Int = 0
@@ -99,7 +114,6 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastAcTemperatureDeputy: Int = 0
     private var lastAcTemperatureRear: Int = 0
     private var lastAcTemperatureOut: Int = 0
-    private var lastTemperatureUnit: Int = 0
     private var lastAcTemperatureControlMode: Int = 0
     private var lastAcVentilationState: Int = 0
     private var lastRearAcStartState: Int = 0
@@ -150,6 +164,35 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastEngineSpeed: Int = 0
     private var lastEngineCoolantLevel: Int = 0
     private var lastOilLevel: Int = 0
+
+    // 数据缓存 - 胎压类
+    private var lastTyreAirLeakState: Int = 0
+    private var lastTyreBatteryState: Int = 0
+    private var lastTyrePressureStateLf: Int = 0
+    private var lastTyrePressureStateRf: Int = 0
+    private var lastTyrePressureStateLr: Int = 0
+    private var lastTyrePressureStateRr: Int = 0
+    private var lastTyreSignalStateLf: Int = 0
+    private var lastTyreSignalStateRf: Int = 0
+    private var lastTyreSignalStateLr: Int = 0
+    private var lastTyreSignalStateRr: Int = 0
+    private var lastTyreSystemState: Int = 0
+    private var lastTyreTemperatureState: Int = 0
+
+    // 数据缓存 - 仪表类
+    private var lastMalfunctionInfo: Int = 0
+    private var lastMaintenanceInfo: Int = 0
+    private var lastTemperatureUnit: Int = 0  // 温度单位
+    private var lastPressureUnit: Int = 0     // 气压单位
+    private var lastFuelConsumptionUnit: Int = 0  // 油耗距离单位
+    private var lastPowerUnit: Int = 0        // 功率单位
+    private var lastAlarmBuzzleState: Int = 0 // 蜂鸣器状态
+
+    // 数据缓存 - 媒体类
+    private var lastPlayMediaInfo: String = ""
+
+    // 数据缓存 - 空调类
+    private var lastAcWindModeShownState: Int = 0
 
     // 数据缓存 - 全景摄像头类
     private var lastPanoOutputSignal: Int = 0
@@ -579,7 +622,8 @@ class BYDAutoVehicleService(private val context: Context) {
         manualReadInitialData()
 
         sendCarLog("BYDAutoVehicleService 启动完成")
-        sendCarData(buildCarData())
+        // 调用 requestCarData() 获取所有真实数据并更新缓存，然后发送完整数据
+        requestCarData()
     }
 
     // 参考车况助手项目：手动读取初始数据
@@ -652,28 +696,28 @@ class BYDAutoVehicleService(private val context: Context) {
     // 参考车况助手项目：监听器作为类成员变量
     private val speedListener = object : AbsBYDAutoSpeedListener() {
         override fun onSpeedChanged(value: Double) {
-            sendCarLog("车速监听器回调 - 速度变化: $value")
-            if (value != lastSpeed && value >= 0 && value <= 282) {
+            sendCarLog("changed-speed-currentSpeed:$value")
+            if (value != lastSpeed) {
                 lastSpeed = value
-                sendCarData(buildCarData())
+                sendCarData()
                 if (speedListenerEnabled) sendSpeedData()
             }
         }
 
         override fun onAccelerateDeepnessChanged(value: Int) {
-            sendCarLog("车速监听器回调 - 油门深度变化: $value")
-            if (value != lastAccelerateDepth && value >= 0 && value <= 100) {
+            sendCarLog("changed-speed-accelerateDeepness:$value")
+            if (value != lastAccelerateDepth) {
                 lastAccelerateDepth = value
-                sendCarData(buildCarData())
+                sendCarData()
                 if (speedListenerEnabled) sendSpeedData()
             }
         }
 
         override fun onBrakeDeepnessChanged(value: Int) {
-            sendCarLog("车速监听器回调 - 刹车深度变化: $value")
-            if (value != lastBrakeDepth && value >= 0 && value <= 100) {
+            sendCarLog("changed-speed-brakeDeepness:$value")
+            if (value != lastBrakeDepth) {
                 lastBrakeDepth = value
-                sendCarData(buildCarData())
+                sendCarData()
                 if (speedListenerEnabled) sendSpeedData()
             }
         }
@@ -681,219 +725,243 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private val statisticListener = object : AbsBYDAutoStatisticListener() {
         override fun onDrivingTimeChanged(value: Double) {
-            sendCarLog("统计监听器回调 - 行驶时间变化: $value")
-            if (value >= 0 && value <= 9999.9) {
-                sendCarData(buildCarData())
-                if (statisticListenerEnabled) sendStatisticData()
-            }
+            sendCarLog("changed-statistic-drivingTime:$value")
+            lastDrivingTime = value
+            sendCarData()
+            if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onElecDrivingRangeChanged(value: Int) {
-            sendCarLog("统计监听器回调 - 电续驶里程变化: $value")
-            if (value >= 0 && value <= 511) {
-                sendCarData(buildCarData())
-                if (statisticListenerEnabled) sendStatisticData()
-            }
+            sendCarLog("changed-statistic-elecDrivingRange:$value")
+            lastElecDrivingRange = value
+            sendCarData()
+            if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onElecPercentageChanged(value: Double) {
-            sendCarLog("统计监听器回调 - 电量变化: $value")
-            if (value >= 0 && value <= 100) {
-                lastElecPercentage = value
-                sendCarData(buildCarData())
-                if (statisticListenerEnabled) sendStatisticData()
-            }
+            sendCarLog("changed-statistic-elecPercentage:$value")
+            lastElecPercentage = value
+            sendCarData()
+            if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onFuelDrivingRangeChanged(value: Int) {
-            sendCarLog("统计监听器回调 - 燃油续驶里程变化: $value")
-            if (value >= 0 && value <= 4095) {
-                sendCarData(buildCarData())
-                if (statisticListenerEnabled) sendStatisticData()
-            }
+            sendCarLog("changed-statistic-fuelDrivingRange:$value")
+            lastFuelDrivingRange = value
+            sendCarData()
+            if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onFuelPercentageChanged(value: Int) {
-            sendCarLog("统计监听器回调 - 油量变化: $value")
-            if (value >= 0 && value <= 100) {
-                lastFuelPercentage = value
-                sendCarData(buildCarData())
-                if (statisticListenerEnabled) sendStatisticData()
-            }
+            sendCarLog("changed-statistic-fuelPercentage:$value")
+            lastFuelPercentage = value
+            sendCarData()
+            if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onLastElecConPHMChanged(value: Double) {
-            sendCarLog("统计监听器回调 - 最近百公里电耗变化: $value")
-            sendCarData(buildCarData())
+            sendCarLog("changed-statistic-lastElecConPHM:$value")
+            lastLastElecConPHM = value
+            sendCarData()
             if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onLastFuelConPHMChanged(value: Double) {
-            sendCarLog("统计监听器回调 - 最近百公里油耗变化: $value")
-            if (value >= 0 && value <= 51.1) {
-                sendCarData(buildCarData())
-                if (statisticListenerEnabled) sendStatisticData()
-            }
+            sendCarLog("changed-statistic-lastFuelConPHM:$value")
+            lastLastFuelConPHM = value
+            sendCarData()
+            if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onTotalElecConPHMChanged(value: Double) {
-            sendCarLog("统计监听器回调 - 累计平均电耗变化: $value")
-            sendCarData(buildCarData())
+            sendCarLog("changed-statistic-totalElecConPHM:$value")
+            lastTotalElecConPHM = value
+            sendCarData()
             if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onTotalFuelConChanged(value: Double) {
-            sendCarLog("统计监听器回调 - 燃油消耗总量变化: $value")
-            if (value >= 0) {
-                sendCarData(buildCarData())
-                if (statisticListenerEnabled) sendStatisticData()
-            }
+            sendCarLog("changed-statistic-totalFuelCon:$value")
+            lastTotalFuelCon = value
+            sendCarData()
+            if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onTotalElecConChanged(value: Double) {
-            sendCarLog("统计监听器回调 - 电消耗总量变化: $value")
-            sendCarData(buildCarData())
+            sendCarLog("changed-statistic-totalElecCon:$value")
+            lastTotalElecCon = value
+            sendCarData()
             if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onTotalFuelConPHMChanged(value: Double) {
-            sendCarLog("统计监听器回调 - 累计平均油耗变化: $value")
-            if (value >= 0 && value <= 51.1) {
-                sendCarData(buildCarData())
-                if (statisticListenerEnabled) sendStatisticData()
-            }
+            sendCarLog("changed-statistic-totalFuelConPHM:$value")
+            lastTotalFuelConPHM = value
+            sendCarData()
+            if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onTotalMileageValueChanged(value: Int) {
-            sendCarLog("统计监听器回调 - 总里程变化: $value")
-            if (value >= 0 && value <= 999999) {
-                lastTotalMileage = value
-                sendCarData(buildCarData())
-                if (statisticListenerEnabled) sendStatisticData()
-            }
+            sendCarLog("changed-statistic-totalMileage:$value")
+            lastTotalMileage = value
+            sendCarData()
+            if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onKeyBatteryLevelChanged(value: Int) {
-            sendCarLog("统计监听器回调 - 钥匙电量变化: $value")
-            sendCarData(buildCarData())
+            sendCarLog("changed-statistic-keyBatteryLevel:$value")
+            lastKeyBatteryLevel = value
+            sendCarData()
             if (statisticListenerEnabled) sendStatisticData()
         }
 
         override fun onEVMileageValueChanged(value: Int) {
-            sendCarLog("统计监听器回调 - EV里程变化: $value")
-            if (value >= 0 && value <= 999999) {
-                lastEvMileage = value
-                sendCarData(buildCarData())
-                if (statisticListenerEnabled) sendStatisticData()
-            }
+            sendCarLog("changed-statistic-evMileage:$value")
+            lastEvMileage = value
+            sendCarData()
+            if (statisticListenerEnabled) sendStatisticData()
         }
     }
 
     private val tyreListener = object : AbsBYDAutoTyreListener() {
         override fun onTyreAirLeakStateChanged(area: Int, state: Int) {
-            sendCarLog("胎压监听器回调 - 漏气状态变化: 区域=$area, 状态=$state")
-            sendCarData(buildCarData())
+            val areaName = when (area) {
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT -> "Lf"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT -> "Rf"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR -> "Lr"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR -> "Rr"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-tyre-tyreAirLeakState-$areaName:$state")
+            lastTyreAirLeakState = state
+            sendCarData()
             if (tyreDataListenerEnabled) sendTyreData()
         }
 
         override fun onTyreBatteryStateChanged(state: Int) {
-            sendCarLog("胎压监听器回调 - 电池状态变化: $state")
-            sendCarData(buildCarData())
+            sendCarLog("changed-tyre-tyreBatteryState:$state")
+            lastTyreBatteryState = state
+            sendCarData()
             if (tyreDataListenerEnabled) sendTyreData()
         }
 
         override fun onTyrePressureStateChanged(area: Int, state: Int) {
-            sendCarLog("胎压监听器回调 - 压力状态变化: 区域=$area, 状态=$state")
-            sendCarData(buildCarData())
+            val areaName = when (area) {
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT -> "Lf"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT -> "Rf"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR -> "Lr"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR -> "Rr"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-tyre-tyrePressureState-$areaName:$state")
+            when (area) {
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT -> lastTyrePressureStateLf = state
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT -> lastTyrePressureStateRf = state
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR -> lastTyrePressureStateLr = state
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR -> lastTyrePressureStateRr = state
+            }
+            sendCarData()
             if (tyreDataListenerEnabled) sendTyreData()
         }
 
         override fun onTyrePressureValueChanged(area: Int, value: Int) {
-            sendCarLog("胎压监听器回调 - 压力值变化: 区域=$area, 值=$value")
-            val changed = when (area) {
-                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT -> {
-                    if (value != lastTyrePressureLf && value in 0..4094) {
-                        lastTyrePressureLf = value
-                        true
-                    } else false
-                }
-                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT -> {
-                    if (value != lastTyrePressureRf && value in 0..4094) {
-                        lastTyrePressureRf = value
-                        true
-                    } else false
-                }
-                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR -> {
-                    if (value != lastTyrePressureLr && value in 0..4094) {
-                        lastTyrePressureLr = value
-                        true
-                    } else false
-                }
-                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR -> {
-                    if (value != lastTyrePressureRr && value in 0..4094) {
-                        lastTyrePressureRr = value
-                        true
-                    } else false
-                }
-                else -> false
+            val areaName = when (area) {
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT -> "Lf"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT -> "Rf"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR -> "Lr"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR -> "Rr"
+                else -> "Unknown"
             }
-            if (changed) {
-                sendCarData(buildCarData())
-                if (tyreDataListenerEnabled) sendTyreData()
+            sendCarLog("changed-tyre-tyrePressure-$areaName:$value")
+            when (area) {
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT -> lastTyrePressureLf = value
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT -> lastTyrePressureRf = value
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR -> lastTyrePressureLr = value
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR -> lastTyrePressureRr = value
             }
+            sendCarData()
+            if (tyreDataListenerEnabled) sendTyreData()
         }
 
         override fun onTyreSignalStateChanged(area: Int, state: Int) {
-            sendCarLog("胎压监听器回调 - 信号状态变化: 区域=$area, 状态=$state")
-            sendCarData(buildCarData())
+            val areaName = when (area) {
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT -> "Lf"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT -> "Rf"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR -> "Lr"
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR -> "Rr"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-tyre-tyreSignalState-$areaName:$state")
+            when (area) {
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT -> lastTyreSignalStateLf = state
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT -> lastTyreSignalStateRf = state
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR -> lastTyreSignalStateLr = state
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR -> lastTyreSignalStateRr = state
+            }
+            sendCarData()
             if (tyreDataListenerEnabled) sendTyreData()
         }
 
         override fun onTyreSystemStateChanged(state: Int) {
-            sendCarLog("胎压监听器回调 - 系统状态变化: $state")
-            sendCarData(buildCarData())
+            sendCarLog("changed-tyre-tyreSystemState:$state")
+            lastTyreSystemState = state
+            sendCarData()
             if (tyreDataListenerEnabled) sendTyreData()
         }
 
         override fun onTyreTemperatureStateChanged(state: Int) {
-            sendCarLog("胎压监听器回调 - 温度状态变化: $state")
-            sendCarData(buildCarData())
+            sendCarLog("changed-tyre-tyreTemperatureState:$state")
+            lastTyreTemperatureState = state
+            sendCarData()
             if (tyreDataListenerEnabled) sendTyreData()
         }
     }
 
     private val instrumentListener = object : AbsBYDAutoInstrumentListener() {
         override fun onMalfunctionInfoChanged(typeName: Int, hasMalfunction: Int) {
-            sendCarLog("仪表监听器回调 - 故障提示信息变化: 类型=$typeName, 状态=$hasMalfunction")
-            sendCarData(buildCarData())
+            sendCarLog("changed-instrument-malfunctionInfo:$hasMalfunction")
+            lastMalfunctionInfo = hasMalfunction
+            sendCarData()
             if (instrumentListenerEnabled) sendInstrumentData()
         }
 
         override fun onAlarmBuzzleStateChange(state: Int) {
-            sendCarLog("仪表监听器回调 - 蜂鸣器状态变化: $state")
-            sendCarData(buildCarData())
-            if (instrumentListenerEnabled) sendInstrumentData()
+            // 蜂鸣器状态变化频繁抖动，暂时忽略以避免性能问题
+            // 状态值在 0(停止) 和 1(鸣响) 之间高频切换会导致大量消息发送
+            // 如需启用，请添加防抖逻辑
+            // sendCarLog("changed-instrument-alarmBuzzleState:$state")
+            // sendCarData()
+            // if (instrumentListenerEnabled) sendInstrumentData()
         }
 
         override fun onMaintenanceInfoChanged(typeName: Int, infoValue: Int) {
-            sendCarLog("仪表监听器回调 - 保养信息变化: 类型=$typeName, 值=$infoValue")
-            sendCarData(buildCarData())
+            sendCarLog("changed-instrument-maintenanceInfo:$infoValue")
+            lastMaintenanceInfo = infoValue
+            sendCarData()
             if (instrumentListenerEnabled) sendInstrumentData()
         }
 
         override fun onExternalChargingPowerChanged(value: Double) {
-            sendCarLog("仪表监听器回调 - 外接充电量变化: $value")
-            if (value >= 0.0 && value <= 10000.0) {
-                lastExternalChargingPower = value
-                sendCarData(buildCarData())
-                if (instrumentListenerEnabled) sendInstrumentData()
-            }
+            sendCarLog("changed-instrument-externalChargingPower:$value")
+            lastExternalChargingPower = value
+            sendCarData()
+            if (instrumentListenerEnabled) sendInstrumentData()
         }
     }
 
     private val doorLockListener = object : AbsBYDAutoDoorLockListener() {
         override fun onDoorLockStatusChanged(area: Int, state: Int) {
-            sendCarLog("门锁监听器回调 - 区域: $area, 状态: $state")
+            val areaName = when (area) {
+                BYDAutoDoorLockDevice.DOOR_LOCK_AREA_LEFT_FRONT -> "Lf"
+                BYDAutoDoorLockDevice.DOOR_LOCK_AREA_LEFT_REAR -> "Lr"
+                BYDAutoDoorLockDevice.DOOR_LOCK_AREA_RIGHT_FRONT -> "Rf"
+                BYDAutoDoorLockDevice.DOOR_LOCK_AREA_RIGHT_REAR -> "Rr"
+                BYDAutoDoorLockDevice.DOOR_LOCK_AREA_BACK -> "Back"
+                BYDAutoDoorLockDevice.DOOR_LOCK_AREA_CHILDLOCK_LEFT -> "ChildlockL"
+                BYDAutoDoorLockDevice.DOOR_LOCK_AREA_CHILDLOCK_RIGHT -> "ChildlockR"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-doorLock-doorLockStatus-$areaName:$state")
             when (area) {
                 BYDAutoDoorLockDevice.DOOR_LOCK_AREA_LEFT_FRONT -> lastDoorLockLeftFront = state
                 BYDAutoDoorLockDevice.DOOR_LOCK_AREA_LEFT_REAR -> lastDoorLockLeftRear = state
@@ -903,280 +971,280 @@ class BYDAutoVehicleService(private val context: Context) {
                 BYDAutoDoorLockDevice.DOOR_LOCK_AREA_CHILDLOCK_LEFT -> lastDoorLockChildlockLeft = state
                 BYDAutoDoorLockDevice.DOOR_LOCK_AREA_CHILDLOCK_RIGHT -> lastDoorLockChildlockRight = state
             }
-            sendCarData(buildCarData())
+            sendCarData()
             if (doorLockListenerEnabled) sendDoorData()
         }
     }
 
     private val settingListener = object : AbsBYDAutoSettingListener() {
         override fun onACBTWindSwitchChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 蓝牙通话自动降风速: $state")
+            sendCarLog("changed-setting-acBTWind:$state")
             lastAcBTWind = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onACTunnelCycleSwitchChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 进隧道自动内循环: $state")
+            sendCarLog("changed-setting-acTunnelCycle:$state")
             lastAcTunnelCycle = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onACPauseCycleSwitchChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 驻车自动内循环: $state")
+            sendCarLog("changed-setting-acPauseCycle:$state")
             lastAcPauseCycle = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onACAutoAirModeChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 空调自动模式: $state")
+            sendCarLog("changed-setting-acAutoAir:$state")
             lastAcAutoAir = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onPM25PowerSwitchChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - PM2.5上电检测: $state")
+            sendCarLog("changed-setting-pm25Power:$state")
             lastPm25Power = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onPM25SwitchCheckChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - PM2.5开关门检测: $state")
+            sendCarLog("changed-setting-pm25SwitchCheck:$state")
             lastPm25SwitchCheck = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onPM25TimeCheckChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - PM2.5定时检测: $state")
+            sendCarLog("changed-setting-pm25TimeCheck:$state")
             lastPm25TimeCheck = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onEnergyFeedbackStrengthChanged(level: Int) {
-            sendCarLog("车辆设置监听器回调 - 能量回馈强度: $level")
+            sendCarLog("changed-setting-energyFeedback:$level")
             lastEnergyFeedback = level
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onSOCTargetRangeChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - SOC目标点: $state")
+            sendCarLog("changed-setting-socTarget:$state")
             lastSocTarget = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onChargingPortSwitchChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 充电枪电锁模式: $state")
+            sendCarLog("changed-setting-chargingPort:$state")
             lastChargingPort = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onAutoExternalRearMirrorFollowUpSwitchChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 外后视镜随动: $state")
+            sendCarLog("changed-setting-autoExternalRearMirrorFollowUp:$state")
             lastAutoExternalRearMirrorFollowUp = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onLockOffDoorChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 开锁方式: $state")
+            sendCarLog("changed-setting-lockOff:$state")
             lastLockOff = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onLanguageChanged(value: Int) {
-            sendCarLog("车辆设置监听器回调 - 语言: $value")
+            sendCarLog("changed-setting-language:$value")
             lastLanguage = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onOverspeedLockStateChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 超速闭锁: $state")
+            sendCarLog("changed-setting-overspeedLock:$state")
             lastOverspeedLock = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onSafeWarnStateChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 安全警告: $state")
+            sendCarLog("changed-setting-safeWarnState:$state")
             lastSafeWarnState = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onMaintainRemindStateChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 保养提醒: $state")
+            sendCarLog("changed-setting-maintainRemindState:$state")
             lastMaintainRemindState = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onSteerAssisModeChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 转向助力模式: $state")
+            sendCarLog("changed-setting-steerAssis:$state")
             lastSteerAssis = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onRearViewMirrorFlipSwitchChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 后视镜翻转: $state")
+            sendCarLog("changed-setting-rearViewMirrorFlip:$state")
             lastRearViewMirrorFlip = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onDriverSeatAutoReturnSwitchChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 驾驶座自动回退: $state")
+            sendCarLog("changed-setting-driverSeatAutoReturn:$state")
             lastDriverSeatAutoReturn = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onSteerPositionAutoReturnSwitchChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 方向盘自动回退: $state")
+            sendCarLog("changed-setting-steerPositionAutoReturn:$state")
             lastSteerPositionAutoReturn = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onRemoteControlUpwindowStateChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 遥控升窗: $state")
+            sendCarLog("changed-setting-remoteControlUpwindowState:$state")
             lastRemoteControlUpwindowState = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onControlWindowSwitchChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 遥控降窗: $state")
+            sendCarLog("changed-setting-remoteControlDownwindowState:$state")
             lastRemoteControlDownwindowState = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onLockCarRiseWindowChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 锁车升窗: $state")
+            sendCarLog("changed-setting-lockCarRiseWindow:$state")
             lastLockCarRiseWindow = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onMicroSwitchLockWindowStateChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 微动开关锁窗: $state")
+            sendCarLog("changed-setting-microSwitchLockWindowState:$state")
             lastMicroSwitchLockWindowState = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onMicroSwitchUnlockWindowStateChanged(state: Int) {
-            sendCarLog("车辆设置监听器回调 - 微动开关解锁窗: $state")
+            sendCarLog("changed-setting-microSwitchUnlockWindowState:$state")
             lastMicroSwitchUnlockWindowState = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onBackHomeLightDelayValueChanged(value: Int) {
-            sendCarLog("车辆设置监听器回调 - 回家灯延时: $value")
+            sendCarLog("changed-setting-backHomeLightDelayValue:$value")
             lastBackHomeLightDelayValue = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onLeftHomeLightDelayValueChanged(value: Int) {
-            sendCarLog("车辆设置监听器回调 - 离家灯延时: $value")
+            sendCarLog("changed-setting-leftHomeLightDelayValue:$value")
             lastLeftHomeLightDelayValue = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
 
         override fun onBackDoorElectricModeChanged(mode: Int) {
-            sendCarLog("车辆设置监听器回调 - 尾门电动模式: $mode")
+            sendCarLog("changed-setting-backDoorElectricMode:$mode")
             lastBackDoorElectricMode = mode
-            sendCarData(buildCarData())
+            sendCarData()
             if (vehicleSettingListenerEnabled) sendVehicleSettingData()
         }
     }
 
     private val engineListener = object : AbsBYDAutoEngineListener() {
         override fun onEngineSpeedChanged(value: Int) {
-            sendCarLog("发动机监听器回调 - 转速: $value")
+            sendCarLog("changed-engine-engineSpeed:$value")
             lastEngineSpeed = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (engineListenerEnabled) sendEngineData()
         }
 
         override fun onEngineCoolantLevelChanged(state: Int) {
-            sendCarLog("发动机监听器回调 - 冷却液液位: $state")
+            sendCarLog("changed-engine-engineCoolantLevel:$state")
             lastEngineCoolantLevel = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (engineListenerEnabled) sendEngineData()
         }
 
         override fun onOilLevelChanged(value: Int) {
-            sendCarLog("发动机监听器回调 - 机油液位: $value")
+            sendCarLog("changed-engine-oilLevel:$value")
             lastOilLevel = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (engineListenerEnabled) sendEngineData()
         }
     }
 
     private val panoramaListener = object : AbsBYDAutoPanoramaListener() {
         override fun onPanOutputStateChanged(mode: Int) {
-            sendCarLog("全景摄像头监听器回调 - 输出状态: $mode")
+            sendCarLog("changed-panorama-panoOutputState:$mode")
             lastPanoOutputState = mode
-            sendCarData(buildCarData())
+            sendCarData()
             if (panoramaListenerEnabled) sendPanoramaData()
         }
 
         override fun onPanoWorkStateChanged(mode: Int) {
-            sendCarLog("全景摄像头监听器回调 - 工作状态: $mode")
+            sendCarLog("changed-panorama-panoWorkState:$mode")
             lastPanoWorkState = mode
-            sendCarData(buildCarData())
+            sendCarData()
             if (panoramaListenerEnabled) sendPanoramaData()
         }
 
         override fun onBackLineConfigChanged(mode: Int) {
-            sendCarLog("全景摄像头监听器回调 - 倒车线配置: $mode")
+            sendCarLog("changed-panorama-backLineConfig:$mode")
             lastBackLineConfig = mode
-            sendCarData(buildCarData())
+            sendCarData()
             if (panoramaListenerEnabled) sendPanoramaData()
         }
 
         override fun onPanoRotationChanged(value: Int) {
-            sendCarLog("全景摄像头监听器回调 - 旋转: $value")
+            sendCarLog("changed-panorama-panoRotation:$value")
             lastPanoRotation = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (panoramaListenerEnabled) sendPanoramaData()
         }
 
         override fun onDisplayModeChanged(mode: Int) {
-            sendCarLog("全景摄像头监听器回调 - 显示模式: $mode")
+            sendCarLog("changed-panorama-displayMode:$mode")
             lastDisplayMode = mode
-            sendCarData(buildCarData())
+            sendCarData()
         }
     }
 
     private val sensorListener = object : AbsBYDAutoSensorListener() {
         override fun onLightIntensityChanged(value: Int) {
-            sendCarLog("传感器监听器回调 - 光照强度: $value")
+            sendCarLog("changed-sensor-lightIntensity:$value")
             lastLightIntensity = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (sensorListenerEnabled) sendSensorData()
         }
     }
 
     private val timeListener = object : AbsBYDAutoTimeListener() {
         override fun onTimeChanged(time: IntArray) {
-            sendCarLog("时间监听器回调 - 时间变化: ${time.joinToString(",")}")
+            sendCarLog("changed-time-time:${time.joinToString(",")}")
             if (time.size >= 6) {
                 lastYear = time[0]
                 lastMonth = time[1]
@@ -1185,58 +1253,69 @@ class BYDAutoVehicleService(private val context: Context) {
                 lastMinute = time[4]
                 lastSecond = time[5]
             }
-            sendCarData(buildCarData())
+            sendCarData()
             if (timeListenerEnabled) sendTimeData()
         }
 
         override fun onTimeFormatChanged(value: Int) {
-            sendCarLog("时间监听器回调 - 格式: $value")
+            sendCarLog("changed-time-timeFormat:$value")
             lastTimeFormat = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (timeListenerEnabled) sendTimeData()
         }
     }
 
     private val energyListener = object : AbsBYDAutoEnergyListener() {
         override fun onEnergyModeChanged(mode: Int) {
-            sendCarLog("能量模式监听器回调 - 能量模式: $mode")
+            sendCarLog("changed-energyMode-energyMode:$mode")
             lastEnergyMode = mode
-            sendCarData(buildCarData())
+            sendCarData()
             if (energyModeListenerEnabled) sendEnergyModeData()
         }
 
         override fun onOperationModeChanged(mode: Int) {
-            sendCarLog("能量模式监听器回调 - 运行模式: $mode")
+            sendCarLog("changed-energyMode-operationMode:$mode")
             lastOperationMode = mode
-            sendCarData(buildCarData())
+            sendCarData()
             if (energyModeListenerEnabled) sendEnergyModeData()
         }
 
         override fun onPowerGenerationStateChanged(mode: Int) {
-            sendCarLog("能量模式监听器回调 - 发电状态: $mode")
+            sendCarLog("changed-energyMode-powerGenerationState:$mode")
             lastPowerGenerationState = mode
-            sendCarData(buildCarData())
+            sendCarData()
             if (energyModeListenerEnabled) sendEnergyModeData()
         }
 
         override fun onPowerGenerationValueChanged(value: Int) {
-            sendCarLog("能量模式监听器回调 - 发电量: $value")
+            sendCarLog("changed-energyMode-powerGenerationValue:$value")
             lastPowerGenerationValue = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (energyModeListenerEnabled) sendEnergyModeData()
         }
 
         override fun onRoadSurfaceChanged(type: Int) {
-            sendCarLog("能量模式监听器回调 - 路面模式: $type")
+            sendCarLog("changed-energyMode-roadSurfaceMode:$type")
             lastRoadSurfaceMode = type
-            sendCarData(buildCarData())
+            sendCarData()
             if (energyModeListenerEnabled) sendEnergyModeData()
         }
     }
 
     private val radarListener = object : AbsBYDAutoRadarListener() {
         override fun onRadarProbeStateChanged(area: Int, state: Int) {
-            sendCarLog("雷达监听器回调 - 区域: $area, 状态: $state")
+            val areaName = when (area) {
+                BYDAutoRadarDevice.RADAR_AREA_LEFT_FRONT -> "Lf"
+                BYDAutoRadarDevice.RADAR_AREA_RIGHT_FRONT -> "Rf"
+                BYDAutoRadarDevice.RADAR_AREA_LEFT_REAR -> "Lr"
+                BYDAutoRadarDevice.RADAR_AREA_RIGHT_REAR -> "Rr"
+                BYDAutoRadarDevice.RADAR_AREA_LEFT -> "L"
+                BYDAutoRadarDevice.RADAR_AREA_RIGHT -> "R"
+                BYDAutoRadarDevice.RADAR_AREA_FRONT_LEFT_MID -> "Flm"
+                BYDAutoRadarDevice.RADAR_AREA_FRONT_RIGHT_MID -> "Frm"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-radar-radarProbeState-$areaName:$state")
             when (area) {
                 BYDAutoRadarDevice.RADAR_AREA_LEFT_FRONT -> lastRadarLeftFront = state
                 BYDAutoRadarDevice.RADAR_AREA_RIGHT_FRONT -> lastRadarRightFront = state
@@ -1244,213 +1323,229 @@ class BYDAutoVehicleService(private val context: Context) {
                 BYDAutoRadarDevice.RADAR_AREA_RIGHT_REAR -> lastRadarRightRear = state
                 BYDAutoRadarDevice.RADAR_AREA_LEFT -> lastRadarLeft = state
                 BYDAutoRadarDevice.RADAR_AREA_RIGHT -> lastRadarRight = state
-                BYDAutoRadarDevice.RADAR_AREA_FRONT_LEFT_MID -> lastFrontLeftMid = state
-                BYDAutoRadarDevice.RADAR_AREA_FRONT_RIGHT_MID -> lastFrontRightMid = state
+                BYDAutoRadarDevice.RADAR_AREA_FRONT_LEFT_MID -> lastRadarFrontLeftMid = state
+                BYDAutoRadarDevice.RADAR_AREA_FRONT_RIGHT_MID -> lastRadarFrontRightMid = state
             }
-            sendCarData(buildCarData())
+            sendCarData()
             if (radarListenerEnabled) sendRadarData()
         }
 
         override fun onReverseRadarSwitchStateChanged(state: Int) {
-            sendCarLog("雷达监听器回调 - 倒车雷达开关: $state")
+            sendCarLog("changed-radar-reverseRadarSwitch:$state")
             lastReverseRadarSwitch = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (radarListenerEnabled) sendRadarData()
         }
     }
 
     private val pm2p5Listener = object : AbsBYDAutoPM2p5Listener() {
         override fun onPM2p5CheckStateChanged(state_in: Int, state_out: Int) {
-            sendCarLog("PM2.5 监听器回调 - 检测状态变化: 车内=$state_in, 车外=$state_out")
+            sendCarLog("changed-pm2p5-pm25CheckStateIn:$state_in")
+            sendCarLog("changed-pm2p5-pm25CheckStateOut:$state_out")
             lastPm25CheckStateIn = state_in
             lastPm25CheckStateOut = state_out
             if (pm2p5ListenerEnabled) sendPm2p5Data()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onPM2p5LevelChanged(level_in: Int, level_out: Int) {
-            sendCarLog("PM2.5 监听器回调 - 等级变化: 车内=$level_in, 车外=$level_out")
+            sendCarLog("changed-pm2p5-pm25LevelIn:$level_in")
+            sendCarLog("changed-pm2p5-pm25LevelOut:$level_out")
             lastPm25LevelIn = level_in
             lastPm25LevelOut = level_out
             if (pm2p5ListenerEnabled) sendPm2p5Data()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onPM2p5ValueChanged(value_in: Int, value_out: Int) {
-            sendCarLog("PM2.5 监听器回调 - 数值变化: 车内=$value_in, 车外=$value_out")
+            sendCarLog("changed-pm2p5-pm25ValueIn:$value_in")
+            sendCarLog("changed-pm2p5-pm25ValueOut:$value_out")
             lastPm25ValueIn = value_in
             lastPm25ValueOut = value_out
             if (pm2p5ListenerEnabled) sendPm2p5Data()
-            sendCarData(buildCarData())
+            sendCarData()
         }
     }
 
     private val chargeListener = object : AbsBYDAutoChargingListener() {
         override fun onChargerFaultStateChanged(value: Int) {
-            sendCarLog("充电监听器回调 - 故障状态: $value")
+            sendCarLog("changed-charge-chargerFaultState:$value")
             lastChargerFaultState = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargerWorkStateChanged(value: Int) {
-            sendCarLog("充电监听器回调 - 工作状态: $value")
+            sendCarLog("changed-charge-chargerWorkState:$value")
             lastChargerWorkState = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingCapacityChanged(value: Double) {
-            sendCarLog("充电监听器回调 - 充电量: $value")
+            sendCarLog("changed-charge-chargingCapacity:$value")
             lastChargingCapacity = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingTypeChanged(value: Int) {
-            sendCarLog("充电监听器回调 - 充电类型: $value")
+            sendCarLog("changed-charge-chargingType:$value")
             lastChargingType = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingRestTimeChanged(hour: Int, minute: Int) {
-            sendCarLog("充电监听器回调 - 剩余时间: $hour 小时 $minute 分钟")
+            sendCarLog("changed-charge-chargingRestTimeHour:$hour")
+            sendCarLog("changed-charge-chargingRestTimeMinute:$minute")
             lastChargingRestTimeHour = hour
             lastChargingRestTimeMinute = minute
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingCapStateChanged(type: Int, state: Int) {
-            sendCarLog("充电监听器回调 - 充电口状态: type=$type, state=$state")
+            val typeName = if (type == BYDAutoChargingDevice.CHARGING_CAP_AC) "Ac" else "Dc"
+            sendCarLog("changed-charge-chargingCapState-$typeName:$state")
             if (type == BYDAutoChargingDevice.CHARGING_CAP_AC) {
                 lastChargingCapStateAc = state
             } else if (type == BYDAutoChargingDevice.CHARGING_CAP_DC) {
                 lastChargingCapStateDc = state
             }
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingPortLockRebackStateChanged(value: Int) {
-            sendCarLog("充电监听器回调 - 充电口锁回退: $value")
+            sendCarLog("changed-charge-chargingPortLockRebackState:$value")
             lastChargingPortLockRebackState = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onDischargeRequestStateChanged(value: Int) {
-            sendCarLog("充电监听器回调 - 放电请求: $value")
+            sendCarLog("changed-charge-dischargeRequestState:$value")
             lastDischargeRequestState = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargerStateChanged(value: Int) {
-            sendCarLog("充电监听器回调 - 充电器状态: $value")
+            sendCarLog("changed-charge-chargerState:$value")
             lastChargerState = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingGunStateChanged(value: Int) {
-            sendCarLog("充电监听器回调 - 充电枪状态: $value")
+            sendCarLog("changed-charge-chargingGunState:$value")
             lastChargingGunState = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingPowerChanged(value: Double) {
-            sendCarLog("充电监听器回调 - 充电功率: $value")
+            sendCarLog("changed-charge-chargingPower:$value")
             lastChargingPower = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onBatteryManagementDeviceStateChanged(value: Int) {
-            sendCarLog("充电监听器回调 - BMS状态: $value")
+            sendCarLog("changed-charge-batteryManagementDeviceState:$value")
             lastBatteryManagementDeviceState = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingScheduleEnableStateChanged(value: Int) {
-            sendCarLog("充电监听器回调 - 定时充电使能: $value")
+            sendCarLog("changed-charge-chargingScheduleEnableState:$value")
             lastChargingScheduleEnableState = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingScheduleStateChanged(value: Int) {
-            sendCarLog("充电监听器回调 - 定时充电状态: $value")
+            sendCarLog("changed-charge-chargingScheduleState:$value")
             lastChargingScheduleState = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingGunNotInsertedStateChanged(value: Int) {
-            sendCarLog("充电监听器回调 - 充电枪未插入: $value")
+            sendCarLog("changed-charge-chargingGunNotInsertedState:$value")
             lastChargingGunNotInsertedState = value
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
 
         override fun onChargingScheduleTimeChanged(hour: Int, minute: Int) {
-            sendCarLog("充电监听器回调 - 定时时间: $hour 小时 $minute 分钟")
+            sendCarLog("changed-charge-chargingScheduleTimeHour:$hour")
+            sendCarLog("changed-charge-chargingScheduleTimeMinute:$minute")
             lastChargingScheduleTimeHour = hour
             lastChargingScheduleTimeMinute = minute
-            sendCarData(buildCarData())
+            sendCarData()
             if (chargeListenerEnabled) sendChargeData()
         }
     }
 
     private val mediaListener = object : AbsBYDAutoMultimediaListener() {
         override fun onMediaTypeChanged(type: Int) {
-            sendCarLog("媒体监听器回调 - 媒体类型: $type")
+            sendCarLog("changed-media-mediaType:$type")
             lastMediaType = type
-            sendCarData(buildCarData())
+            sendCarData()
             if (mediaListenerEnabled) sendMediaData()
         }
 
         override fun onPlayModeChanged(mode: Int) {
-            sendCarLog("媒体监听器回调 - 播放模式: $mode")
+            sendCarLog("changed-media-playMode:$mode")
             lastPlayMode = mode
-            sendCarData(buildCarData())
+            sendCarData()
             if (mediaListenerEnabled) sendMediaData()
         }
 
         override fun onPlayStateChanged(state: Int) {
-            sendCarLog("媒体监听器回调 - 播放状态: $state")
+            sendCarLog("changed-media-playState:$state")
             lastPlayState = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (mediaListenerEnabled) sendMediaData()
         }
 
         override fun onPlayMediaInfoChanged(mediaInfo: MediaInfo?) {
-            sendCarLog("媒体监听器回调 - 媒体信息变化")
-            sendCarData(buildCarData())
+            sendCarLog("changed-media-playMediaInfo:${mediaInfo?.toString() ?: ""}")
+            lastPlayMediaInfo = mediaInfo?.toString() ?: ""
+            sendCarData()
             if (mediaListenerEnabled) sendMediaData()
         }
     }
 
     private val bodyStatusListener = object : AbsBYDAutoBodyworkListener() {
         override fun onAutoSystemStateChanged(state: Int) {
-            sendCarLog("车身状态监听器回调 - 系统状态: $state")
+            sendCarLog("changed-bodyStatus-autoSystemState:$state")
             lastAutoSystemState = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (bodyStatusListenerEnabled) sendBodyStatusData()
         }
 
         override fun onBatteryVoltageLevelChanged(level: Int) {
-            sendCarLog("车身状态监听器回调 - 电瓶电压: $level")
+            sendCarLog("changed-bodyStatus-batteryVoltageLevel:$level")
             lastBatteryVoltageLevel = level
-            sendCarData(buildCarData())
+            sendCarData()
             if (bodyStatusListenerEnabled) sendBodyStatusData()
         }
 
         override fun onDoorStateChanged(area: Int, state: Int) {
-            sendCarLog("车身状态监听器回调 - 车门区域: $area, 状态: $state")
+            val areaName = when (area) {
+                BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_FRONT -> "Lf"
+                BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_FRONT -> "Rf"
+                BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_REAR -> "Lr"
+                BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_REAR -> "Rr"
+                BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_HOOD -> "Hood"
+                BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LUGGAGE_DOOR -> "Luggage"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-bodyStatus-doorState-$areaName:$state")
             when (area) {
                 BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_FRONT -> lastDoorStateLf = state
                 BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_FRONT -> lastDoorStateRf = state
@@ -1459,81 +1554,109 @@ class BYDAutoVehicleService(private val context: Context) {
                 BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_HOOD -> lastDoorStateHood = state
                 BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LUGGAGE_DOOR -> lastDoorStateLuggage = state
             }
-            sendCarData(buildCarData())
+            sendCarData()
             if (bodyStatusListenerEnabled) sendBodyStatusData()
         }
 
         override fun onWindowStateChanged(area: Int, state: Int) {
-            sendCarLog("车身状态监听器回调 - 车窗区域: $area, 状态: $state")
+            val areaName = when (area) {
+                BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_LEFT_FRONT -> "Lf"
+                BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_RIGHT_FRONT -> "Rf"
+                BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_LEFT_REAR -> "Lr"
+                BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_RIGHT_REAR -> "Rr"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-bodyStatus-windowState-$areaName:$state")
             when (area) {
                 BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_LEFT_FRONT -> lastWindowStateLf = state
                 BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_RIGHT_FRONT -> lastWindowStateRf = state
                 BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_LEFT_REAR -> lastWindowStateLr = state
                 BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_RIGHT_REAR -> lastWindowStateRr = state
             }
-            sendCarData(buildCarData())
+            sendCarData()
             if (bodyStatusListenerEnabled) sendBodyStatusData()
         }
 
         override fun onWindowOpenPercentChanged(area: Int, value: Int) {
-            sendCarLog("车身状态监听器回调 - 天窗/遮阳帘区域: $area, 开度: $value")
+            val areaName = when (area) {
+                BYDAutoBodyworkDevice.BODYWORK_CMD_MOON_ROOF -> "MoonRoof"
+                BYDAutoBodyworkDevice.BODYWORK_CMD_SUNSHADE_PANEL -> "Sunshade"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-bodyStatus-windowOpenPercent-$areaName:$value")
             when (area) {
                 BYDAutoBodyworkDevice.BODYWORK_CMD_MOON_ROOF -> lastMoonRoofPercent = value
                 BYDAutoBodyworkDevice.BODYWORK_CMD_SUNSHADE_PANEL -> lastSunshadePercent = value
             }
-            sendCarData(buildCarData())
+            sendCarData()
             if (bodyStatusListenerEnabled) sendBodyStatusData()
         }
 
         override fun onPowerLevelChanged(level: Int) {
-            sendCarLog("车身状态监听器回调 - 电源等级: $level")
+            sendCarLog("changed-bodyStatus-powerLevel:$level")
             lastPowerLevel = level
-            sendCarData(buildCarData())
+            sendCarData()
             if (bodyStatusListenerEnabled) sendBodyStatusData()
         }
 
         override fun onSteeringWheelValueChanged(type: Int, value: Double) {
-            sendCarLog("车身状态监听器回调 - 方向盘类型: $type, 值: $value")
+            val typeName = when (type) {
+                BYDAutoBodyworkDevice.BODYWORK_CMD_STEERING_WHEEL_ANGEL -> "Angle"
+                BYDAutoBodyworkDevice.BODYWORK_CMD_STEERING_WHEEL_SPEED -> "Speed"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-bodyStatus-steeringWheel-$typeName:$value")
             when (type) {
                 BYDAutoBodyworkDevice.BODYWORK_CMD_STEERING_WHEEL_ANGEL -> lastSteeringWheelAngle = value
                 BYDAutoBodyworkDevice.BODYWORK_CMD_STEERING_WHEEL_SPEED -> lastSteeringWheelSpeed = value
             }
-            sendCarData(buildCarData())
+            sendCarData()
             if (bodyStatusListenerEnabled) sendBodyStatusData()
         }
 
         override fun onFuelElecLowPowerChanged(state: Int) {
-            sendCarLog("车身状态监听器回调 - 油电低电量: $state")
+            sendCarLog("changed-bodyStatus-fuelElecLowPower:$state")
             lastFuelElecLowPower = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (bodyStatusListenerEnabled) sendBodyStatusData()
         }
 
         override fun onAlarmStateChanged(state: Int) {
-            sendCarLog("车身状态监听器回调 - 报警状态: $state")
+            sendCarLog("changed-bodyStatus-alarmState:$state")
             lastAlarmState = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (bodyStatusListenerEnabled) sendBodyStatusData()
         }
     }
 
     private val lightListener = object : AbsBYDAutoLightListener() {
         override fun onLightAutoSwitchOff() {
-            sendCarLog("车灯监听器回调 - 灯光AUTO档关闭")
+            sendCarLog("changed-light-lightAutoStatus:0")
             lastLightAutoStatus = BYDAutoLightDevice.LIGHT_OFF
-            sendCarData(buildCarData())
+            sendCarData()
             if (lightListenerEnabled) sendLightData()
         }
 
         override fun onLightAutoSwitchOn() {
-            sendCarLog("车灯监听器回调 - 灯光AUTO档打开")
+            sendCarLog("changed-light-lightAutoStatus:1")
             lastLightAutoStatus = BYDAutoLightDevice.LIGHT_ON
-            sendCarData(buildCarData())
+            sendCarData()
             if (lightListenerEnabled) sendLightData()
         }
 
         override fun onLightOff(type: Int) {
-            sendCarLog("车灯监听器回调 - 车灯关闭: 类型=$type")
+            val typeName = when (type) {
+                BYDAutoLightDevice.LIGHT_SIDE -> "Side"
+                BYDAutoLightDevice.LIGHT_LOW_BEAM -> "LowBeam"
+                BYDAutoLightDevice.LIGHT_HIGH_BEAM -> "HighBeam"
+                BYDAutoLightDevice.LIGHT_LEFT_TURN_SIGNAL -> "LeftTurnSignal"
+                BYDAutoLightDevice.LIGHT_RIGHT_TURN_SIGNAL -> "RightTurnSignal"
+                BYDAutoLightDevice.LIGHT_FRONT_FOG -> "FrontFog"
+                BYDAutoLightDevice.LIGHT_REAR_FOG -> "RearFog"
+                BYDAutoLightDevice.LIGHT_FOOT -> "Foot"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-light-light-$typeName:0")
             when (type) {
                 BYDAutoLightDevice.LIGHT_SIDE -> lastLightSide = BYDAutoLightDevice.LIGHT_OFF
                 BYDAutoLightDevice.LIGHT_LOW_BEAM -> lastLightLowBeam = BYDAutoLightDevice.LIGHT_OFF
@@ -1544,12 +1667,23 @@ class BYDAutoVehicleService(private val context: Context) {
                 BYDAutoLightDevice.LIGHT_REAR_FOG -> lastLightRearFog = BYDAutoLightDevice.LIGHT_OFF
                 BYDAutoLightDevice.LIGHT_FOOT -> lastLightFoot = BYDAutoLightDevice.LIGHT_OFF
             }
-            sendCarData(buildCarData())
+            sendCarData()
             if (lightListenerEnabled) sendLightData()
         }
 
         override fun onLightOn(type: Int) {
-            sendCarLog("车灯监听器回调 - 车灯打开: 类型=$type")
+            val typeName = when (type) {
+                BYDAutoLightDevice.LIGHT_SIDE -> "Side"
+                BYDAutoLightDevice.LIGHT_LOW_BEAM -> "LowBeam"
+                BYDAutoLightDevice.LIGHT_HIGH_BEAM -> "HighBeam"
+                BYDAutoLightDevice.LIGHT_LEFT_TURN_SIGNAL -> "LeftTurnSignal"
+                BYDAutoLightDevice.LIGHT_RIGHT_TURN_SIGNAL -> "RightTurnSignal"
+                BYDAutoLightDevice.LIGHT_FRONT_FOG -> "FrontFog"
+                BYDAutoLightDevice.LIGHT_REAR_FOG -> "RearFog"
+                BYDAutoLightDevice.LIGHT_FOOT -> "Foot"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-light-light-$typeName:1")
             when (type) {
                 BYDAutoLightDevice.LIGHT_SIDE -> lastLightSide = BYDAutoLightDevice.LIGHT_ON
                 BYDAutoLightDevice.LIGHT_LOW_BEAM -> lastLightLowBeam = BYDAutoLightDevice.LIGHT_ON
@@ -1560,14 +1694,14 @@ class BYDAutoVehicleService(private val context: Context) {
                 BYDAutoLightDevice.LIGHT_REAR_FOG -> lastLightRearFog = BYDAutoLightDevice.LIGHT_ON
                 BYDAutoLightDevice.LIGHT_FOOT -> lastLightFoot = BYDAutoLightDevice.LIGHT_ON
             }
-            sendCarData(buildCarData())
+            sendCarData()
             if (lightListenerEnabled) sendLightData()
         }
 
         override fun onAFSSwitchStateChange(state: Int) {
-            sendCarLog("车灯监听器回调 - AFS开关状态变化: $state")
+            sendCarLog("changed-light-afsSwitch:$state")
             lastAfsSwitch = state
-            sendCarData(buildCarData())
+            sendCarData()
             if (lightListenerEnabled) sendLightData()
         }
     }
@@ -1725,6 +1859,299 @@ class BYDAutoVehicleService(private val context: Context) {
         }
     }
 
+    private fun updateInstrumentData() {
+        try {
+            sendCarLog("updateInstrumentData() - instrumentDevice: ${instrumentDevice != null}")
+            if (instrumentDevice == null) return
+            
+            // 获取单位信息
+            lastTemperatureUnit = instrumentDevice?.getUnit(BYDAutoInstrumentDevice.TEMPERATURE_UNIT) ?: lastTemperatureUnit
+            lastPressureUnit = instrumentDevice?.getUnit(BYDAutoInstrumentDevice.PRESSURE_UNIT) ?: lastPressureUnit
+            lastFuelConsumptionUnit = instrumentDevice?.getUnit(BYDAutoInstrumentDevice.FUEL_CONSUMPTION_AND_DISTANCE_UNIT) ?: lastFuelConsumptionUnit
+            lastPowerUnit = instrumentDevice?.getUnit(BYDAutoInstrumentDevice.POWER_UNIT) ?: lastPowerUnit
+            
+            // 获取故障信息
+            lastMalfunctionInfo = instrumentDevice?.getMalfunctionInfo(0) ?: lastMalfunctionInfo
+            
+            // 获取保养信息
+            lastMaintenanceInfo = instrumentDevice?.getMaintenanceInfo(BYDAutoInstrumentDevice.MAINTENANCE_TIME) ?: lastMaintenanceInfo
+            
+            // 获取外接充电量
+            lastExternalChargingPower = instrumentDevice?.getExternalChargingPower() ?: lastExternalChargingPower
+            
+            sendCarLog("updateInstrumentData() - 单位: 温度=$lastTemperatureUnit, 气压=$lastPressureUnit, 油耗=$lastFuelConsumptionUnit, 功率=$lastPowerUnit")
+        } catch (e: Exception) {
+            sendCarLog("updateInstrumentData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateDoorLockData() {
+        try {
+            sendCarLog("updateDoorLockData() - doorLockDevice: ${doorLockDevice != null}")
+            if (doorLockDevice == null) return
+            
+            lastDoorLockLeftFront = doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_LEFT_FRONT) ?: lastDoorLockLeftFront
+            lastDoorLockRightFront = doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_RIGHT_FRONT) ?: lastDoorLockRightFront
+            lastDoorLockLeftRear = doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_LEFT_REAR) ?: lastDoorLockLeftRear
+            lastDoorLockRightRear = doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_RIGHT_REAR) ?: lastDoorLockRightRear
+            lastDoorLockBack = doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_BACK) ?: lastDoorLockBack
+            
+            sendCarLog("updateDoorLockData() - 门锁状态: 左前=$lastDoorLockLeftFront, 右前=$lastDoorLockRightFront, 左后=$lastDoorLockLeftRear, 右后=$lastDoorLockRightRear")
+        } catch (e: Exception) {
+            sendCarLog("updateDoorLockData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateSettingData() {
+        try {
+            sendCarLog("updateSettingData() - settingDevice: ${settingDevice != null}")
+            if (settingDevice == null) return
+            
+            lastAcBTWind = settingDevice?.getACBTWind() ?: lastAcBTWind
+            lastAcTunnelCycle = settingDevice?.getACTunnelCycle() ?: lastAcTunnelCycle
+            lastAcPauseCycle = settingDevice?.getACPauseCycle() ?: lastAcPauseCycle
+            lastAcAutoAir = settingDevice?.getACAutoAir() ?: lastAcAutoAir
+            lastPm25Power = settingDevice?.getPM25Power() ?: lastPm25Power
+            lastPm25SwitchCheck = settingDevice?.getPM25SwitchCheck() ?: lastPm25SwitchCheck
+            lastEnergyFeedback = settingDevice?.getEnergyFeedback() ?: lastEnergyFeedback
+            lastSocTarget = settingDevice?.getSOCTarget() ?: lastSocTarget
+            lastChargingPort = settingDevice?.getChargingPort() ?: lastChargingPort
+            lastLockOff = settingDevice?.getLockOff() ?: lastLockOff
+            lastLanguage = settingDevice?.getLanguage() ?: lastLanguage
+            lastOverspeedLock = settingDevice?.getOverspeedLock() ?: lastOverspeedLock
+            
+            sendCarLog("updateSettingData() - 更新完成")
+        } catch (e: Exception) {
+            sendCarLog("updateSettingData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateEngineData() {
+        try {
+            sendCarLog("updateEngineData() - engineDevice: ${engineDevice != null}")
+            if (engineDevice == null) return
+            
+            lastEngineDisplacement = engineDevice?.getEngineDisplacement() ?: lastEngineDisplacement
+            lastEngineCode = engineDevice?.getEngineCode() ?: lastEngineCode
+            lastEnginePower = engineDevice?.getEnginePower() ?: lastEnginePower
+            lastEngineSpeed = engineDevice?.getEngineSpeed() ?: lastEngineSpeed
+            lastEngineCoolantLevel = engineDevice?.getEngineCoolantLevel() ?: lastEngineCoolantLevel
+            lastOilLevel = engineDevice?.getOilLevel() ?: lastOilLevel
+            
+            sendCarLog("updateEngineData() - 发动机排量=$lastEngineDisplacement, 功率=$lastEnginePower, 转速=$lastEngineSpeed")
+        } catch (e: Exception) {
+            sendCarLog("updateEngineData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updatePanoramaData() {
+        try {
+            sendCarLog("updatePanoramaData() - panoramaDevice: ${panoramaDevice != null}")
+            if (panoramaDevice == null) return
+            
+            lastPanoOutputSignal = panoramaDevice?.getPanoOutputSignal() ?: lastPanoOutputSignal
+            lastPanoWorkState = panoramaDevice?.getPanoWorkState() ?: lastPanoWorkState
+            lastBackLineConfig = panoramaDevice?.getBackLineConfig() ?: lastBackLineConfig
+            lastPanoOutputState = panoramaDevice?.getPanoOutputState() ?: lastPanoOutputState
+            lastPanoRotation = panoramaDevice?.getPanoRotation() ?: lastPanoRotation
+            lastDisplayMode = panoramaDevice?.getDisplayMode() ?: lastDisplayMode
+            lastPanoramaOnlineState = panoramaDevice?.getPanoramaOnlineState() ?: lastPanoramaOnlineState
+            
+            sendCarLog("updatePanoramaData() - 工作状态=$lastPanoWorkState, 在线状态=$lastPanoramaOnlineState")
+        } catch (e: Exception) {
+            sendCarLog("updatePanoramaData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateAcData() {
+        try {
+            sendCarLog("updateAcData() - acDevice: ${acDevice != null}")
+            if (acDevice == null) return
+            
+            lastAcCompressorMode = acDevice?.getAcCompressorMode() ?: lastAcCompressorMode
+            lastAcStartState = acDevice?.getAcStartState() ?: lastAcStartState
+            lastAcControlMode = acDevice?.getAcControlMode() ?: lastAcControlMode
+            lastAcCycleMode = acDevice?.getAcCycleMode() ?: lastAcCycleMode
+            lastAcWindMode = acDevice?.getAcWindMode() ?: lastAcWindMode
+            lastAcWindLevel = acDevice?.getAcWindLevel() ?: lastAcWindLevel
+            lastAcTemperatureMain = acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_MAIN) ?: lastAcTemperatureMain
+            lastAcTemperatureDeputy = acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_DEPUTY) ?: lastAcTemperatureDeputy
+            lastTemperatureUnit = acDevice?.getTemperatureUnit() ?: lastTemperatureUnit
+            
+            sendCarLog("updateAcData() - 压缩机状态=$lastAcCompressorMode, 主温度=$lastAcTemperatureMain, 风速=$lastAcWindLevel")
+        } catch (e: Exception) {
+            sendCarLog("updateAcData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateSensorData() {
+        try {
+            sendCarLog("updateSensorData() - sensorDevice: ${sensorDevice != null}")
+            if (sensorDevice == null) return
+            
+            lastLightIntensity = sensorDevice?.getLightIntensity() ?: lastLightIntensity
+            
+            sendCarLog("updateSensorData() - 光照强度=$lastLightIntensity")
+        } catch (e: Exception) {
+            sendCarLog("updateSensorData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateTimeData() {
+        try {
+            sendCarLog("updateTimeData() - timeDevice: ${timeDevice != null}")
+            if (timeDevice == null) return
+            
+            val timeArray = timeDevice?.getTime() ?: intArrayOf()
+            lastYear = timeArray.getOrNull(0) ?: lastYear
+            lastMonth = timeArray.getOrNull(1) ?: lastMonth
+            lastDay = timeArray.getOrNull(2) ?: lastDay
+            lastHour = timeArray.getOrNull(3) ?: lastHour
+            lastMinute = timeArray.getOrNull(4) ?: lastMinute
+            lastSecond = timeArray.getOrNull(5) ?: lastSecond
+            lastTimeFormat = timeDevice?.getTimeFormat() ?: lastTimeFormat
+            
+            sendCarLog("updateTimeData() - 时间: ${lastYear}-${lastMonth}-${lastDay} ${lastHour}:${lastMinute}:${lastSecond}")
+        } catch (e: Exception) {
+            sendCarLog("updateTimeData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateEnergyModeData() {
+        try {
+            sendCarLog("updateEnergyModeData() - energyDevice: ${energyDevice != null}")
+            if (energyDevice == null) return
+            
+            lastEnergyMode = energyDevice?.getEnergyMode() ?: lastEnergyMode
+            lastOperationMode = energyDevice?.getOperationMode() ?: lastOperationMode
+            lastPowerGenerationState = energyDevice?.getPowerGenerationState() ?: lastPowerGenerationState
+            lastPowerGenerationValue = energyDevice?.getPowerGenerationValue() ?: lastPowerGenerationValue
+            lastRoadSurfaceMode = energyDevice?.getRoadSurfaceMode() ?: lastRoadSurfaceMode
+            
+            sendCarLog("updateEnergyModeData() - 能量模式=$lastEnergyMode, 运行模式=$lastOperationMode")
+        } catch (e: Exception) {
+            sendCarLog("updateEnergyModeData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateRadarData() {
+        try {
+            sendCarLog("updateRadarData() - radarDevice: ${radarDevice != null}")
+            if (radarDevice == null) return
+            
+            lastRadarLeftFront = radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_LEFT_FRONT) ?: lastRadarLeftFront
+            lastRadarRightFront = radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_RIGHT_FRONT) ?: lastRadarRightFront
+            lastRadarLeftRear = radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_LEFT_REAR) ?: lastRadarLeftRear
+            lastRadarRightRear = radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_RIGHT_REAR) ?: lastRadarRightRear
+            lastRadarLeft = radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_LEFT) ?: lastRadarLeft
+            lastRadarRight = radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_RIGHT) ?: lastRadarRight
+            lastReverseRadarSwitch = radarDevice?.getReverseRadarSwitchState() ?: lastReverseRadarSwitch
+            
+            sendCarLog("updateRadarData() - 雷达值: 左前=$lastRadarLeftFront, 右前=$lastRadarRightFront")
+        } catch (e: Exception) {
+            sendCarLog("updateRadarData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateAirQualityData() {
+        try {
+            sendCarLog("updateAirQualityData() - pm2p5Device: ${pm2p5Device != null}")
+            if (pm2p5Device == null) return
+            
+            lastPm25OnlineState = pm2p5Device?.getPM2p5OnlineState() ?: lastPm25OnlineState
+            
+            val pm2p5CheckStates = pm2p5Device?.getPM2p5CheckState() ?: intArrayOf()
+            lastPm25CheckStateIn = pm2p5CheckStates.getOrNull(0) ?: lastPm25CheckStateIn
+            lastPm25CheckStateOut = pm2p5CheckStates.getOrNull(1) ?: lastPm25CheckStateOut
+            
+            val pm2p5Levels = pm2p5Device?.getPM2p5Level() ?: intArrayOf()
+            lastPm25LevelIn = pm2p5Levels.getOrNull(0) ?: lastPm25LevelIn
+            lastPm25LevelOut = pm2p5Levels.getOrNull(1) ?: lastPm25LevelOut
+            
+            val pm2p5Values = pm2p5Device?.getPM2p5Value() ?: intArrayOf()
+            lastPm25ValueIn = pm2p5Values.getOrNull(0) ?: lastPm25ValueIn
+            lastPm25ValueOut = pm2p5Values.getOrNull(1) ?: lastPm25ValueOut
+            
+            sendCarLog("updateAirQualityData() - PM2.5: 车内=$lastPm25ValueIn, 车外=$lastPm25ValueOut")
+        } catch (e: Exception) {
+            sendCarLog("updateAirQualityData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateChargeData() {
+        try {
+            sendCarLog("updateChargeData() - chargeDevice: ${chargeDevice != null}")
+            if (chargeDevice == null) return
+            
+            lastChargerFaultState = chargeDevice?.getChargerFaultState() ?: lastChargerFaultState
+            lastChargerWorkState = chargeDevice?.getChargerWorkState() ?: lastChargerWorkState
+            lastChargingCapacity = chargeDevice?.getChargingCapacity() ?: lastChargingCapacity
+            lastChargingType = chargeDevice?.getChargingType() ?: lastChargingType
+            lastChargingPower = chargeDevice?.getChargingPower() ?: lastChargingPower
+            lastChargerState = chargeDevice?.getChargerState() ?: lastChargerState
+            lastChargingGunState = chargeDevice?.getChargingGunState() ?: lastChargingGunState
+            
+            sendCarLog("updateChargeData() - 充电状态=$lastChargerState, 充电功率=$lastChargingPower")
+        } catch (e: Exception) {
+            sendCarLog("updateChargeData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateMediaData() {
+        try {
+            sendCarLog("updateMediaData() - mediaDevice: ${mediaDevice != null}")
+            if (mediaDevice == null) return
+            
+            lastMediaType = mediaDevice?.getMediaType() ?: lastMediaType
+            lastPlayMode = mediaDevice?.getPlayMode() ?: lastPlayMode
+            lastPlayState = mediaDevice?.getPlayState() ?: lastPlayState
+            lastPlayMediaInfo = mediaDevice?.getPlayMediaInfo()?.toString() ?: lastPlayMediaInfo
+            
+            sendCarLog("updateMediaData() - 媒体类型=$lastMediaType, 播放状态=$lastPlayState")
+        } catch (e: Exception) {
+            sendCarLog("updateMediaData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateBodyStatusData() {
+        try {
+            sendCarLog("updateBodyStatusData() - bodyStatusDevice: ${bodyStatusDevice != null}")
+            if (bodyStatusDevice == null) return
+            
+            lastAutoVIN = bodyStatusDevice?.getAutoVIN() ?: lastAutoVIN
+            lastAutoModelName = bodyStatusDevice?.getAutoModelName() ?: lastAutoModelName
+            lastAutoSystemState = bodyStatusDevice?.getAutoSystemState() ?: lastAutoSystemState
+            lastDoorStateLf = bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_FRONT) ?: lastDoorStateLf
+            lastDoorStateRf = bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_FRONT) ?: lastDoorStateRf
+            lastDoorStateLr = bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_REAR) ?: lastDoorStateLr
+            lastDoorStateRr = bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_REAR) ?: lastDoorStateRr
+            lastPowerLevel = bodyStatusDevice?.getPowerLevel() ?: lastPowerLevel
+            
+            sendCarLog("updateBodyStatusData() - VIN=$lastAutoVIN, 系统状态=$lastAutoSystemState")
+        } catch (e: Exception) {
+            sendCarLog("updateBodyStatusData() 异常: ${e.message}")
+        }
+    }
+
+    private fun updateLightData() {
+        try {
+            sendCarLog("updateLightData() - lightDevice: ${lightDevice != null}")
+            if (lightDevice == null) return
+            
+            lastLightAutoStatus = lightDevice?.getLightAutoStatus() ?: lastLightAutoStatus
+            lastLightSide = lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_SIDE) ?: lastLightSide
+            lastLightLowBeam = lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_LOW_BEAM) ?: lastLightLowBeam
+            lastLightHighBeam = lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_HIGH_BEAM) ?: lastLightHighBeam
+            lastLightFrontFog = lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_FRONT_FOG) ?: lastLightFrontFog
+            lastLightRearFog = lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_REAR_FOG) ?: lastLightRearFog
+            lastAfsSwitch = lightDevice?.getAFSSwitch() ?: lastAfsSwitch
+            
+            sendCarLog("updateLightData() - 自动灯=$lastLightAutoStatus, 近光=$lastLightLowBeam, 远光=$lastLightHighBeam")
+        } catch (e: Exception) {
+            sendCarLog("updateLightData() 异常: ${e.message}")
+        }
+    }
+
     fun stop() {
         if (!isStarted) {
             sendCarLog("服务未启动，无需停止")
@@ -1865,233 +2292,235 @@ class BYDAutoVehicleService(private val context: Context) {
     private fun buildCarData(): Map<String, Any?> {
         return mapOf<String, Any?>(
             "speed" to mapOf<String, Any?>(
-                "currentSpeed" to (speedDevice?.getCurrentSpeed() ?: lastSpeed),
-                "accelerateDeepness" to (speedDevice?.getAccelerateDeepness() ?: lastAccelerateDepth),
-                "brakeDeepness" to (speedDevice?.getBrakeDeepness() ?: lastBrakeDepth)
+                "currentSpeed" to lastSpeed,
+                "accelerateDeepness" to lastAccelerateDepth,
+                "brakeDeepness" to lastBrakeDepth
             ),
             "statistic" to mapOf<String, Any?>(
-                "drivingTime" to (statisticDevice?.getDrivingTimeValue() ?: 0.0),
-                "elecDrivingRange" to (statisticDevice?.getElecDrivingRangeValue() ?: 0),
-                "elecPercentage" to (statisticDevice?.getElecPercentageValue() ?: lastElecPercentage),
-                "fuelDrivingRange" to (statisticDevice?.getFuelDrivingRangeValue() ?: 0),
-                "fuelPercentage" to (statisticDevice?.getFuelPercentageValue() ?: lastFuelPercentage),
-                "lastElecConPHM" to (statisticDevice?.getLastElecConPHMValue() ?: 0.0),
-                "lastFuelConPHM" to (statisticDevice?.getLastFuelConPHMValue() ?: 0.0),
-                "totalElecConPHM" to (statisticDevice?.getTotalElecConPHMValue() ?: 0.0),
-                "totalFuelConPHM" to (statisticDevice?.getTotalFuelConPHMValue() ?: 0.0),
-                "totalFuelCon" to (statisticDevice?.getTotalFuelConValue() ?: 0.0),
-                "totalElecCon" to (statisticDevice?.getTotalElecConValue() ?: 0.0),
-                "totalMileage" to (statisticDevice?.getTotalMileageValue() ?: lastTotalMileage),
-                "keyBatteryLevel" to (statisticDevice?.getKeyBatteryLevel() ?: 0),
-                "evMileage" to (statisticDevice?.getEVMileageValue() ?: lastEvMileage)
+                "drivingTime" to lastDrivingTime,
+                "elecDrivingRange" to lastElecDrivingRange,
+                "elecPercentage" to lastElecPercentage,
+                "fuelDrivingRange" to lastFuelDrivingRange,
+                "fuelPercentage" to lastFuelPercentage,
+                "lastElecConPHM" to lastLastElecConPHM,
+                "lastFuelConPHM" to lastLastFuelConPHM,
+                "totalElecConPHM" to lastTotalElecConPHM,
+                "totalFuelConPHM" to lastTotalFuelConPHM,
+                "totalFuelCon" to lastTotalFuelCon,
+                "totalElecCon" to lastTotalElecCon,
+                "totalMileage" to lastTotalMileage,
+                "keyBatteryLevel" to lastKeyBatteryLevel,
+                "evMileage" to lastEvMileage
             ),
             "instrument" to mapOf<String, Any?>(
-                "malfunctionInfo" to emptyMap<Int, Int>(),
-                "alarmBuzzleState" to (instrumentDevice?.getAlarmBuzzleState() ?: 0),
-                "unit" to emptyMap<Int, Int>(),
-                "maintenanceInfo" to emptyMap<Int, Int>(),
-                "externalChargingPower" to (instrumentDevice?.getExternalChargingPower() ?: lastExternalChargingPower)
+                "malfunctionInfo" to lastMalfunctionInfo,
+                "alarmBuzzleState" to lastAlarmBuzzleState,
+                "unit" to mapOf<String, Any?>(
+                    "temperature" to lastTemperatureUnit,
+                    "pressure" to lastPressureUnit,
+                    "fuelConsumption" to lastFuelConsumptionUnit,
+                    "power" to lastPowerUnit
+                ),
+                "maintenanceInfo" to lastMaintenanceInfo,
+                "externalChargingPower" to lastExternalChargingPower
             ),
             "door" to mapOf<String, Any?>(
-                "leftFront" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_LEFT_FRONT) ?: lastDoorLockLeftFront),
-                "leftRear" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_LEFT_REAR) ?: lastDoorLockLeftRear),
-                "rightFront" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_RIGHT_FRONT) ?: lastDoorLockRightFront),
-                "rightRear" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_RIGHT_REAR) ?: lastDoorLockRightRear),
-                "back" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_BACK) ?: lastDoorLockBack),
-                "childlockLeft" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_CHILDLOCK_LEFT) ?: lastDoorLockChildlockLeft),
-                "childlockRight" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_CHILDLOCK_RIGHT) ?: lastDoorLockChildlockRight)
+                "leftFront" to lastDoorLockLeftFront,
+                "leftRear" to lastDoorLockLeftRear,
+                "rightFront" to lastDoorLockRightFront,
+                "rightRear" to lastDoorLockRightRear,
+                "back" to lastDoorLockBack,
+                "childlockLeft" to lastDoorLockChildlockLeft,
+                "childlockRight" to lastDoorLockChildlockRight
             ),
             "vehicleSetting" to mapOf<String, Any?>(
-                "acBTWind" to (settingDevice?.getACBTWind() ?: lastAcBTWind),
-                "acTunnelCycle" to (settingDevice?.getACTunnelCycle() ?: lastAcTunnelCycle),
-                "acPauseCycle" to (settingDevice?.getACPauseCycle() ?: lastAcPauseCycle),
-                "acAutoAir" to (settingDevice?.getACAutoAir() ?: lastAcAutoAir),
-                "pm25Power" to (settingDevice?.getPM25Power() ?: lastPm25Power),
-                "pm25SwitchCheck" to (settingDevice?.getPM25SwitchCheck() ?: lastPm25SwitchCheck),
-                "pm25TimeCheck" to (settingDevice?.getPM25TimeCheck() ?: lastPm25TimeCheck),
-                "energyFeedback" to (settingDevice?.getEnergyFeedback() ?: lastEnergyFeedback),
-                "socTarget" to (settingDevice?.getSOCTarget() ?: lastSocTarget),
-                "chargingPort" to (settingDevice?.getChargingPort() ?: lastChargingPort),
-                "autoExternalRearMirrorFollowUp" to (settingDevice?.getAutoExternalRearMirrorFollowUpSwitch() ?: lastAutoExternalRearMirrorFollowUp),
-                "lockOff" to (settingDevice?.getLockOff() ?: lastLockOff),
-                "language" to (settingDevice?.getLanguage() ?: lastLanguage),
-                "overspeedLock" to (settingDevice?.getOverspeedLock() ?: lastOverspeedLock),
-                "safeWarnState" to (settingDevice?.getSafeWarnState() ?: lastSafeWarnState),
-                "maintainRemindState" to (settingDevice?.getMaintainRemindState() ?: lastMaintainRemindState),
-                "steerAssis" to (settingDevice?.getSteerAssis() ?: lastSteerAssis),
-                "rearViewMirrorFlip" to (settingDevice?.getRearViewMirrorFlip() ?: lastRearViewMirrorFlip),
+                "acBTWind" to lastAcBTWind,
+                "acTunnelCycle" to lastAcTunnelCycle,
+                "acPauseCycle" to lastAcPauseCycle,
+                "acAutoAir" to lastAcAutoAir,
+                "pm25Power" to lastPm25Power,
+                "pm25SwitchCheck" to lastPm25SwitchCheck,
+                "pm25TimeCheck" to lastPm25TimeCheck,
+                "energyFeedback" to lastEnergyFeedback,
+                "socTarget" to lastSocTarget,
+                "chargingPort" to lastChargingPort,
+                "autoExternalRearMirrorFollowUp" to lastAutoExternalRearMirrorFollowUp,
+                "lockOff" to lastLockOff,
+                "language" to lastLanguage,
+                "overspeedLock" to lastOverspeedLock,
+                "safeWarnState" to lastSafeWarnState,
+                "maintainRemindState" to lastMaintainRemindState,
+                "steerAssis" to lastSteerAssis,
+                "rearViewMirrorFlip" to lastRearViewMirrorFlip,
                 "driverSeatAutoReturn" to lastDriverSeatAutoReturn,
                 "steerPositionAutoReturn" to lastSteerPositionAutoReturn,
-                "remoteControlUpwindowState" to (settingDevice?.getRemoteControlUpwindowState() ?: lastRemoteControlUpwindowState),
-                "remoteControlDownwindowState" to (settingDevice?.getRemoteControlDownwindowState() ?: lastRemoteControlDownwindowState),
-                "lockCarRiseWindow" to (settingDevice?.getLockCarRiseWindow() ?: lastLockCarRiseWindow),
-                "microSwitchLockWindowState" to (settingDevice?.getMicroSwitchLockWindowState() ?: lastMicroSwitchLockWindowState),
-                "microSwitchUnlockWindowState" to (settingDevice?.getMicroSwitchUnlockWindowState() ?: lastMicroSwitchUnlockWindowState),
-                "backHomeLightDelayValue" to (settingDevice?.getBackHomeLightDelayValue() ?: lastBackHomeLightDelayValue),
-                "leftHomeLightDelayValue" to (settingDevice?.getLeftHomeLightDelayValue() ?: lastLeftHomeLightDelayValue),
-                "backDoorElectricMode" to (settingDevice?.getBackDoorElectricMode() ?: lastBackDoorElectricMode)
+                "remoteControlUpwindowState" to lastRemoteControlUpwindowState,
+                "remoteControlDownwindowState" to lastRemoteControlDownwindowState,
+                "lockCarRiseWindow" to lastLockCarRiseWindow,
+                "microSwitchLockWindowState" to lastMicroSwitchLockWindowState,
+                "microSwitchUnlockWindowState" to lastMicroSwitchUnlockWindowState,
+                "backHomeLightDelayValue" to lastBackHomeLightDelayValue,
+                "leftHomeLightDelayValue" to lastLeftHomeLightDelayValue,
+                "backDoorElectricMode" to lastBackDoorElectricMode
             ),
             "engine" to mapOf<String, Any?>(
-                "engineDisplacement" to (engineDevice?.getEngineDisplacement() ?: lastEngineDisplacement),
-                "engineCode" to (engineDevice?.getEngineCode() ?: lastEngineCode),
-                "enginePower" to (engineDevice?.getEnginePower() ?: lastEnginePower),
-                "engineSpeed" to (engineDevice?.getEngineSpeed() ?: lastEngineSpeed),
-                "engineCoolantLevel" to (engineDevice?.getEngineCoolantLevel() ?: lastEngineCoolantLevel),
-                "oilLevel" to (engineDevice?.getOilLevel() ?: lastOilLevel)
+                "engineDisplacement" to lastEngineDisplacement,
+                "engineCode" to lastEngineCode,
+                "enginePower" to lastEnginePower,
+                "engineSpeed" to lastEngineSpeed,
+                "engineCoolantLevel" to lastEngineCoolantLevel,
+                "oilLevel" to lastOilLevel
             ),
             "panorama" to mapOf<String, Any?>(
-                "panoOutputSignal" to (panoramaDevice?.getPanoOutputSignal() ?: lastPanoOutputSignal),
-                "panoWorkState" to (panoramaDevice?.getPanoWorkState() ?: lastPanoWorkState),
-                "backLineConfig" to (panoramaDevice?.getBackLineConfig() ?: lastBackLineConfig),
-                "panoOutputState" to (panoramaDevice?.getPanoOutputState() ?: lastPanoOutputState),
-                "panoRotation" to (panoramaDevice?.getPanoRotation() ?: lastPanoRotation),
-                "displayMode" to (panoramaDevice?.getDisplayMode() ?: lastDisplayMode),
-                "panoramaOnlineState" to (panoramaDevice?.getPanoramaOnlineState() ?: lastPanoramaOnlineState)
+                "panoOutputSignal" to lastPanoOutputSignal,
+                "panoWorkState" to lastPanoWorkState,
+                "backLineConfig" to lastBackLineConfig,
+                "panoOutputState" to lastPanoOutputState,
+                "panoRotation" to lastPanoRotation,
+                "displayMode" to lastDisplayMode,
+                "panoramaOnlineState" to lastPanoramaOnlineState
             ),
             "ac" to mapOf<String, Any?>(
-                "acCompressorMode" to (acDevice?.getAcCompressorMode() ?: lastAcCompressorMode),
-                "acCompressorManualSign" to (acDevice?.getAcCompressorManualSign() ?: lastAcCompressorManualSign),
-                "acWindLevelManualSign" to (acDevice?.getAcWindLevelManualSign() ?: lastAcWindLevelManualSign),
-                "acWindModeManualSign" to (acDevice?.getAcWindModeManualSign() ?: lastAcWindModeManualSign),
-                "acStartState" to (acDevice?.getAcStartState() ?: lastAcStartState),
-                "acControlMode" to (acDevice?.getAcControlMode() ?: lastAcControlMode),
-                "acCycleMode" to (acDevice?.getAcCycleMode() ?: lastAcCycleMode),
-                "acWindMode" to (acDevice?.getAcWindMode() ?: lastAcWindMode),
-                "acDefrostStateFront" to (acDevice?.getAcDefrostState(BYDAutoAcDevice.AC_DEFROST_AREA_FRONT) ?: lastAcDefrostStateFront),
-                "acDefrostStateRear" to (acDevice?.getAcDefrostState(BYDAutoAcDevice.AC_DEFROST_AREA_REAR) ?: lastAcDefrostStateRear),
-                "acWindLevel" to (acDevice?.getAcWindLevel() ?: lastAcWindLevel),
-                "acTemperatureMain" to (acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_MAIN) ?: lastAcTemperatureMain),
-                "acTemperatureDeputy" to (acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_DEPUTY) ?: lastAcTemperatureDeputy),
-                "acTemperatureRear" to (acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_REAR) ?: lastAcTemperatureRear),
-                "acTemperatureOut" to (acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_OUT) ?: lastAcTemperatureOut),
-                "temperatureUnit" to (acDevice?.getTemperatureUnit() ?: lastTemperatureUnit),
-                "acTemperatureControlMode" to (acDevice?.getAcTemperatureControlMode() ?: lastAcTemperatureControlMode),
-                "acVentilationState" to (acDevice?.getAcVentilationState() ?: lastAcVentilationState),
-                "rearAcStartState" to (acDevice?.getRearAcStartState() ?: lastRearAcStartState)
+                "acCompressorMode" to lastAcCompressorMode,
+                "acCompressorManualSign" to lastAcCompressorManualSign,
+                "acWindLevelManualSign" to lastAcWindLevelManualSign,
+                "acWindModeManualSign" to lastAcWindModeManualSign,
+                "acStartState" to lastAcStartState,
+                "acControlMode" to lastAcControlMode,
+                "acCycleMode" to lastAcCycleMode,
+                "acWindMode" to lastAcWindMode,
+                "acDefrostStateFront" to lastAcDefrostStateFront,
+                "acDefrostStateRear" to lastAcDefrostStateRear,
+                "acWindLevel" to lastAcWindLevel,
+                "acTemperatureMain" to lastAcTemperatureMain,
+                "acTemperatureDeputy" to lastAcTemperatureDeputy,
+                "acTemperatureRear" to lastAcTemperatureRear,
+                "acTemperatureOut" to lastAcTemperatureOut,
+                "temperatureUnit" to lastTemperatureUnit,
+                "acTemperatureControlMode" to lastAcTemperatureControlMode,
+                "acVentilationState" to lastAcVentilationState,
+                "rearAcStartState" to lastRearAcStartState
             ),
             "sensor" to mapOf<String, Any?>(
-                "lightIntensity" to (sensorDevice?.getLightIntensity() ?: lastLightIntensity)
+                "lightIntensity" to lastLightIntensity
             ),
-            "time" to run {
-                val timeArray = timeDevice?.getTime()
-                mapOf<String, Any?>(
-                    "year" to (timeArray?.getOrNull(0) ?: lastYear),
-                    "month" to (timeArray?.getOrNull(1) ?: lastMonth),
-                    "day" to (timeArray?.getOrNull(2) ?: lastDay),
-                    "hour" to (timeArray?.getOrNull(3) ?: lastHour),
-                    "minute" to (timeArray?.getOrNull(4) ?: lastMinute),
-                    "second" to (timeArray?.getOrNull(5) ?: lastSecond),
-                    "timeFormat" to (timeDevice?.getTimeFormat() ?: lastTimeFormat)
-                )
-            },
+            "time" to mapOf<String, Any?>(
+                "year" to lastYear,
+                "month" to lastMonth,
+                "day" to lastDay,
+                "hour" to lastHour,
+                "minute" to lastMinute,
+                "second" to lastSecond,
+                "timeFormat" to lastTimeFormat
+            ),
             "energyMode" to mapOf<String, Any?>(
-                "energyMode" to (energyDevice?.getEnergyMode() ?: lastEnergyMode),
-                "operationMode" to (energyDevice?.getOperationMode() ?: lastOperationMode),
-                "powerGenerationState" to (energyDevice?.getPowerGenerationState() ?: lastPowerGenerationState),
-                "powerGenerationValue" to (energyDevice?.getPowerGenerationValue() ?: lastPowerGenerationValue),
-                "roadSurfaceMode" to (energyDevice?.getRoadSurfaceMode() ?: lastRoadSurfaceMode)
+                "energyMode" to lastEnergyMode,
+                "operationMode" to lastOperationMode,
+                "powerGenerationState" to lastPowerGenerationState,
+                "powerGenerationValue" to lastPowerGenerationValue,
+                "roadSurfaceMode" to lastRoadSurfaceMode
             ),
             "radar" to mapOf<String, Any?>(
-                "leftFront" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_LEFT_FRONT) ?: 0),
-                "rightFront" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_RIGHT_FRONT) ?: 0),
-                "leftRear" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_LEFT_REAR) ?: 0),
-                "rightRear" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_RIGHT_REAR) ?: 0),
-                "left" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_LEFT) ?: 0),
-                "right" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_RIGHT) ?: 0),
-                "frontLeftMid" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_FRONT_LEFT_MID) ?: 0),
-                "frontRightMid" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_FRONT_RIGHT_MID) ?: 0),
-                "reverseRadarSwitch" to (radarDevice?.getReverseRadarSwitchState() ?: 0)
+                "leftFront" to lastRadarLeftFront,
+                "rightFront" to lastRadarRightFront,
+                "leftRear" to lastRadarLeftRear,
+                "rightRear" to lastRadarRightRear,
+                "left" to lastRadarLeft,
+                "right" to lastRadarRight,
+                "frontLeftMid" to lastRadarFrontLeftMid,
+                "frontRightMid" to lastRadarFrontRightMid,
+                "reverseRadarSwitch" to lastReverseRadarSwitch
             ),
             "tyre" to mapOf<String, Any?>(
-                "tyrePressureLf" to (tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: lastTyrePressureLf),
-                "tyrePressureRf" to (tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: lastTyrePressureRf),
-                "tyrePressureLr" to (tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: lastTyrePressureLr),
-                "tyrePressureRr" to (tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: lastTyrePressureRr),
-                "tyreAirLeakStateLf" to (tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: lastTyreAirLeakStateLf),
-                "tyreAirLeakStateRf" to (tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: lastTyreAirLeakStateRf),
-                "tyreAirLeakStateLr" to (tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: lastTyreAirLeakStateLr),
-                "tyreAirLeakStateRr" to (tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: lastTyreAirLeakStateRr),
-                "tyreBatteryState" to (tyreDevice?.getTyreBatteryState() ?: lastTyreBatteryState),
-                "tyreSystemState" to (tyreDevice?.getTyreSystemState() ?: lastTyreSystemState),
-                "tyreTemperatureState" to (tyreDevice?.getTyreTemperatureState() ?: lastTyreTemperatureState),
-                "tyreSignalStateLf" to (tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: lastTyreSignalStateLf),
-                "tyreSignalStateRf" to (tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: lastTyreSignalStateRf),
-                "tyreSignalStateLr" to (tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: lastTyreSignalStateLr),
-                "tyreSignalStateRr" to (tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: lastTyreSignalStateRr)
+                "tyrePressureLf" to lastTyrePressureLf,
+                "tyrePressureRf" to lastTyrePressureRf,
+                "tyrePressureLr" to lastTyrePressureLr,
+                "tyrePressureRr" to lastTyrePressureRr,
+                "tyreAirLeakStateLf" to lastTyreAirLeakState,
+                "tyreAirLeakStateRf" to lastTyreAirLeakState,
+                "tyreAirLeakStateLr" to lastTyreAirLeakState,
+                "tyreAirLeakStateRr" to lastTyreAirLeakState,
+                "tyreBatteryState" to lastTyreBatteryState,
+                "tyreSystemState" to lastTyreSystemState,
+                "tyreTemperatureState" to lastTyreTemperatureState,
+                "tyreSignalStateLf" to lastTyreSignalStateLf,
+                "tyreSignalStateRf" to lastTyreSignalStateRf,
+                "tyreSignalStateLr" to lastTyreSignalStateLr,
+                "tyreSignalStateRr" to lastTyreSignalStateRr
             ),
             "airQuality" to mapOf<String, Any?>(
-                "pm25OnlineState" to (pm2p5Device?.getPM2p5OnlineState() ?: lastPm25OnlineState),
-                "pm25CheckStateIn" to (pm2p5Device?.getPM2p5CheckState()?.getOrNull(0) ?: lastPm25CheckStateIn),
-                "pm25CheckStateOut" to (pm2p5Device?.getPM2p5CheckState()?.getOrNull(1) ?: lastPm25CheckStateOut),
-                "pm25LevelIn" to (pm2p5Device?.getPM2p5Level()?.getOrNull(0) ?: lastPm25LevelIn),
-                "pm25LevelOut" to (pm2p5Device?.getPM2p5Level()?.getOrNull(1) ?: lastPm25LevelOut),
-                "pm25ValueIn" to (pm2p5Device?.getPM2p5Value()?.getOrNull(0) ?: lastPm25ValueIn),
-                "pm25ValueOut" to (pm2p5Device?.getPM2p5Value()?.getOrNull(1) ?: lastPm25ValueOut)
+                "pm25OnlineState" to lastPm25OnlineState,
+                "pm25CheckStateIn" to lastPm25CheckStateIn,
+                "pm25CheckStateOut" to lastPm25CheckStateOut,
+                "pm25LevelIn" to lastPm25LevelIn,
+                "pm25LevelOut" to lastPm25LevelOut,
+                "pm25ValueIn" to lastPm25ValueIn,
+                "pm25ValueOut" to lastPm25ValueOut
             ),
             "charge" to mapOf<String, Any?>(
-                "chargerFaultState" to (chargeDevice?.getChargerFaultState() ?: lastChargerFaultState),
-                "chargerWorkState" to (chargeDevice?.getChargerWorkState() ?: lastChargerWorkState),
-                "chargingCapacity" to (chargeDevice?.getChargingCapacity() ?: lastChargingCapacity),
-                "chargingType" to (chargeDevice?.getChargingType() ?: lastChargingType),
-                "chargingRestTimeHour" to (chargeDevice?.getChargingRestTime()?.getOrNull(0) ?: lastChargingRestTimeHour),
-                "chargingRestTimeMinute" to (chargeDevice?.getChargingRestTime()?.getOrNull(1) ?: lastChargingRestTimeMinute),
-                "chargingCapStateAc" to (chargeDevice?.getChargingCapState(BYDAutoChargingDevice.CHARGING_CAP_AC) ?: lastChargingCapStateAc),
-                "chargingCapStateDc" to (chargeDevice?.getChargingCapState(BYDAutoChargingDevice.CHARGING_CAP_DC) ?: lastChargingCapStateDc),
-                "chargingPortLockRebackState" to (chargeDevice?.getChargingPortLockRebackState() ?: lastChargingPortLockRebackState),
-                "dischargeRequestState" to (chargeDevice?.getDischargeRequestState() ?: lastDischargeRequestState),
-                "chargerState" to (chargeDevice?.getChargerState() ?: lastChargerState),
-                "chargingGunState" to (chargeDevice?.getChargingGunState() ?: lastChargingGunState),
-                "chargingPower" to (chargeDevice?.getChargingPower() ?: lastChargingPower),
-                "batteryManagementDeviceState" to (chargeDevice?.getBatteryManagementDeviceState() ?: lastBatteryManagementDeviceState),
-                "chargingScheduleEnableState" to (chargeDevice?.getChargingScheduleEnableState() ?: lastChargingScheduleEnableState),
-                "chargingScheduleState" to (chargeDevice?.getChargingScheduleState() ?: lastChargingScheduleState),
-                "chargingGunNotInsertedState" to (chargeDevice?.getChargingGunNotInsertedState() ?: lastChargingGunNotInsertedState),
-                "chargingScheduleTimeHour" to (chargeDevice?.getChargingScheduleTime()?.getOrNull(0) ?: lastChargingScheduleTimeHour),
-                "chargingScheduleTimeMinute" to (chargeDevice?.getChargingScheduleTime()?.getOrNull(1) ?: lastChargingScheduleTimeMinute)
+                "chargerFaultState" to lastChargerFaultState,
+                "chargerWorkState" to lastChargerWorkState,
+                "chargingCapacity" to lastChargingCapacity,
+                "chargingType" to lastChargingType,
+                "chargingRestTimeHour" to lastChargingRestTimeHour,
+                "chargingRestTimeMinute" to lastChargingRestTimeMinute,
+                "chargingCapStateAc" to lastChargingCapStateAc,
+                "chargingCapStateDc" to lastChargingCapStateDc,
+                "chargingPortLockRebackState" to lastChargingPortLockRebackState,
+                "dischargeRequestState" to lastDischargeRequestState,
+                "chargerState" to lastChargerState,
+                "chargingGunState" to lastChargingGunState,
+                "chargingPower" to lastChargingPower,
+                "batteryManagementDeviceState" to lastBatteryManagementDeviceState,
+                "chargingScheduleEnableState" to lastChargingScheduleEnableState,
+                "chargingScheduleState" to lastChargingScheduleState,
+                "chargingGunNotInsertedState" to lastChargingGunNotInsertedState,
+                "chargingScheduleTimeHour" to lastChargingScheduleTimeHour,
+                "chargingScheduleTimeMinute" to lastChargingScheduleTimeMinute
             ),
             "media" to mapOf<String, Any?>(
-                "mediaType" to (mediaDevice?.getMediaType() ?: lastMediaType),
-                "playMode" to (mediaDevice?.getPlayMode() ?: lastPlayMode),
-                "playState" to (mediaDevice?.getPlayState() ?: lastPlayState),
-                "fileName" to (mediaDevice?.getPlayMediaInfo()?.fileName ?: lastFileName),
-                "artistName" to (mediaDevice?.getPlayMediaInfo()?.artistName ?: lastArtistName),
-                "albumName" to (mediaDevice?.getPlayMediaInfo()?.albumName ?: lastAlbumName)
+                "mediaType" to lastMediaType,
+                "playMode" to lastPlayMode,
+                "playState" to lastPlayState,
+                "fileName" to lastFileName,
+                "artistName" to lastArtistName,
+                "albumName" to lastAlbumName
             ),
             "bodyStatus" to mapOf<String, Any?>(
-                "autoVIN" to (bodyStatusDevice?.getAutoVIN() ?: lastAutoVIN),
-                "autoModelName" to (bodyStatusDevice?.getAutoModelName() ?: lastAutoModelName),
-                "autoSystemState" to (bodyStatusDevice?.getAutoSystemState() ?: lastAutoSystemState),
-                "doorStateLf" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_FRONT) ?: lastDoorStateLf),
-                "doorStateRf" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_FRONT) ?: lastDoorStateRf),
-                "doorStateLr" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_REAR) ?: lastDoorStateLr),
-                "doorStateRr" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_REAR) ?: lastDoorStateRr),
-                "doorStateHood" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_HOOD) ?: lastDoorStateHood),
-                "doorStateLuggage" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LUGGAGE_DOOR) ?: lastDoorStateLuggage),
-                "windowStateLf" to (bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_LEFT_FRONT) ?: lastWindowStateLf),
-                "windowStateRf" to (bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_RIGHT_FRONT) ?: lastWindowStateRf),
-                "windowStateLr" to (bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_LEFT_REAR) ?: lastWindowStateLr),
-                "windowStateRr" to (bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_RIGHT_REAR) ?: lastWindowStateRr),
-                "moonRoofPercent" to (bodyStatusDevice?.getWindowOpenPercent(BYDAutoBodyworkDevice.BODYWORK_CMD_MOON_ROOF) ?: lastMoonRoofPercent),
-                "sunshadePercent" to (bodyStatusDevice?.getWindowOpenPercent(BYDAutoBodyworkDevice.BODYWORK_CMD_SUNSHADE_PANEL) ?: lastSunshadePercent),
-                "batteryVoltageLevel" to (bodyStatusDevice?.getBatteryVoltageLevel() ?: lastBatteryVoltageLevel),
-                "powerLevel" to (bodyStatusDevice?.getPowerLevel() ?: lastPowerLevel),
-                "steeringWheelAngle" to (bodyStatusDevice?.getSteeringWheelValue(BYDAutoBodyworkDevice.BODYWORK_CMD_STEERING_WHEEL_ANGEL) ?: lastSteeringWheelAngle),
-                "steeringWheelSpeed" to (bodyStatusDevice?.getSteeringWheelValue(BYDAutoBodyworkDevice.BODYWORK_CMD_STEERING_WHEEL_SPEED) ?: lastSteeringWheelSpeed),
-                "fuelElecLowPower" to (bodyStatusDevice?.getFuelElecLowPower() ?: lastFuelElecLowPower),
-                "alarmState" to (bodyStatusDevice?.getAlarmState() ?: lastAlarmState),
-                "moonRoofConfig" to (bodyStatusDevice?.getMoonRoofConfig() ?: lastMoonRoofConfig)
+                "autoVIN" to lastAutoVIN,
+                "autoModelName" to lastAutoModelName,
+                "autoSystemState" to lastAutoSystemState,
+                "doorStateLf" to lastDoorStateLf,
+                "doorStateRf" to lastDoorStateRf,
+                "doorStateLr" to lastDoorStateLr,
+                "doorStateRr" to lastDoorStateRr,
+                "doorStateHood" to lastDoorStateHood,
+                "doorStateLuggage" to lastDoorStateLuggage,
+                "windowStateLf" to lastWindowStateLf,
+                "windowStateRf" to lastWindowStateRf,
+                "windowStateLr" to lastWindowStateLr,
+                "windowStateRr" to lastWindowStateRr,
+                "moonRoofPercent" to lastMoonRoofPercent,
+                "sunshadePercent" to lastSunshadePercent,
+                "batteryVoltageLevel" to lastBatteryVoltageLevel,
+                "powerLevel" to lastPowerLevel,
+                "steeringWheelAngle" to lastSteeringWheelAngle,
+                "steeringWheelSpeed" to lastSteeringWheelSpeed,
+                "fuelElecLowPower" to lastFuelElecLowPower,
+                "alarmState" to lastAlarmState,
+                "moonRoofConfig" to lastMoonRoofConfig
             ),
             "light" to mapOf<String, Any?>(
-                "lightAutoStatus" to (lightDevice?.getLightAutoStatus() ?: lastLightAutoStatus),
-                "lightSide" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_SIDE) ?: lastLightSide),
-                "lightLowBeam" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_LOW_BEAM) ?: lastLightLowBeam),
-                "lightHighBeam" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_HIGH_BEAM) ?: lastLightHighBeam),
-                "lightLeftTurnSignal" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_LEFT_TURN_SIGNAL) ?: lastLightLeftTurnSignal),
-                "lightRightTurnSignal" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_RIGHT_TURN_SIGNAL) ?: lastLightRightTurnSignal),
-                "lightFrontFog" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_FRONT_FOG) ?: lastLightFrontFog),
-                "lightRearFog" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_REAR_FOG) ?: lastLightRearFog),
-                "lightFoot" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_FOOT) ?: lastLightFoot),
-                "afsSwitch" to (lightDevice?.getAFSSwitch() ?: lastAfsSwitch)
+                "lightAutoStatus" to lastLightAutoStatus,
+                "lightSide" to lastLightSide,
+                "lightLowBeam" to lastLightLowBeam,
+                "lightHighBeam" to lastLightHighBeam,
+                "lightLeftTurnSignal" to lastLightLeftTurnSignal,
+                "lightRightTurnSignal" to lastLightRightTurnSignal,
+                "lightFrontFog" to lastLightFrontFog,
+                "lightRearFog" to lastLightRearFog,
+                "lightFoot" to lastLightFoot,
+                "afsSwitch" to lastAfsSwitch
             ),
             "timestamp" to System.currentTimeMillis()
         )
@@ -2100,11 +2529,14 @@ class BYDAutoVehicleService(private val context: Context) {
     // ==================== 车速类接口 ====================
     private var speedListenerEnabled = false
 
-    fun getSpeedData(): Map<String, Any?> {
+    fun getSpeedData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateSpeedData()
+        }
         return mapOf<String, Any?>(
-            "currentSpeed" to (speedDevice?.getCurrentSpeed() ?: lastSpeed),
-            "accelerateDeepness" to (speedDevice?.getAccelerateDeepness() ?: lastAccelerateDepth),
-            "brakeDeepness" to (speedDevice?.getBrakeDeepness() ?: lastBrakeDepth)
+            "currentSpeed" to lastSpeed,
+            "accelerateDeepness" to lastAccelerateDepth,
+            "brakeDeepness" to lastBrakeDepth
         )
     }
 
@@ -2118,7 +2550,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendSpeedData() {
         try {
-            val data = getSpeedData()
+            val data = getSpeedData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onSpeedDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2131,73 +2563,81 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private val acListener = object : AbsBYDAutoAcListener() {
         override fun onAcStarted() {
-            sendCarLog("空调监听器回调 - 空调开启")
+            sendCarLog("changed-ac-acStartState:1")
             lastAcStartState = 1
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcStoped() {
-            sendCarLog("空调监听器回调 - 空调关闭")
+            sendCarLog("changed-ac-acStartState:0")
             lastAcStartState = 0
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcRearStarted() {
-            sendCarLog("空调监听器回调 - 后空调开启")
+            sendCarLog("changed-ac-rearAcStartState:1")
             lastRearAcStartState = 1
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcRearStoped() {
-            sendCarLog("空调监听器回调 - 后空调关闭")
+            sendCarLog("changed-ac-rearAcStartState:0")
             lastRearAcStartState = 0
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcCtrlModeChanged(mode: Int) {
-            sendCarLog("空调监听器回调 - 控制方式变化: $mode")
+            sendCarLog("changed-ac-acControlMode:$mode")
             lastAcControlMode = mode
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcCycleModeChanged(mode: Int) {
-            sendCarLog("空调监听器回调 - 循环方式变化: $mode")
+            sendCarLog("changed-ac-acCycleMode:$mode")
             lastAcCycleMode = mode
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcWindModeChanged(mode: Int) {
-            sendCarLog("空调监听器回调 - 出风模式变化: $mode")
+            sendCarLog("changed-ac-acWindMode:$mode")
             lastAcWindMode = mode
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcDefrostStateChanged(area: Int, state: Int) {
-            sendCarLog("空调监听器回调 - 除霜状态变化 area=$area, state=$state")
+            val areaName = if (area == BYDAutoAcDevice.AC_DEFROST_AREA_FRONT) "Front" else "Rear"
+            sendCarLog("changed-ac-acDefrostState-$areaName:$state")
             when (area) {
                 BYDAutoAcDevice.AC_DEFROST_AREA_FRONT -> lastAcDefrostStateFront = state
                 BYDAutoAcDevice.AC_DEFROST_AREA_REAR -> lastAcDefrostStateRear = state
             }
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcWindLevelChanged(level: Int) {
-            sendCarLog("空调监听器回调 - 风量档位变化: $level")
+            sendCarLog("changed-ac-acWindLevel:$level")
             lastAcWindLevel = level
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onTemperatureChanged(area: Int, value: Int) {
-            sendCarLog("空调监听器回调 - 温度变化 area=$area, value=$value")
+            val areaName = when (area) {
+                BYDAutoAcDevice.AC_TEMPERATURE_MAIN -> "Main"
+                BYDAutoAcDevice.AC_TEMPERATURE_DEPUTY -> "Deputy"
+                BYDAutoAcDevice.AC_TEMPERATURE_REAR -> "Rear"
+                BYDAutoAcDevice.AC_TEMPERATURE_OUT -> "Out"
+                else -> "Unknown"
+            }
+            sendCarLog("changed-ac-acTemperature-$areaName:$value")
             when (area) {
                 BYDAutoAcDevice.AC_TEMPERATURE_MAIN -> lastAcTemperatureMain = value
                 BYDAutoAcDevice.AC_TEMPERATURE_DEPUTY -> lastAcTemperatureDeputy = value
@@ -2205,79 +2645,83 @@ class BYDAutoVehicleService(private val context: Context) {
                 BYDAutoAcDevice.AC_TEMPERATURE_OUT -> lastAcTemperatureOut = value
             }
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onTemperatureUnitChanged(unit: Int) {
-            sendCarLog("空调监听器回调 - 温度单位变化: $unit")
+            sendCarLog("changed-ac-temperatureUnit:$unit")
             lastTemperatureUnit = unit
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcCompressorModeChanged(mode: Int) {
-            sendCarLog("空调监听器回调 - 压缩机状态变化: $mode")
+            sendCarLog("changed-ac-acCompressorMode:$mode")
             lastAcCompressorMode = mode
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcVentilationStateChanged(state: Int) {
-            sendCarLog("空调监听器回调 - 通风状态变化: $state")
+            sendCarLog("changed-ac-acVentilationState:$state")
             lastAcVentilationState = state
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcCompressorManualSignChanged(sign: Int) {
-            sendCarLog("空调监听器回调 - 压缩机手动标志变化: $sign")
+            sendCarLog("changed-ac-acCompressorManualSign:$sign")
             lastAcCompressorManualSign = sign
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcWindLevelManualSignChanged(sign: Int) {
-            sendCarLog("空调监听器回调 - 风量手动标志变化: $sign")
+            sendCarLog("changed-ac-acWindLevelManualSign:$sign")
             lastAcWindLevelManualSign = sign
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcWindModeManualSignChanged(sign: Int) {
-            sendCarLog("空调监听器回调 - 出风模式手动标志变化: $sign")
+            sendCarLog("changed-ac-acWindModeManualSign:$sign")
             lastAcWindModeManualSign = sign
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
 
         override fun onAcWindModeShownStateChanged(state: Int) {
-            sendCarLog("空调监听器回调 - 出风模式显示状态变化: $state")
+            sendCarLog("changed-ac-acWindModeShownState:$state")
+            lastAcWindModeShownState = state
             if (acListenerEnabled) sendAcData()
-            sendCarData(buildCarData())
+            sendCarData()
         }
     }
 
-    fun getAcData(): Map<String, Any?> {
+    fun getAcData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateAcData()
+        }
         return mapOf<String, Any?>(
-            "acCompressorMode" to (acDevice?.getAcCompressorMode() ?: lastAcCompressorMode),
-            "acCompressorManualSign" to (acDevice?.getAcCompressorManualSign() ?: lastAcCompressorManualSign),
-            "acWindLevelManualSign" to (acDevice?.getAcWindLevelManualSign() ?: lastAcWindLevelManualSign),
-            "acWindModeManualSign" to (acDevice?.getAcWindModeManualSign() ?: lastAcWindModeManualSign),
-            "acStartState" to (acDevice?.getAcStartState() ?: lastAcStartState),
-            "acControlMode" to (acDevice?.getAcControlMode() ?: lastAcControlMode),
-            "acCycleMode" to (acDevice?.getAcCycleMode() ?: lastAcCycleMode),
-            "acWindMode" to (acDevice?.getAcWindMode() ?: lastAcWindMode),
-            "acDefrostStateFront" to (acDevice?.getAcDefrostState(BYDAutoAcDevice.AC_DEFROST_AREA_FRONT) ?: lastAcDefrostStateFront),
-            "acDefrostStateRear" to (acDevice?.getAcDefrostState(BYDAutoAcDevice.AC_DEFROST_AREA_REAR) ?: lastAcDefrostStateRear),
-            "acWindLevel" to (acDevice?.getAcWindLevel() ?: lastAcWindLevel),
-            "acTemperatureMain" to (acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_MAIN) ?: lastAcTemperatureMain),
-            "acTemperatureDeputy" to (acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_DEPUTY) ?: lastAcTemperatureDeputy),
-            "acTemperatureRear" to (acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_REAR) ?: lastAcTemperatureRear),
-            "acTemperatureOut" to (acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_OUT) ?: lastAcTemperatureOut),
-            "temperatureUnit" to (acDevice?.getTemperatureUnit() ?: lastTemperatureUnit),
-            "acTemperatureControlMode" to (acDevice?.getAcTemperatureControlMode() ?: lastAcTemperatureControlMode),
-            "acVentilationState" to (acDevice?.getAcVentilationState() ?: lastAcVentilationState),
-            "rearAcStartState" to (acDevice?.getRearAcStartState() ?: lastRearAcStartState)
+            "acCompressorMode" to lastAcCompressorMode,
+            "acCompressorManualSign" to lastAcCompressorManualSign,
+            "acWindLevelManualSign" to lastAcWindLevelManualSign,
+            "acWindModeManualSign" to lastAcWindModeManualSign,
+            "acStartState" to lastAcStartState,
+            "acControlMode" to lastAcControlMode,
+            "acCycleMode" to lastAcCycleMode,
+            "acWindMode" to lastAcWindMode,
+            "acDefrostStateFront" to lastAcDefrostStateFront,
+            "acDefrostStateRear" to lastAcDefrostStateRear,
+            "acWindLevel" to lastAcWindLevel,
+            "acTemperatureMain" to lastAcTemperatureMain,
+            "acTemperatureDeputy" to lastAcTemperatureDeputy,
+            "acTemperatureRear" to lastAcTemperatureRear,
+            "acTemperatureOut" to lastAcTemperatureOut,
+            "temperatureUnit" to lastTemperatureUnit,
+            "acTemperatureControlMode" to lastAcTemperatureControlMode,
+            "acVentilationState" to lastAcVentilationState,
+            "rearAcStartState" to lastRearAcStartState
         )
     }
 
@@ -2291,7 +2735,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendAcData() {
         try {
-            val data = getAcData()
+            val data = getAcData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onAcDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2383,7 +2827,7 @@ class BYDAutoVehicleService(private val context: Context) {
             }
             val success = result == 0
             if (success) {
-                sendCarData(buildCarData())
+                sendCarData()
             }
             success
         } catch (e: Exception) {
@@ -2392,10 +2836,25 @@ class BYDAutoVehicleService(private val context: Context) {
         }
     }
 
-    private fun sendCarData(data: Map<String, Any?>) {
+    private fun sendCarData() {
+        sendCarLog("sendCarData: 方法被调用，enableCarDataListener=$enableCarDataListener, debounceDelayMs=$debounceDelayMs")
+        if (!enableCarDataListener) {
+            sendCarLog("sendCarData: enableCarDataListener 为 false，直接返回")
+            return
+        }
+        if (debounceDelayMs > 0) {
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastSendTime < debounceDelayMs) {
+                sendCarLog("sendCarData: 防抖机制，距离上次发送不足${debounceDelayMs}ms，跳过")
+                return
+            }
+            lastSendTime = currentTime
+        }
         try {
-            val jsonString = JSONObject(data).toString()
+            val jsonString = JSONObject(buildCarData()).toString()
+            sendCarLog("sendCarData: 准备发送数据，长度=${jsonString.length}")
             methodChannel?.invokeMethod("onCarDataChanged", jsonString)
+            sendCarLog("sendCarData: 数据发送成功")
         } catch (e: Exception) {
             sendCarLog("发送车机数据失败: ${e.message}")
         }
@@ -2412,6 +2871,19 @@ class BYDAutoVehicleService(private val context: Context) {
         } catch (e: Exception) {
             sendCarLog("发送错误消息失败: ${e.message}")
         }
+    }
+
+    fun enableCarDataListener(enabled: Boolean) {
+        enableCarDataListener = enabled
+        sendCarLog("全局车机数据监听状态: $enabled")
+        if (enabled) {
+            sendCarData()
+        }
+    }
+
+    fun setCarDataListenerDebounceDelay(delayMs: Int) {
+        debounceDelayMs = delayMs
+        sendCarLog("车机数据防抖延迟设置为: ${delayMs}ms")
     }
 
     private fun sendCarLog(log: String) {
@@ -2473,36 +2945,90 @@ class BYDAutoVehicleService(private val context: Context) {
             }
         }
 
-        // 强制更新所有数据
-        sendCarLog("requestCarData() - 开始更新数据")
+        // 强制更新所有数据 - 获取真实数据并更新缓存
+        sendCarLog("requestCarData() - 开始更新所有数据")
+        
+        // 更新车速数据
         updateSpeedData()
+        
+        // 更新统计数据
         updateStatisticData()
+        
+        // 更新胎压数据
         updateTyreData()
+        
+        // 更新仪表数据
+        updateInstrumentData()
+        
+        // 更新门锁数据
+        updateDoorLockData()
+        
+        // 更新车辆设置数据
+        updateSettingData()
+        
+        // 更新发动机数据
+        updateEngineData()
+        
+        // 更新全景摄像头数据
+        updatePanoramaData()
+        
+        // 更新空调数据
+        updateAcData()
+        
+        // 更新传感器数据
+        updateSensorData()
+        
+        // 更新时间数据
+        updateTimeData()
+        
+        // 更新能量模式数据
+        updateEnergyModeData()
+        
+        // 更新雷达数据
+        updateRadarData()
+        
+        // 更新空气质量数据
+        updateAirQualityData()
+        
+        // 更新充电数据
+        updateChargeData()
+        
+        // 更新媒体数据
+        updateMediaData()
+        
+        // 更新车身状态数据
+        updateBodyStatusData()
+        
+        // 更新灯光数据
+        updateLightData()
 
         sendCarLog("requestCarData() - 发送数据")
-        sendCarData(buildCarData())
+        sendCarData()
         sendCarLog("=== requestCarData() 结束 ===")
     }
 
     // ==================== 行驶数据类型接口 ====================
     private var statisticListenerEnabled = false
 
-    fun getStatisticData(): Map<String, Any?> {
+    fun getStatisticData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateStatisticData()
+        }
         return mapOf<String, Any?>(
-            "drivingTime" to (statisticDevice?.getDrivingTimeValue() ?: 0.0),
-            "elecDrivingRange" to (statisticDevice?.getElecDrivingRangeValue() ?: 0),
-            "elecPercentage" to (statisticDevice?.getElecPercentageValue() ?: lastElecPercentage),
-            "fuelDrivingRange" to (statisticDevice?.getFuelDrivingRangeValue() ?: 0),
-            "fuelPercentage" to (statisticDevice?.getFuelPercentageValue() ?: lastFuelPercentage),
-            "lastElecConPHM" to (statisticDevice?.getLastElecConPHMValue() ?: 0.0),
-            "lastFuelConPHM" to (statisticDevice?.getLastFuelConPHMValue() ?: 0.0),
-            "totalElecConPHM" to (statisticDevice?.getTotalElecConPHMValue() ?: 0.0),
-            "totalFuelConPHM" to (statisticDevice?.getTotalFuelConPHMValue() ?: 0.0),
-            "totalFuelCon" to (statisticDevice?.getTotalFuelConValue() ?: 0.0),
-            "totalElecCon" to (statisticDevice?.getTotalElecConValue() ?: 0.0),
-            "totalMileage" to (statisticDevice?.getTotalMileageValue() ?: lastTotalMileage),
-            "keyBatteryLevel" to (statisticDevice?.getKeyBatteryLevel() ?: 0),
-            "evMileage" to (statisticDevice?.getEVMileageValue() ?: lastEvMileage)
+            "drivingTime" to lastDrivingTime,
+            "elecDrivingRange" to lastElecDrivingRange,
+            "elecPercentage" to lastElecPercentage,
+            "fuelDrivingRange" to lastFuelDrivingRange,
+            "fuelPercentage" to lastFuelPercentage,
+            "lastElecConPHM" to lastLastElecConPHM,
+            "lastFuelConPHM" to lastLastFuelConPHM,
+            "totalElecConPHM" to lastTotalElecConPHM,
+            "totalFuelConPHM" to lastTotalFuelConPHM,
+            "totalFuelCon" to lastTotalFuelCon,
+            "totalElecCon" to lastTotalElecCon,
+            "totalMileage" to lastTotalMileage,
+            "keyBatteryLevel" to lastKeyBatteryLevel,
+            "evMileage" to lastEvMileage
         )
     }
 
@@ -2521,7 +3047,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendStatisticData() {
         try {
-            val data = getStatisticData()
+            val data = getStatisticData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onStatisticDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2532,13 +3058,21 @@ class BYDAutoVehicleService(private val context: Context) {
     // ==================== 仪表类接口 ====================
     private var instrumentListenerEnabled = false
 
-    fun getInstrumentData(): Map<String, Any?> {
+    fun getInstrumentData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateInstrumentData()
+        }
         return mapOf<String, Any?>(
-            "malfunctionInfo" to emptyMap<Int, Int>(),
-            "alarmBuzzleState" to (instrumentDevice?.getAlarmBuzzleState() ?: 0),
-            "unit" to emptyMap<Int, Int>(),
-            "maintenanceInfo" to emptyMap<Int, Int>(),
-            "externalChargingPower" to (instrumentDevice?.getExternalChargingPower() ?: lastExternalChargingPower)
+            "malfunctionInfo" to lastMalfunctionInfo,
+            "alarmBuzzleState" to lastAlarmBuzzleState,
+            "unit" to mapOf<String, Any?>(
+                "temperature" to lastTemperatureUnit,
+                "pressure" to lastPressureUnit,
+                "fuelConsumption" to lastFuelConsumptionUnit,
+                "power" to lastPowerUnit
+            ),
+            "maintenanceInfo" to lastMaintenanceInfo,
+            "externalChargingPower" to lastExternalChargingPower
         )
     }
 
@@ -2551,23 +3085,119 @@ class BYDAutoVehicleService(private val context: Context) {
     }
 
     fun setInstrumentData(field: String, value: Any): Boolean {
-        sendCarLog("设置仪表数据: $field = $value")
-        return false
+        return try {
+            val result = when (field) {
+                "setUnit" -> {
+                    val v = value as Map<*, *>
+                    val frontEndUnitName = (v["unitName"] as? Int) ?: 0
+                    val unitValue = (v["unitValue"] as? Int) ?: 0
+                    
+                    val sdkUnitName = when (frontEndUnitName) {
+                        1 -> BYDAutoInstrumentDevice.PRESSURE_UNIT           // 压力单位
+                        2 -> BYDAutoInstrumentDevice.TEMPERATURE_UNIT         // 温度单位
+                        3 -> BYDAutoInstrumentDevice.POWER_UNIT                // 能量单位 -> 功率
+                        4 -> BYDAutoInstrumentDevice.FUEL_CONSUMPTION_AND_DISTANCE_UNIT  // 长度单位 -> 油耗距离
+                        else -> {
+                            sendCarLog("不支持的单位类型: $frontEndUnitName")
+                            -1
+                        }
+                    }
+                    
+                    if (sdkUnitName == -1) null
+                    else instrumentDevice?.setUnit(sdkUnitName, unitValue)
+                }
+                "setMaintenanceInfo" -> {
+                    val v = value as Map<*, *>
+                    val frontEndTypeName = (v["typeName"] as? Int) ?: 0
+                    val infoValue = (v["infoValue"] as? Int) ?: 0
+                    
+                    val sdkTypeName = when (frontEndTypeName) {
+                        0 -> BYDAutoInstrumentDevice.MAINTENANCE_TIME      // 轮胎换位 -> 保养时间
+                        1 -> BYDAutoInstrumentDevice.MAINTENANCE_MILEAGE   // 保养检查 -> 保养里程
+                        else -> {
+                            sendCarLog("不支持的保养类型: $frontEndTypeName")
+                            -1
+                        }
+                    }
+                    
+                    if (sdkTypeName == -1) null
+                    else instrumentDevice?.setMaintenanceInfo(sdkTypeName, infoValue)
+                }
+                else -> null
+            }
+            val success = result == BYDAutoInstrumentDevice.INSTRUMENT_COMMAND_SUCCESS
+            sendCarLog("设置仪表数据: $field = $value, 结果: $success")
+            if (success) {
+                sendCarData()
+            }
+            success
+        } catch (e: Exception) {
+            sendCarLog("设置仪表数据失败: ${e.message}")
+            false
+        }
     }
 
     fun setInstrumentUnit(unitName: Int, unitValue: Int): Boolean {
-        sendCarLog("设置仪表单位: $unitName = $unitValue")
-        return false
+        return try {
+            val sdkUnitName = when (unitName) {
+                1 -> BYDAutoInstrumentDevice.PRESSURE_UNIT           // 压力单位
+                2 -> BYDAutoInstrumentDevice.TEMPERATURE_UNIT         // 温度单位
+                3 -> BYDAutoInstrumentDevice.POWER_UNIT                // 能量单位 -> 功率
+                4 -> BYDAutoInstrumentDevice.FUEL_CONSUMPTION_AND_DISTANCE_UNIT  // 长度单位 -> 油耗距离
+                else -> {
+                    sendCarLog("不支持的单位类型: $unitName")
+                    -1
+                }
+            }
+            
+            if (sdkUnitName == -1) {
+                false
+            } else {
+                val result = instrumentDevice?.setUnit(sdkUnitName, unitValue)
+                val success = result == BYDAutoInstrumentDevice.INSTRUMENT_COMMAND_SUCCESS
+                sendCarLog("设置仪表单位: $unitName -> $sdkUnitName = $unitValue, 结果: $success")
+                if (success) {
+                    sendCarData()
+                }
+                success
+            }
+        } catch (e: Exception) {
+            sendCarLog("设置仪表单位失败: ${e.message}")
+            false
+        }
     }
 
     fun setMaintenanceInfo(typeName: Int, infoValue: Int): Boolean {
-        sendCarLog("设置保养信息: $typeName = $infoValue")
-        return false
+        return try {
+            val sdkTypeName = when (typeName) {
+                0 -> BYDAutoInstrumentDevice.MAINTENANCE_TIME      // 轮胎换位 -> 保养时间
+                1 -> BYDAutoInstrumentDevice.MAINTENANCE_MILEAGE   // 保养检查 -> 保养里程
+                else -> {
+                    sendCarLog("不支持的保养类型: $typeName")
+                    -1
+                }
+            }
+            
+            if (sdkTypeName == -1) {
+                false
+            } else {
+                val result = instrumentDevice?.setMaintenanceInfo(sdkTypeName, infoValue)
+                val success = result == BYDAutoInstrumentDevice.INSTRUMENT_COMMAND_SUCCESS
+                sendCarLog("设置保养信息: $typeName -> $sdkTypeName = $infoValue, 结果: $success")
+                if (success) {
+                    sendCarData()
+                }
+                success
+            }
+        } catch (e: Exception) {
+            sendCarLog("设置保养信息失败: ${e.message}")
+            false
+        }
     }
 
     private fun sendInstrumentData() {
         try {
-            val data = getInstrumentData()
+            val data = getInstrumentData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onInstrumentDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2578,15 +3208,18 @@ class BYDAutoVehicleService(private val context: Context) {
     // ==================== 门锁类接口 ====================
     private var doorLockListenerEnabled = false
 
-    fun getDoorData(): Map<String, Any?> {
+    fun getDoorData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateDoorLockData()
+        }
         return mapOf<String, Any?>(
-            "leftFront" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_LEFT_FRONT) ?: lastDoorLockLeftFront),
-            "leftRear" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_LEFT_REAR) ?: lastDoorLockLeftRear),
-            "rightFront" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_RIGHT_FRONT) ?: lastDoorLockRightFront),
-            "rightRear" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_RIGHT_REAR) ?: lastDoorLockRightRear),
-            "back" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_BACK) ?: lastDoorLockBack),
-            "childlockLeft" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_CHILDLOCK_LEFT) ?: lastDoorLockChildlockLeft),
-            "childlockRight" to (doorLockDevice?.getDoorLockStatus(BYDAutoDoorLockDevice.DOOR_LOCK_AREA_CHILDLOCK_RIGHT) ?: lastDoorLockChildlockRight)
+            "leftFront" to lastDoorLockLeftFront,
+            "leftRear" to lastDoorLockLeftRear,
+            "rightFront" to lastDoorLockRightFront,
+            "rightRear" to lastDoorLockRightRear,
+            "back" to lastDoorLockBack,
+            "childlockLeft" to lastDoorLockChildlockLeft,
+            "childlockRight" to lastDoorLockChildlockRight
         )
     }
 
@@ -2605,7 +3238,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendDoorData() {
         try {
-            val data = getDoorData()
+            val data = getDoorData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onDoorDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2616,36 +3249,39 @@ class BYDAutoVehicleService(private val context: Context) {
     // ==================== 车辆设置类接口 ====================
     private var vehicleSettingListenerEnabled = false
 
-    fun getVehicleSettingData(): Map<String, Any?> {
+    fun getVehicleSettingData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateSettingData()
+        }
         return mapOf<String, Any?>(
-            "acBTWind" to (settingDevice?.getACBTWind() ?: lastAcBTWind),
-            "acTunnelCycle" to (settingDevice?.getACTunnelCycle() ?: lastAcTunnelCycle),
-            "acPauseCycle" to (settingDevice?.getACPauseCycle() ?: lastAcPauseCycle),
-            "acAutoAir" to (settingDevice?.getACAutoAir() ?: lastAcAutoAir),
-            "pm25Power" to (settingDevice?.getPM25Power() ?: lastPm25Power),
-            "pm25SwitchCheck" to (settingDevice?.getPM25SwitchCheck() ?: lastPm25SwitchCheck),
-            "pm25TimeCheck" to (settingDevice?.getPM25TimeCheck() ?: lastPm25TimeCheck),
-            "energyFeedback" to (settingDevice?.getEnergyFeedback() ?: lastEnergyFeedback),
-            "socTarget" to (settingDevice?.getSOCTarget() ?: lastSocTarget),
-            "chargingPort" to (settingDevice?.getChargingPort() ?: lastChargingPort),
-            "autoExternalRearMirrorFollowUp" to (settingDevice?.getAutoExternalRearMirrorFollowUpSwitch() ?: lastAutoExternalRearMirrorFollowUp),
-            "lockOff" to (settingDevice?.getLockOff() ?: lastLockOff),
-            "language" to (settingDevice?.getLanguage() ?: lastLanguage),
-            "overspeedLock" to (settingDevice?.getOverspeedLock() ?: lastOverspeedLock),
-            "safeWarnState" to (settingDevice?.getSafeWarnState() ?: lastSafeWarnState),
-            "maintainRemindState" to (settingDevice?.getMaintainRemindState() ?: lastMaintainRemindState),
-            "steerAssis" to (settingDevice?.getSteerAssis() ?: lastSteerAssis),
-            "rearViewMirrorFlip" to (settingDevice?.getRearViewMirrorFlip() ?: lastRearViewMirrorFlip),
+            "acBTWind" to lastAcBTWind,
+            "acTunnelCycle" to lastAcTunnelCycle,
+            "acPauseCycle" to lastAcPauseCycle,
+            "acAutoAir" to lastAcAutoAir,
+            "pm25Power" to lastPm25Power,
+            "pm25SwitchCheck" to lastPm25SwitchCheck,
+            "pm25TimeCheck" to lastPm25TimeCheck,
+            "energyFeedback" to lastEnergyFeedback,
+            "socTarget" to lastSocTarget,
+            "chargingPort" to lastChargingPort,
+            "autoExternalRearMirrorFollowUp" to lastAutoExternalRearMirrorFollowUp,
+            "lockOff" to lastLockOff,
+            "language" to lastLanguage,
+            "overspeedLock" to lastOverspeedLock,
+            "safeWarnState" to lastSafeWarnState,
+            "maintainRemindState" to lastMaintainRemindState,
+            "steerAssis" to lastSteerAssis,
+            "rearViewMirrorFlip" to lastRearViewMirrorFlip,
             "driverSeatAutoReturn" to lastDriverSeatAutoReturn,
             "steerPositionAutoReturn" to lastSteerPositionAutoReturn,
-            "remoteControlUpwindowState" to (settingDevice?.getRemoteControlUpwindowState() ?: lastRemoteControlUpwindowState),
-            "remoteControlDownwindowState" to (settingDevice?.getRemoteControlDownwindowState() ?: lastRemoteControlDownwindowState),
-            "lockCarRiseWindow" to (settingDevice?.getLockCarRiseWindow() ?: lastLockCarRiseWindow),
-            "microSwitchLockWindowState" to (settingDevice?.getMicroSwitchLockWindowState() ?: lastMicroSwitchLockWindowState),
-            "microSwitchUnlockWindowState" to (settingDevice?.getMicroSwitchUnlockWindowState() ?: lastMicroSwitchUnlockWindowState),
-            "backHomeLightDelayValue" to (settingDevice?.getBackHomeLightDelayValue() ?: lastBackHomeLightDelayValue),
-            "leftHomeLightDelayValue" to (settingDevice?.getLeftHomeLightDelayValue() ?: lastLeftHomeLightDelayValue),
-            "backDoorElectricMode" to (settingDevice?.getBackDoorElectricMode() ?: lastBackDoorElectricMode)
+            "remoteControlUpwindowState" to lastRemoteControlUpwindowState,
+            "remoteControlDownwindowState" to lastRemoteControlDownwindowState,
+            "lockCarRiseWindow" to lastLockCarRiseWindow,
+            "microSwitchLockWindowState" to lastMicroSwitchLockWindowState,
+            "microSwitchUnlockWindowState" to lastMicroSwitchUnlockWindowState,
+            "backHomeLightDelayValue" to lastBackHomeLightDelayValue,
+            "leftHomeLightDelayValue" to lastLeftHomeLightDelayValue,
+            "backDoorElectricMode" to lastBackDoorElectricMode
         )
     }
 
@@ -2691,7 +3327,7 @@ class BYDAutoVehicleService(private val context: Context) {
             sendCarLog("设置车辆设置数据: $field = $value, 结果: $result")
             val success = result == 0
             if (success) {
-                sendCarData(buildCarData())
+                sendCarData()
             }
             success
         } catch (e: Exception) {
@@ -2707,7 +3343,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendVehicleSettingData() {
         try {
-            val data = getVehicleSettingData()
+            val data = getVehicleSettingData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onVehicleSettingDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2718,14 +3354,17 @@ class BYDAutoVehicleService(private val context: Context) {
     // ==================== 发动机类接口 ====================
     private var engineListenerEnabled = false
 
-    fun getEngineData(): Map<String, Any?> {
+    fun getEngineData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateEngineData()
+        }
         return mapOf<String, Any?>(
-            "engineDisplacement" to (engineDevice?.getEngineDisplacement() ?: lastEngineDisplacement),
-            "engineCode" to (engineDevice?.getEngineCode() ?: lastEngineCode),
-            "enginePower" to (engineDevice?.getEnginePower() ?: lastEnginePower),
-            "engineSpeed" to (engineDevice?.getEngineSpeed() ?: lastEngineSpeed),
-            "engineCoolantLevel" to (engineDevice?.getEngineCoolantLevel() ?: lastEngineCoolantLevel),
-            "oilLevel" to (engineDevice?.getOilLevel() ?: lastOilLevel)
+            "engineDisplacement" to lastEngineDisplacement,
+            "engineCode" to lastEngineCode,
+            "enginePower" to lastEnginePower,
+            "engineSpeed" to lastEngineSpeed,
+            "engineCoolantLevel" to lastEngineCoolantLevel,
+            "oilLevel" to lastOilLevel
         )
     }
 
@@ -2744,7 +3383,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendEngineData() {
         try {
-            val data = getEngineData()
+            val data = getEngineData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onEngineDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2755,15 +3394,18 @@ class BYDAutoVehicleService(private val context: Context) {
     // ==================== 全景摄像头类接口 ====================
     private var panoramaListenerEnabled = false
 
-    fun getPanoramaData(): Map<String, Any?> {
+    fun getPanoramaData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updatePanoramaData()
+        }
         return mapOf<String, Any?>(
-            "panoOutputSignal" to (panoramaDevice?.panoOutputSignal ?: lastPanoOutputSignal),
-            "panoWorkState" to (panoramaDevice?.panoWorkState ?: lastPanoWorkState),
-            "backLineConfig" to (panoramaDevice?.backLineConfig ?: lastBackLineConfig),
-            "panoOutputState" to (panoramaDevice?.panoOutputState ?: lastPanoOutputState),
-            "panoRotation" to (panoramaDevice?.panoRotation ?: lastPanoRotation),
-            "displayMode" to (panoramaDevice?.displayMode ?: lastDisplayMode),
-            "panoramaOnlineState" to (panoramaDevice?.panoramaOnlineState ?: lastPanoramaOnlineState)
+            "panoOutputSignal" to lastPanoOutputSignal,
+            "panoWorkState" to lastPanoWorkState,
+            "backLineConfig" to lastBackLineConfig,
+            "panoOutputState" to lastPanoOutputState,
+            "panoRotation" to lastPanoRotation,
+            "displayMode" to lastDisplayMode,
+            "panoramaOnlineState" to lastPanoramaOnlineState
         )
     }
 
@@ -2782,7 +3424,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendPanoramaData() {
         try {
-            val data = getPanoramaData()
+            val data = getPanoramaData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onPanoramaDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2794,8 +3436,11 @@ class BYDAutoVehicleService(private val context: Context) {
     private var sensorListenerEnabled = false
     private var lastLightIntensity: Int = 0
 
-    fun getSensorData(): Map<String, Any?> {
-        return mapOf<String, Any?>("lightIntensity" to (sensorDevice?.getLightIntensity() ?: lastLightIntensity))
+    fun getSensorData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateSensorData()
+        }
+        return mapOf<String, Any?>("lightIntensity" to lastLightIntensity)
     }
 
     fun enableSensorListener(enabled: Boolean) {
@@ -2811,7 +3456,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendSensorData() {
         try {
-            val data = getSensorData()
+            val data = getSensorData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onSensorDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2829,16 +3474,18 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastSecond: Int = 0
     private var lastTimeFormat: Int = 0
 
-    fun getTimeData(): Map<String, Any?> {
-        val timeArray = timeDevice?.getTime()
+    fun getTimeData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateTimeData()
+        }
         return mapOf<String, Any?>(
-            "year" to (timeArray?.getOrNull(0) ?: lastYear),
-            "month" to (timeArray?.getOrNull(1) ?: lastMonth),
-            "day" to (timeArray?.getOrNull(2) ?: lastDay),
-            "hour" to (timeArray?.getOrNull(3) ?: lastHour),
-            "minute" to (timeArray?.getOrNull(4) ?: lastMinute),
-            "second" to (timeArray?.getOrNull(5) ?: lastSecond),
-            "timeFormat" to (timeDevice?.getTimeFormat() ?: lastTimeFormat)
+            "year" to lastYear,
+            "month" to lastMonth,
+            "day" to lastDay,
+            "hour" to lastHour,
+            "minute" to lastMinute,
+            "second" to lastSecond,
+            "timeFormat" to lastTimeFormat
         )
     }
 
@@ -2855,7 +3502,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendTimeData() {
         try {
-            val data = getTimeData()
+            val data = getTimeData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onTimeDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2871,13 +3518,16 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastPowerGenerationValue: Int = 0
     private var lastRoadSurfaceMode: Int = 0
 
-    fun getEnergyModeData(): Map<String, Any?> {
+    fun getEnergyModeData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateEnergyModeData()
+        }
         return mapOf<String, Any?>(
-            "energyMode" to (energyDevice?.getEnergyMode() ?: lastEnergyMode),
-            "operationMode" to (energyDevice?.getOperationMode() ?: lastOperationMode),
-            "powerGenerationState" to (energyDevice?.getPowerGenerationState() ?: lastPowerGenerationState),
-            "powerGenerationValue" to (energyDevice?.getPowerGenerationValue() ?: lastPowerGenerationValue),
-            "roadSurfaceMode" to (energyDevice?.getRoadSurfaceMode() ?: lastRoadSurfaceMode)
+            "energyMode" to lastEnergyMode,
+            "operationMode" to lastOperationMode,
+            "powerGenerationState" to lastPowerGenerationState,
+            "powerGenerationValue" to lastPowerGenerationValue,
+            "roadSurfaceMode" to lastRoadSurfaceMode
         )
     }
 
@@ -2894,7 +3544,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendEnergyModeData() {
         try {
-            val data = getEnergyModeData()
+            val data = getEnergyModeData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onEnergyModeDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2910,21 +3560,24 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastRadarRightRear: Int = 0
     private var lastRadarLeft: Int = 0
     private var lastRadarRight: Int = 0
-    private var lastFrontLeftMid: Int = 0
-    private var lastFrontRightMid: Int = 0
+    private var lastRadarFrontLeftMid: Int = 0
+    private var lastRadarFrontRightMid: Int = 0
     private var lastReverseRadarSwitch: Int = 0
 
-    fun getRadarData(): Map<String, Any?> {
+    fun getRadarData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateRadarData()
+        }
         return mapOf<String, Any?>(
-            "leftFront" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_LEFT_FRONT) ?: lastRadarLeftFront),
-            "rightFront" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_RIGHT_FRONT) ?: lastRadarRightFront),
-            "leftRear" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_LEFT_REAR) ?: lastRadarLeftRear),
-            "rightRear" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_RIGHT_REAR) ?: lastRadarRightRear),
-            "left" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_LEFT) ?: lastRadarLeft),
-            "right" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_RIGHT) ?: lastRadarRight),
-            "frontLeftMid" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_FRONT_LEFT_MID) ?: lastFrontLeftMid),
-            "frontRightMid" to (radarDevice?.getRadarProbeState(BYDAutoRadarDevice.RADAR_AREA_FRONT_RIGHT_MID) ?: lastFrontRightMid),
-            "reverseRadarSwitch" to (radarDevice?.getReverseRadarSwitchState() ?: lastReverseRadarSwitch)
+            "leftFront" to lastRadarLeftFront,
+            "rightFront" to lastRadarRightFront,
+            "leftRear" to lastRadarLeftRear,
+            "rightRear" to lastRadarRightRear,
+            "left" to lastRadarLeft,
+            "right" to lastRadarRight,
+            "frontLeftMid" to lastRadarFrontLeftMid,
+            "frontRightMid" to lastRadarFrontRightMid,
+            "reverseRadarSwitch" to lastReverseRadarSwitch
         )
     }
 
@@ -2941,7 +3594,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendRadarData() {
         try {
-            val data = getRadarData()
+            val data = getRadarData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onRadarDataChanged", jsonString)
         } catch (e: Exception) {
@@ -2959,31 +3612,27 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastTyreAirLeakStateRf: Int = 0
     private var lastTyreAirLeakStateLr: Int = 0
     private var lastTyreAirLeakStateRr: Int = 0
-    private var lastTyreBatteryState: Int = 0
-    private var lastTyreSystemState: Int = 0
-    private var lastTyreTemperatureState: Int = 0
-    private var lastTyreSignalStateLf: Int = 0
-    private var lastTyreSignalStateRf: Int = 0
-    private var lastTyreSignalStateLr: Int = 0
-    private var lastTyreSignalStateRr: Int = 0
 
-    fun getTyreData(): Map<String, Any?> {
+    fun getTyreData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateTyreData()
+        }
         return mapOf<String, Any?>(
-            "tyrePressureLf" to (tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: lastTyrePressureLf),
-            "tyrePressureRf" to (tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: lastTyrePressureRf),
-            "tyrePressureLr" to (tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: lastTyrePressureLr),
-            "tyrePressureRr" to (tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: lastTyrePressureRr),
-            "tyreAirLeakStateLf" to (tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: lastTyreAirLeakStateLf),
-            "tyreAirLeakStateRf" to (tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: lastTyreAirLeakStateRf),
-            "tyreAirLeakStateLr" to (tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: lastTyreAirLeakStateLr),
-            "tyreAirLeakStateRr" to (tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: lastTyreAirLeakStateRr),
-            "tyreBatteryState" to (tyreDevice?.getTyreBatteryState() ?: lastTyreBatteryState),
-            "tyreSystemState" to (tyreDevice?.getTyreSystemState() ?: lastTyreSystemState),
-            "tyreTemperatureState" to (tyreDevice?.getTyreTemperatureState() ?: lastTyreTemperatureState),
-            "tyreSignalStateLf" to (tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: lastTyreSignalStateLf),
-            "tyreSignalStateRf" to (tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: lastTyreSignalStateRf),
-            "tyreSignalStateLr" to (tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: lastTyreSignalStateLr),
-            "tyreSignalStateRr" to (tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: lastTyreSignalStateRr)
+            "tyrePressureLf" to lastTyrePressureLf,
+            "tyrePressureRf" to lastTyrePressureRf,
+            "tyrePressureLr" to lastTyrePressureLr,
+            "tyrePressureRr" to lastTyrePressureRr,
+            "tyreAirLeakStateLf" to lastTyreAirLeakStateLf,
+            "tyreAirLeakStateRf" to lastTyreAirLeakStateRf,
+            "tyreAirLeakStateLr" to lastTyreAirLeakStateLr,
+            "tyreAirLeakStateRr" to lastTyreAirLeakStateRr,
+            "tyreBatteryState" to lastTyreBatteryState,
+            "tyreSystemState" to lastTyreSystemState,
+            "tyreTemperatureState" to lastTyreTemperatureState,
+            "tyreSignalStateLf" to lastTyreSignalStateLf,
+            "tyreSignalStateRf" to lastTyreSignalStateRf,
+            "tyreSignalStateLr" to lastTyreSignalStateLr,
+            "tyreSignalStateRr" to lastTyreSignalStateRr
         )
     }
 
@@ -3000,7 +3649,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendTyreData() {
         try {
-            val data = getTyreData()
+            val data = getTyreData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onTyreDataChanged", jsonString)
         } catch (e: Exception) {
@@ -3018,19 +3667,28 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastPm25ValueIn: Int = 0
     private var lastPm25ValueOut: Int = 0
 
-    fun sendPm2p5Data() {
-        methodChannel?.invokeMethod("onAirQualityDataChanged", getAirQualityData())
+    private fun sendPm2p5Data() {
+        try {
+            val data = getAirQualityData(false)
+            val jsonString = JSONObject(data).toString()
+            methodChannel?.invokeMethod("onAirQualityDataChanged", jsonString)
+        } catch (e: Exception) {
+            sendCarLog("发送空气质量数据失败: ${e.message}")
+        }
     }
 
-    fun getAirQualityData(): Map<String, Any?> {
+    fun getAirQualityData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateAirQualityData()
+        }
         return mapOf<String, Any?>(
-            "pm25OnlineState" to (pm2p5Device?.getPM2p5OnlineState() ?: lastPm25OnlineState),
-            "pm25CheckStateIn" to (pm2p5Device?.getPM2p5CheckState()?.getOrNull(0) ?: lastPm25CheckStateIn),
-            "pm25CheckStateOut" to (pm2p5Device?.getPM2p5CheckState()?.getOrNull(1) ?: lastPm25CheckStateOut),
-            "pm25LevelIn" to (pm2p5Device?.getPM2p5Level()?.getOrNull(0) ?: lastPm25LevelIn),
-            "pm25LevelOut" to (pm2p5Device?.getPM2p5Level()?.getOrNull(1) ?: lastPm25LevelOut),
-            "pm25ValueIn" to (pm2p5Device?.getPM2p5Value()?.getOrNull(0) ?: lastPm25ValueIn),
-            "pm25ValueOut" to (pm2p5Device?.getPM2p5Value()?.getOrNull(1) ?: lastPm25ValueOut)
+            "pm25OnlineState" to lastPm25OnlineState,
+            "pm25CheckStateIn" to lastPm25CheckStateIn,
+            "pm25CheckStateOut" to lastPm25CheckStateOut,
+            "pm25LevelIn" to lastPm25LevelIn,
+            "pm25LevelOut" to lastPm25LevelOut,
+            "pm25ValueIn" to lastPm25ValueIn,
+            "pm25ValueOut" to lastPm25ValueOut
         )
     }
 
@@ -3077,27 +3735,30 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastChargingScheduleTimeHour: Int = 0
     private var lastChargingScheduleTimeMinute: Int = 0
 
-    fun getChargeData(): Map<String, Any?> {
+    fun getChargeData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateChargeData()
+        }
         return mapOf<String, Any?>(
-            "chargerFaultState" to (chargeDevice?.getChargerFaultState() ?: lastChargerFaultState),
-            "chargerWorkState" to (chargeDevice?.getChargerWorkState() ?: lastChargerWorkState),
-            "chargingCapacity" to (chargeDevice?.getChargingCapacity() ?: lastChargingCapacity),
-            "chargingType" to (chargeDevice?.getChargingType() ?: lastChargingType),
-            "chargingRestTimeHour" to (chargeDevice?.getChargingRestTime()?.getOrNull(0) ?: lastChargingRestTimeHour),
-            "chargingRestTimeMinute" to (chargeDevice?.getChargingRestTime()?.getOrNull(1) ?: lastChargingRestTimeMinute),
-            "chargingCapStateAc" to (chargeDevice?.getChargingCapState(0) ?: lastChargingCapStateAc),
-            "chargingCapStateDc" to (chargeDevice?.getChargingCapState(1) ?: lastChargingCapStateDc),
-            "chargingPortLockRebackState" to (chargeDevice?.getChargingPortLockRebackState() ?: lastChargingPortLockRebackState),
-            "dischargeRequestState" to (chargeDevice?.getDischargeRequestState() ?: lastDischargeRequestState),
-            "chargerState" to (chargeDevice?.getChargerState() ?: lastChargerState),
-            "chargingGunState" to (chargeDevice?.getChargingGunState() ?: lastChargingGunState),
-            "chargingPower" to (chargeDevice?.getChargingPower() ?: lastChargingPower),
-            "batteryManagementDeviceState" to (chargeDevice?.getBatteryManagementDeviceState() ?: lastBatteryManagementDeviceState),
-            "chargingScheduleEnableState" to (chargeDevice?.getChargingScheduleEnableState() ?: lastChargingScheduleEnableState),
-            "chargingScheduleState" to (chargeDevice?.getChargingScheduleState() ?: lastChargingScheduleState),
-            "chargingGunNotInsertedState" to (chargeDevice?.getChargingGunNotInsertedState() ?: lastChargingGunNotInsertedState),
-            "chargingScheduleTimeHour" to (chargeDevice?.getChargingScheduleTime()?.getOrNull(0) ?: lastChargingScheduleTimeHour),
-            "chargingScheduleTimeMinute" to (chargeDevice?.getChargingScheduleTime()?.getOrNull(1) ?: lastChargingScheduleTimeMinute)
+            "chargerFaultState" to lastChargerFaultState,
+            "chargerWorkState" to lastChargerWorkState,
+            "chargingCapacity" to lastChargingCapacity,
+            "chargingType" to lastChargingType,
+            "chargingRestTimeHour" to lastChargingRestTimeHour,
+            "chargingRestTimeMinute" to lastChargingRestTimeMinute,
+            "chargingCapStateAc" to lastChargingCapStateAc,
+            "chargingCapStateDc" to lastChargingCapStateDc,
+            "chargingPortLockRebackState" to lastChargingPortLockRebackState,
+            "dischargeRequestState" to lastDischargeRequestState,
+            "chargerState" to lastChargerState,
+            "chargingGunState" to lastChargingGunState,
+            "chargingPower" to lastChargingPower,
+            "batteryManagementDeviceState" to lastBatteryManagementDeviceState,
+            "chargingScheduleEnableState" to lastChargingScheduleEnableState,
+            "chargingScheduleState" to lastChargingScheduleState,
+            "chargingGunNotInsertedState" to lastChargingGunNotInsertedState,
+            "chargingScheduleTimeHour" to lastChargingScheduleTimeHour,
+            "chargingScheduleTimeMinute" to lastChargingScheduleTimeMinute
         )
     }
 
@@ -3114,7 +3775,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendChargeData() {
         try {
-            val data = getChargeData()
+            val data = getChargeData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onChargeDataChanged", jsonString)
         } catch (e: Exception) {
@@ -3131,14 +3792,17 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastArtistName: String = ""
     private var lastAlbumName: String = ""
 
-    fun getMediaData(): Map<String, Any?> {
+    fun getMediaData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateMediaData()
+        }
         return mapOf<String, Any?>(
-            "mediaType" to (mediaDevice?.getMediaType() ?: lastMediaType),
-            "playMode" to (mediaDevice?.getPlayMode() ?: lastPlayMode),
-            "playState" to (mediaDevice?.getPlayState() ?: lastPlayState),
-            "fileName" to (mediaDevice?.getPlayMediaInfo()?.fileName ?: lastFileName),
-            "artistName" to (mediaDevice?.getPlayMediaInfo()?.artistName ?: lastArtistName),
-            "albumName" to (mediaDevice?.getPlayMediaInfo()?.albumName ?: lastAlbumName)
+            "mediaType" to lastMediaType,
+            "playMode" to lastPlayMode,
+            "playState" to lastPlayState,
+            "fileName" to lastFileName,
+            "artistName" to lastArtistName,
+            "albumName" to lastAlbumName
         )
     }
 
@@ -3176,7 +3840,7 @@ class BYDAutoVehicleService(private val context: Context) {
             sendCarLog("设置媒体中心数据: $field = $value, 结果: $result")
             val success = result == BYDAutoMultimediaDevice.MULTIMEDIA_COMMAND_SUCCESS
             if (success) {
-                sendCarData(buildCarData())
+                sendCarData()
             }
             success
         } catch (e: Exception) {
@@ -3187,7 +3851,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendMediaData() {
         try {
-            val data = getMediaData()
+            val data = getMediaData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onMediaDataChanged", jsonString)
         } catch (e: Exception) {
@@ -3220,30 +3884,33 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastAlarmState: Int = 0
     private var lastMoonRoofConfig: Int = 0
 
-    fun getBodyStatusData(): Map<String, Any?> {
+    fun getBodyStatusData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateBodyStatusData()
+        }
         return mapOf<String, Any?>(
-            "autoVIN" to (bodyStatusDevice?.getAutoVIN() ?: lastAutoVIN),
-            "autoModelName" to (bodyStatusDevice?.getAutoModelName() ?: lastAutoModelName),
-            "autoSystemState" to (bodyStatusDevice?.getAutoSystemState() ?: lastAutoSystemState),
-            "doorStateLf" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_FRONT) ?: lastDoorStateLf),
-            "doorStateRf" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_FRONT) ?: lastDoorStateRf),
-            "doorStateLr" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_REAR) ?: lastDoorStateLr),
-            "doorStateRr" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_REAR) ?: lastDoorStateRr),
-            "doorStateHood" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_HOOD) ?: lastDoorStateHood),
-            "doorStateLuggage" to (bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LUGGAGE_DOOR) ?: lastDoorStateLuggage),
-            "windowStateLf" to (bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_LEFT_FRONT) ?: lastWindowStateLf),
-            "windowStateRf" to (bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_RIGHT_FRONT) ?: lastWindowStateRf),
-            "windowStateLr" to (bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_LEFT_REAR) ?: lastWindowStateLr),
-            "windowStateRr" to (bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_RIGHT_REAR) ?: lastWindowStateRr),
-            "moonRoofPercent" to (bodyStatusDevice?.getWindowOpenPercent(BYDAutoBodyworkDevice.BODYWORK_CMD_MOON_ROOF) ?: lastMoonRoofPercent),
-            "sunshadePercent" to (bodyStatusDevice?.getWindowOpenPercent(BYDAutoBodyworkDevice.BODYWORK_CMD_SUNSHADE_PANEL) ?: lastSunshadePercent),
-            "batteryVoltageLevel" to (bodyStatusDevice?.getBatteryVoltageLevel() ?: lastBatteryVoltageLevel),
-            "powerLevel" to (bodyStatusDevice?.getPowerLevel() ?: lastPowerLevel),
-            "steeringWheelAngle" to (bodyStatusDevice?.getSteeringWheelValue(BYDAutoBodyworkDevice.BODYWORK_CMD_STEERING_WHEEL_ANGEL) ?: lastSteeringWheelAngle),
-            "steeringWheelSpeed" to (bodyStatusDevice?.getSteeringWheelValue(BYDAutoBodyworkDevice.BODYWORK_CMD_STEERING_WHEEL_SPEED) ?: lastSteeringWheelSpeed),
-            "fuelElecLowPower" to (bodyStatusDevice?.getFuelElecLowPower() ?: lastFuelElecLowPower),
-            "alarmState" to (bodyStatusDevice?.getAlarmState() ?: lastAlarmState),
-            "moonRoofConfig" to (bodyStatusDevice?.getMoonRoofConfig() ?: lastMoonRoofConfig)
+            "autoVIN" to lastAutoVIN,
+            "autoModelName" to lastAutoModelName,
+            "autoSystemState" to lastAutoSystemState,
+            "doorStateLf" to lastDoorStateLf,
+            "doorStateRf" to lastDoorStateRf,
+            "doorStateLr" to lastDoorStateLr,
+            "doorStateRr" to lastDoorStateRr,
+            "doorStateHood" to lastDoorStateHood,
+            "doorStateLuggage" to lastDoorStateLuggage,
+            "windowStateLf" to lastWindowStateLf,
+            "windowStateRf" to lastWindowStateRf,
+            "windowStateLr" to lastWindowStateLr,
+            "windowStateRr" to lastWindowStateRr,
+            "moonRoofPercent" to lastMoonRoofPercent,
+            "sunshadePercent" to lastSunshadePercent,
+            "batteryVoltageLevel" to lastBatteryVoltageLevel,
+            "powerLevel" to lastPowerLevel,
+            "steeringWheelAngle" to lastSteeringWheelAngle,
+            "steeringWheelSpeed" to lastSteeringWheelSpeed,
+            "fuelElecLowPower" to lastFuelElecLowPower,
+            "alarmState" to lastAlarmState,
+            "moonRoofConfig" to lastMoonRoofConfig
         )
     }
 
@@ -3260,7 +3927,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendBodyStatusData() {
         try {
-            val data = getBodyStatusData()
+            val data = getBodyStatusData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onBodyStatusDataChanged", jsonString)
         } catch (e: Exception) {
@@ -3281,18 +3948,21 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastLightFoot: Int = 0
     private var lastAfsSwitch: Int = 0
 
-    fun getLightData(): Map<String, Any?> {
+    fun getLightData(refreshCache: Boolean = false): Map<String, Any?> {
+        if (refreshCache) {
+            updateLightData()
+        }
         return mapOf<String, Any?>(
-            "lightAutoStatus" to (lightDevice?.getLightAutoStatus() ?: lastLightAutoStatus),
-            "lightSide" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_SIDE) ?: lastLightSide),
-            "lightLowBeam" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_LOW_BEAM) ?: lastLightLowBeam),
-            "lightHighBeam" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_HIGH_BEAM) ?: lastLightHighBeam),
-            "lightLeftTurnSignal" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_LEFT_TURN_SIGNAL) ?: lastLightLeftTurnSignal),
-            "lightRightTurnSignal" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_RIGHT_TURN_SIGNAL) ?: lastLightRightTurnSignal),
-            "lightFrontFog" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_FRONT_FOG) ?: lastLightFrontFog),
-            "lightRearFog" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_REAR_FOG) ?: lastLightRearFog),
-            "lightFoot" to (lightDevice?.getLightStatus(BYDAutoLightDevice.LIGHT_FOOT) ?: lastLightFoot),
-            "afsSwitch" to (lightDevice?.getAFSSwitch() ?: lastAfsSwitch)
+            "lightAutoStatus" to lastLightAutoStatus,
+            "lightSide" to lastLightSide,
+            "lightLowBeam" to lastLightLowBeam,
+            "lightHighBeam" to lastLightHighBeam,
+            "lightLeftTurnSignal" to lastLightLeftTurnSignal,
+            "lightRightTurnSignal" to lastLightRightTurnSignal,
+            "lightFrontFog" to lastLightFrontFog,
+            "lightRearFog" to lastLightRearFog,
+            "lightFoot" to lastLightFoot,
+            "afsSwitch" to lastAfsSwitch
         )
     }
 
@@ -3309,7 +3979,7 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendLightData() {
         try {
-            val data = getLightData()
+            val data = getLightData(false)
             val jsonString = JSONObject(data).toString()
             methodChannel?.invokeMethod("onLightDataChanged", jsonString)
         } catch (e: Exception) {

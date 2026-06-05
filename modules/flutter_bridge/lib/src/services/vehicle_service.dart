@@ -303,6 +303,24 @@ class VehicleService {
     print('[VehicleService] requestCarData() completed');
   }
 
+  Future<void> enableCarDataListener(bool enabled) async {
+    print('[VehicleService] enableCarDataListener() calling native method with: $enabled');
+    await _channel.invokeMethod('enableCarDataListener', {'enabled': enabled});
+    print('[VehicleService] enableCarDataListener() completed');
+  }
+
+  Future<void> testCarData(bool enabled) async {
+    print('[VehicleService] testCarData() calling native method with: $enabled');
+    await _channel.invokeMethod('testCarData', {'enabled': enabled});
+    print('[VehicleService] testCarData() completed');
+  }
+
+  Future<void> setCarDataListenerDebounceDelay(int delayMs) async {
+    print('[VehicleService] setCarDataListenerDebounceDelay() calling native method with: $delayMs');
+    await _channel.invokeMethod('setCarDataListenerDebounceDelay', {'delayMs': delayMs});
+    print('[VehicleService] setCarDataListenerDebounceDelay() completed');
+  }
+
   Future<bool> hasBydPermissions() async {
     try {
       print('[VehicleService] hasBydPermissions() calling native method');

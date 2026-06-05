@@ -854,6 +854,7 @@ class BridgeController {
                   'latitude': lastKnownPosition.latitude,
                   'longitude': lastKnownPosition.longitude,
                   'altitude': lastKnownPosition.altitude,
+                  'altitudeAccuracy': lastKnownPosition.altitudeAccuracy,
                   'accuracy': lastKnownPosition.accuracy,
                   'heading': lastKnownPosition.heading,
                   'speed': lastKnownPosition.speed,
@@ -881,6 +882,7 @@ class BridgeController {
                 'latitude': position.latitude,
                 'longitude': position.longitude,
                 'altitude': position.altitude,
+                'altitudeAccuracy': position.altitudeAccuracy,
                 'accuracy': position.accuracy,
                 'heading': position.heading,
                 'speed': position.speed,
@@ -905,6 +907,7 @@ class BridgeController {
                   'latitude': position.latitude,
                   'longitude': position.longitude,
                   'altitude': position.altitude,
+                  'altitudeAccuracy': position.altitudeAccuracy,
                   'accuracy': position.accuracy,
                   'heading': position.heading,
                   'speed': position.speed,
@@ -1216,6 +1219,7 @@ class BridgeController {
                 'latitude': position.latitude,
                 'longitude': position.longitude,
                 'altitude': position.altitude,
+                'altitudeAccuracy': position.altitudeAccuracy,
                 'accuracy': position.accuracy,
                 'heading': position.heading,
                 'speed': position.speed,
@@ -2269,6 +2273,18 @@ class BridgeController {
         case 'getCarData':
           _vehicleService.requestCarData();
           break;
+        case 'enableCarDataListener':
+          final enableData = message.payload as bool;
+          await _vehicleService.enableCarDataListener(enableData);
+          break;
+        case 'testCarData':
+          final enabled = message.payload as bool;
+          await _vehicleService.testCarData(enabled);
+          break;
+        case 'setCarDataListenerDebounceDelay':
+          final delayMs = message.payload as int;
+          await _vehicleService.setCarDataListenerDebounceDelay(delayMs);
+          break;
         case 'setStatusBar':
           final statusType = message.payload as String?;
           if (statusType != null) {
@@ -2429,6 +2445,7 @@ class BridgeController {
             'latitude': position.latitude,
             'longitude': position.longitude,
             'altitude': position.altitude,
+            'altitudeAccuracy': position.altitudeAccuracy,
             'accuracy': position.accuracy,
             'heading': position.heading,
             'speed': position.speed,

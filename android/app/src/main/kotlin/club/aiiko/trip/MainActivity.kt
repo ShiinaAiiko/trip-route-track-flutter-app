@@ -45,6 +45,9 @@ class MainActivity : FlutterActivity() {
     private var pendingStartCarData = false
     private var pendingApkPath: String? = null
     
+    // 测试服务
+    private var testBYDAutoVehicleService: TestBYDAutoVehicleService? = null
+    
     // Google Sign-In
     private lateinit var googleSignInClient: GoogleSignInClient
     private var pendingThirdPartyLoginResult: ((Map<String, Any>) -> Unit)? = null
@@ -161,6 +164,11 @@ class MainActivity : FlutterActivity() {
         }
 
         bydMethodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BYD_CHANNEL)
+        
+        // 初始化测试服务
+        testBYDAutoVehicleService = TestBYDAutoVehicleService(bydMethodChannel)
+        testBYDAutoVehicleService?.setLogCallback { log -> sendCarLog(log) }
+        
         bydMethodChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "startCarDataUpdates" -> {
@@ -238,7 +246,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 车速类接口 ====================
                 "getSpeedData" -> {
-                    val data = bydVehicleService?.getSpeedData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getSpeedData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableSpeedListener" -> {
@@ -248,7 +256,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 空调类接口 ====================
                 "getAcData" -> {
-                    val data = bydVehicleService?.getAcData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getAcData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableAcListener" -> {
@@ -268,7 +276,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 行驶数据类型接口 ====================
                 "getStatisticData" -> {
-                    val data = bydVehicleService?.getStatisticData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getStatisticData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableStatisticListener" -> {
@@ -288,7 +296,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 仪表类接口 ====================
                 "getInstrumentData" -> {
-                    val data = bydVehicleService?.getInstrumentData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getInstrumentData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableInstrumentListener" -> {
@@ -320,7 +328,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 门锁类接口 ====================
                 "getDoorData" -> {
-                    val data = bydVehicleService?.getDoorData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getDoorData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableDoorListener" -> {
@@ -340,7 +348,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 车辆设置类接口 ====================
                 "getVehicleSettingData" -> {
-                    val data = bydVehicleService?.getVehicleSettingData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getVehicleSettingData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableVehicleSettingListener" -> {
@@ -365,7 +373,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 发动机类接口 ====================
                 "getEngineData" -> {
-                    val data = bydVehicleService?.getEngineData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getEngineData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableEngineListener" -> {
@@ -385,7 +393,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 全景摄像头类接口 ====================
                 "getPanoramaData" -> {
-                    val data = bydVehicleService?.getPanoramaData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getPanoramaData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enablePanoramaListener" -> {
@@ -405,7 +413,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 传感器类接口 ====================
                 "getSensorData" -> {
-                    val data = bydVehicleService?.getSensorData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getSensorData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableSensorListener" -> {
@@ -425,7 +433,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 时间类接口 ====================
                 "getTimeData" -> {
-                    val data = bydVehicleService?.getTimeData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getTimeData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableTimeListener" -> {
@@ -445,7 +453,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 能量模式类接口 ====================
                 "getEnergyModeData" -> {
-                    val data = bydVehicleService?.getEnergyModeData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getEnergyModeData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableEnergyModeListener" -> {
@@ -465,7 +473,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 雷达类接口 ====================
                 "getRadarData" -> {
-                    val data = bydVehicleService?.getRadarData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getRadarData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableRadarListener" -> {
@@ -485,7 +493,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 轮胎类接口 ====================
                 "getTyreData" -> {
-                    val data = bydVehicleService?.getTyreData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getTyreData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableTyreListener" -> {
@@ -505,7 +513,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 空气质量类接口 ====================
                 "getAirQualityData" -> {
-                    val data = bydVehicleService?.getAirQualityData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getAirQualityData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableAirQualityListener" -> {
@@ -525,7 +533,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 充电类接口 ====================
                 "getChargeData" -> {
-                    val data = bydVehicleService?.getChargeData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getChargeData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableChargeListener" -> {
@@ -545,7 +553,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 媒体中心类接口 ====================
                 "getMediaData" -> {
-                    val data = bydVehicleService?.getMediaData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getMediaData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableMediaListener" -> {
@@ -565,7 +573,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 车身状态类接口 ====================
                 "getBodyStatusData" -> {
-                    val data = bydVehicleService?.getBodyStatusData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getBodyStatusData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableBodyStatusListener" -> {
@@ -585,7 +593,7 @@ class MainActivity : FlutterActivity() {
                 }
                 // ==================== 车灯类接口 ====================
                 "getLightData" -> {
-                    val data = bydVehicleService?.getLightData() ?: emptyMap<String, Any?>()
+                    val data = bydVehicleService?.getLightData(true) ?: emptyMap<String, Any?>()
                     result.success(data)
                 }
                 "enableLightListener" -> {
@@ -602,6 +610,22 @@ class MainActivity : FlutterActivity() {
                     } else {
                         result.success(mapOf("success" to false))
                     }
+                }
+                "enableCarDataListener" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    bydVehicleService?.enableCarDataListener(enabled)
+                    result.success(null)
+                }
+                "testCarData" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    testBYDAutoVehicleService?.testCarData(enabled)
+                    result.success(true)
+                }
+                "setCarDataListenerDebounceDelay" -> {
+                    val delayMs = call.argument<Int>("delayMs") ?: 0
+                    bydVehicleService?.setCarDataListenerDebounceDelay(delayMs)
+                    testBYDAutoVehicleService?.setCarDataListenerDebounceDelay(delayMs)
+                    result.success(true)
                 }
                 else -> {
                     sendCarLog("未实现的方法调用: ${call.method}")

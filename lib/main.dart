@@ -127,7 +127,7 @@ void main() async {
 
   await _initNotificationService();
 
-  // 初始化 BridgeController (包含 i18n)
+  // 先初始化 BridgeController，它会检查版本并清理旧的静态资源（如果有更新）
   await BridgeController().init();
   final i18nService = BridgeController().i18nService;
   _appTitle = i18nService.t('app_title');
@@ -141,7 +141,7 @@ void main() async {
     baseUrl = customHost;
     print('Using custom host: $baseUrl');
   } else {
-    // 先访问 LocalServer.instance 确保单例初始化（端口已确定）
+    // 现在再初始化 LocalServer，因为 BridgeController 已经清理了旧资源
     final localServerUrl = LocalServer.instance.url;
     baseUrl = localServerUrl;
     print('Using local server: $baseUrl');
@@ -410,7 +410,14 @@ class _WebViewContainerState extends State<WebViewContainer>
 
     if (_communication != null) {
       try {
-        final result = await _communication!.checkReady();
+        // 添加2秒超时保护，防止checkReady()无限阻塞
+        final result = await Future.any([
+          _communication!.checkReady(),
+          Future.delayed(const Duration(seconds: 2), () {
+            print('[NYANYA-WEBVIEW] checkWebViewReady timeout after 2 seconds');
+            return false;
+          }),
+        ]);
         print('[NYANYA-WEBVIEW] checkWebViewReady (via comm) result: $result');
         return result;
       } catch (e) {
