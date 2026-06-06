@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.20+661
+version: 1.0.21+671
 
 tencent_kit:
   app_id: 1904094302
@@ -60,19 +60,20 @@ flutter:
     - .env
     - assets/out/
     - assets/out/_next/
+    - assets/out/_next/BQBWM39-ZhS_F8R7h23UC/
     - assets/out/_next/data/
-    - assets/out/_next/data/hhviOG_CwZlICiyrBWCSf/
-    - assets/out/_next/data/hhviOG_CwZlICiyrBWCSf/en-US/
-    - assets/out/_next/data/hhviOG_CwZlICiyrBWCSf/en-US/journeyMemories/
-    - assets/out/_next/data/hhviOG_CwZlICiyrBWCSf/en-US/trip/
-    - assets/out/_next/data/hhviOG_CwZlICiyrBWCSf/zh-CN/
-    - assets/out/_next/data/hhviOG_CwZlICiyrBWCSf/zh-CN/journeyMemories/
-    - assets/out/_next/data/hhviOG_CwZlICiyrBWCSf/zh-CN/trip/
-    - assets/out/_next/data/hhviOG_CwZlICiyrBWCSf/zh-TW/
-    - assets/out/_next/data/hhviOG_CwZlICiyrBWCSf/zh-TW/journeyMemories/
-    - assets/out/_next/data/hhviOG_CwZlICiyrBWCSf/zh-TW/trip/
-    - assets/out/_next/hhviOG_CwZlICiyrBWCSf/
+    - assets/out/_next/data/BQBWM39-ZhS_F8R7h23UC/
+    - assets/out/_next/data/BQBWM39-ZhS_F8R7h23UC/en-US/
+    - assets/out/_next/data/BQBWM39-ZhS_F8R7h23UC/en-US/journeyMemories/
+    - assets/out/_next/data/BQBWM39-ZhS_F8R7h23UC/en-US/trip/
+    - assets/out/_next/data/BQBWM39-ZhS_F8R7h23UC/zh-CN/
+    - assets/out/_next/data/BQBWM39-ZhS_F8R7h23UC/zh-CN/journeyMemories/
+    - assets/out/_next/data/BQBWM39-ZhS_F8R7h23UC/zh-CN/trip/
+    - assets/out/_next/data/BQBWM39-ZhS_F8R7h23UC/zh-TW/
+    - assets/out/_next/data/BQBWM39-ZhS_F8R7h23UC/zh-TW/journeyMemories/
+    - assets/out/_next/data/BQBWM39-ZhS_F8R7h23UC/zh-TW/trip/
     - assets/out/_next/static/
+    - assets/out/_next/static/BQBWM39-ZhS_F8R7h23UC/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/
@@ -81,7 +82,6 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
-    - assets/out/_next/static/hhviOG_CwZlICiyrBWCSf/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/
