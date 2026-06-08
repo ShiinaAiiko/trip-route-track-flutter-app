@@ -399,10 +399,11 @@ class _WebViewContainerState extends State<WebViewContainer>
     await _startLoadingSequence();
   }
 
-  /// 验证 WebView 是否准备就绪
+  /// 验证 WebView 是否准备就绪（快速版）
   Future<bool> _checkWebViewReady() async {
+    // 快速轮询等待 communication 初始化，最多等待 800ms
     int waitAttempts = 0;
-    const maxWaitAttempts = 20;
+    const maxWaitAttempts = 8;
     while (_communication == null && waitAttempts < maxWaitAttempts) {
       await Future.delayed(const Duration(milliseconds: 100));
       waitAttempts++;
@@ -410,11 +411,11 @@ class _WebViewContainerState extends State<WebViewContainer>
 
     if (_communication != null) {
       try {
-        // 添加2秒超时保护，防止checkReady()无限阻塞
+        // 快速超时保护，最多等待 500ms
         final result = await Future.any([
           _communication!.checkReady(),
-          Future.delayed(const Duration(seconds: 2), () {
-            print('[NYANYA-WEBVIEW] checkWebViewReady timeout after 2 seconds');
+          Future.delayed(const Duration(milliseconds: 500), () {
+            print('[NYANYA-WEBVIEW] checkReady timeout after 500ms');
             return false;
           }),
         ]);
@@ -481,7 +482,7 @@ class _WebViewContainerState extends State<WebViewContainer>
       // 达到最大重试次数，重启 App
       print('[NYANYA-RETRY] Max retries reached, restarting App');
 
-      Timer(const Duration(seconds: 2), () {
+      Timer(const Duration(seconds: 1), () {
         BridgeController().restartApp();
       });
     }
@@ -527,19 +528,34 @@ class _WebViewContainerState extends State<WebViewContainer>
     });
     print('Loading WebView engine: ${engine.name}...');
 
-    // 等待 WebView 初始化，然后验证
+    // 等待 WebView 初始化，然后验证（整体超时 2 秒）
     bool webViewReady = false;
+    final startTime = DateTime.now();
+    const maxTotalDuration = Duration(seconds: 2);
+    
     int webViewCheckAttempts = 0;
-    while (!webViewReady && webViewCheckAttempts < 5) {
-      await Future.delayed(const Duration(milliseconds: 400));
+    const maxCheckAttempts = 10; // 最多检查 10 次
+    
+    while (!webViewReady && webViewCheckAttempts < maxCheckAttempts) {
+      // 检查是否已经超时
+      if (DateTime.now().difference(startTime) >= maxTotalDuration) {
+        print('[NYANYA-WEBVIEW] WebView check total timeout reached');
+        break;
+      }
+      
       webViewReady = await _checkWebViewReady();
       webViewCheckAttempts++;
       print(
           '[NYANYA-WEBVIEW] Check attempt $webViewCheckAttempts: $webViewReady');
+      
+      // 如果还没就绪且还有时间，短暂等待后重试
+      if (!webViewReady && DateTime.now().difference(startTime) < maxTotalDuration) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
     }
 
     if (!webViewReady) {
-      print('[NYANYA-WEBVIEW] Failed to load WebView after all checks');
+      print('[NYANYA-WEBVIEW] Failed to load WebView after all checks (max 2 seconds)');
       await _handleLoadFailure(loadingFailedKey, LoadingStep.geckoFailed);
       return;
     }
