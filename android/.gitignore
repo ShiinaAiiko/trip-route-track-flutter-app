@@ -13,3 +13,4 @@ key.properties
 **/*.jks
 /app/.env
 /app/keystore_backup
+/*.hprof

@@ -269,6 +269,15 @@ _build() {
 	setVersion
 	flutter build apk --release --flavor "$flavor" --split-per-abi --no-shrink
 
+	# 检查构建是否成功
+	if [ $? -ne 0 ]; then
+		echo "❌ flutter build 失败，停止执行"
+		exit 1
+	fi
+
+	# 只有 build 成功才会执行到这里
+	echo "✅ flutter build 成功，继续执行..."
+
 	# 复制并重命名新 APK 到 out 和 packages
 	echo "-> 整理新 APK 文件..."
 	# /build/app/outputs/flutter-apk/app-arm64-v8a-dev-release.apk
