@@ -117,6 +117,7 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastAcTemperatureControlMode: Int = 0
     private var lastAcVentilationState: Int = 0
     private var lastRearAcStartState: Int = 0
+    private var lastRearAcOnlineState: Int = 0
 
     // 数据缓存 - 门锁类
     private var lastDoorLockLeftFront: Int = 0
@@ -166,7 +167,10 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastOilLevel: Int = 0
 
     // 数据缓存 - 胎压类
-    private var lastTyreAirLeakState: Int = 0
+    private var lastTyreAirLeakStateLf: Int = 0
+    private var lastTyreAirLeakStateRf: Int = 0
+    private var lastTyreAirLeakStateLr: Int = 0
+    private var lastTyreAirLeakStateRr: Int = 0
     private var lastTyreBatteryState: Int = 0
     private var lastTyrePressureStateLf: Int = 0
     private var lastTyrePressureStateRf: Int = 0
@@ -833,7 +837,12 @@ class BYDAutoVehicleService(private val context: Context) {
                 else -> "Unknown"
             }
             sendCarLog("changed-tyre-tyreAirLeakState-$areaName:$state")
-            lastTyreAirLeakState = state
+            when (area) {
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT -> lastTyreAirLeakStateLf = state
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT -> lastTyreAirLeakStateRf = state
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR -> lastTyreAirLeakStateLr = state
+                BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR -> lastTyreAirLeakStateRr = state
+            }
             sendCarData()
             if (tyreDataListenerEnabled) sendTyreData()
         }
@@ -1770,40 +1779,90 @@ class BYDAutoVehicleService(private val context: Context) {
                 return
             }
 
+            var drivingTime = 0.0
+            var elecDrivingRange = 0
             var elecPercent = 0.0
+            var fuelDrivingRange = 0
             var fuelPercent = 0
+            var lastElecConPHM = 0.0
+            var lastFuelConPHM = 0.0
+            var totalElecConPHM = 0.0
+            var totalFuelConPHM = 0.0
+            var totalFuelCon = 0.0
+            var totalElecCon = 0.0
             var totalMileage = 0
+            var keyBatteryLevel = 0
             var evMileage = 0
 
             try {
                 // 先尝试直接调用
+                drivingTime = statisticDevice?.getDrivingTimeValue() ?: 0.0
+                elecDrivingRange = statisticDevice?.getElecDrivingRangeValue() ?: 0
                 elecPercent = statisticDevice?.getElecPercentageValue() ?: 0.0
+                fuelDrivingRange = statisticDevice?.getFuelDrivingRangeValue() ?: 0
                 fuelPercent = statisticDevice?.getFuelPercentageValue() ?: 0
+                lastElecConPHM = statisticDevice?.getLastElecConPHMValue() ?: 0.0
+                lastFuelConPHM = statisticDevice?.getLastFuelConPHMValue() ?: 0.0
+                totalElecConPHM = statisticDevice?.getTotalElecConPHMValue() ?: 0.0
+                totalFuelConPHM = statisticDevice?.getTotalFuelConPHMValue() ?: 0.0
+                totalFuelCon = statisticDevice?.getTotalFuelConValue() ?: 0.0
+                totalElecCon = statisticDevice?.getTotalElecConValue() ?: 0.0
                 totalMileage = statisticDevice?.getTotalMileageValue() ?: 0
+                keyBatteryLevel = statisticDevice?.getKeyBatteryLevel() ?: 0
                 evMileage = statisticDevice?.getEVMileageValue() ?: 0
             } catch (securityEx: SecurityException) {
                 sendCarLog("直接调用失败(SecurityException)，尝试反射调用: ${securityEx.message}")
                 // 使用反射调用（使用数值常量，避免SDK版本差异）
+                drivingTime = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777392) // STATISTIC_DRIVING_TIME
+                elecDrivingRange = BydApiReflectHelper.get(statisticDevice, 2, 1246777393) // STATISTIC_ELEC_DRIVING_RANGE
                 elecPercent = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777400) / 100.0 // STATISTIC_ELEC_PERCENTAGE
+                fuelDrivingRange = BydApiReflectHelper.get(statisticDevice, 2, 1246777394) // STATISTIC_FUEL_DRIVING_RANGE
                 fuelPercent = BydApiReflectHelper.get(statisticDevice, 2, 1246777401) // STATISTIC_FUEL_PERCENTAGE
+                lastElecConPHM = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777404) // STATISTIC_LAST_ELEC_CON_PHM
+                lastFuelConPHM = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777405) // STATISTIC_LAST_FUEL_CON_PHM
+                totalElecConPHM = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777406) // STATISTIC_TOTAL_ELEC_CON_PHM
+                totalFuelConPHM = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777407) // STATISTIC_TOTAL_FUEL_CON_PHM
+                totalFuelCon = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777408) // STATISTIC_TOTAL_FUEL_CON
+                totalElecCon = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777409) // STATISTIC_TOTAL_ELEC_CON
                 totalMileage = BydApiReflectHelper.get(statisticDevice, 2, 1246777402) // STATISTIC_TOTAL_MILEAGE
+                keyBatteryLevel = BydApiReflectHelper.get(statisticDevice, 2, 1246777410) // STATISTIC_KEY_BATTERY_LEVEL
                 evMileage = BydApiReflectHelper.get(statisticDevice, 2, 1246777403) // STATISTIC_EV_MILEAGE
             } catch (e: Exception) {
                 sendCarLog("直接调用失败，尝试反射调用: ${e.message}")
+                drivingTime = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777392) // STATISTIC_DRIVING_TIME
+                elecDrivingRange = BydApiReflectHelper.get(statisticDevice, 2, 1246777393) // STATISTIC_ELEC_DRIVING_RANGE
                 elecPercent = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777400) / 100.0 // STATISTIC_ELEC_PERCENTAGE
+                fuelDrivingRange = BydApiReflectHelper.get(statisticDevice, 2, 1246777394) // STATISTIC_FUEL_DRIVING_RANGE
                 fuelPercent = BydApiReflectHelper.get(statisticDevice, 2, 1246777401) // STATISTIC_FUEL_PERCENTAGE
+                lastElecConPHM = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777404) // STATISTIC_LAST_ELEC_CON_PHM
+                lastFuelConPHM = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777405) // STATISTIC_LAST_FUEL_CON_PHM
+                totalElecConPHM = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777406) // STATISTIC_TOTAL_ELEC_CON_PHM
+                totalFuelConPHM = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777407) // STATISTIC_TOTAL_FUEL_CON_PHM
+                totalFuelCon = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777408) // STATISTIC_TOTAL_FUEL_CON
+                totalElecCon = BydApiReflectHelper.getDouble(statisticDevice, 2, 1246777409) // STATISTIC_TOTAL_ELEC_CON
                 totalMileage = BydApiReflectHelper.get(statisticDevice, 2, 1246777402) // STATISTIC_TOTAL_MILEAGE
+                keyBatteryLevel = BydApiReflectHelper.get(statisticDevice, 2, 1246777410) // STATISTIC_KEY_BATTERY_LEVEL
                 evMileage = BydApiReflectHelper.get(statisticDevice, 2, 1246777403) // STATISTIC_EV_MILEAGE
             }
 
-            sendCarLog("updateStatisticData() - 原始数据: elecPercent=$elecPercent%, fuelPercent=$fuelPercent%, totalMileage=$totalMileage, evMileage=$evMileage")
+            sendCarLog("updateStatisticData() - 原始数据: drivingTime=$drivingTime, elecDrivingRange=$elecDrivingRange, elecPercent=$elecPercent%, fuelDrivingRange=$fuelDrivingRange, fuelPercent=$fuelPercent%, lastElecConPHM=$lastElecConPHM, lastFuelConPHM=$lastFuelConPHM, totalElecConPHM=$totalElecConPHM, totalFuelConPHM=$totalFuelConPHM, totalFuelCon=$totalFuelCon, totalElecCon=$totalElecCon, totalMileage=$totalMileage, keyBatteryLevel=$keyBatteryLevel, evMileage=$evMileage")
 
+            if (drivingTime in 0.0..9999.9) lastDrivingTime = drivingTime
+            if (elecDrivingRange in 0..511) lastElecDrivingRange = elecDrivingRange
             if (elecPercent >= 0 && elecPercent <= 100) lastElecPercentage = elecPercent
-            if (fuelPercent >= 0 && fuelPercent <= 100) lastFuelPercentage = fuelPercent
+            if (fuelDrivingRange in 0..4095) lastFuelDrivingRange = fuelDrivingRange
+            if (fuelPercent in 0..100) lastFuelPercentage = fuelPercent
+            if (lastElecConPHM in -99.9..99.9) lastLastElecConPHM = lastElecConPHM
+            if (lastFuelConPHM in 0.0..51.1) lastLastFuelConPHM = lastFuelConPHM
+            if (totalElecConPHM in -99.9..99.9) lastTotalElecConPHM = totalElecConPHM
+            if (totalFuelConPHM in 0.0..51.1) lastTotalFuelConPHM = totalFuelConPHM
+            if (totalFuelCon >= 0) lastTotalFuelCon = totalFuelCon
+            if (totalElecCon >= -1000) lastTotalElecCon = totalElecCon
             if (totalMileage >= 0) lastTotalMileage = totalMileage
+            if (keyBatteryLevel in 1..2) lastKeyBatteryLevel = keyBatteryLevel
             if (evMileage >= 0) lastEvMileage = evMileage
 
-            sendCarLog("updateStatisticData() - 更新后数据: elecPercentage=$lastElecPercentage%, fuelPercentage=$lastFuelPercentage%, totalMileage=$lastTotalMileage, evMileage=$lastEvMileage")
+            sendCarLog("updateStatisticData() - 更新后数据: drivingTime=$lastDrivingTime, elecDrivingRange=$lastElecDrivingRange, elecPercentage=$lastElecPercentage%, fuelDrivingRange=$lastFuelDrivingRange, fuelPercentage=$lastFuelPercentage%, lastElecConPHM=$lastLastElecConPHM, lastFuelConPHM=$lastLastFuelConPHM, totalElecConPHM=$lastTotalElecConPHM, totalFuelConPHM=$lastTotalFuelConPHM, totalFuelCon=$lastTotalFuelCon, totalElecCon=$lastTotalElecCon, totalMileage=$lastTotalMileage, keyBatteryLevel=$lastKeyBatteryLevel, evMileage=$lastEvMileage")
         } catch (e: Exception) {
             sendCarLog("updateStatisticData() 异常: ${e.message}")
             sendCarLog("异常堆栈: ${e.stackTraceToString()}")
@@ -1819,40 +1878,160 @@ class BYDAutoVehicleService(private val context: Context) {
                 return
             }
 
-            var lf = 0
-            var rf = 0
-            var lr = 0
-            var rr = 0
+            // 轮胎压力值
+            var lfPressure = 0
+            var rfPressure = 0
+            var lrPressure = 0
+            var rrPressure = 0
+
+            // 轮胎漏气状态
+            var lfAirLeak = 0
+            var rfAirLeak = 0
+            var lrAirLeak = 0
+            var rrAirLeak = 0
+
+            // 轮胎压力状态
+            var lfPressureState = 0
+            var rfPressureState = 0
+            var lrPressureState = 0
+            var rrPressureState = 0
+
+            // 轮胎信号状态
+            var lfSignal = 0
+            var rfSignal = 0
+            var lrSignal = 0
+            var rrSignal = 0
+
+            // 系统状态
+            var batteryState = 0
+            var systemState = 0
+            var temperatureState = 0
 
             try {
                 // 先尝试直接调用
-                lf = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: 0
-                rf = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: 0
-                lr = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: 0
-                rr = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: 0
+                // 轮胎压力值
+                lfPressure = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: 0
+                rfPressure = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: 0
+                lrPressure = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: 0
+                rrPressure = tyreDevice?.getTyrePressureValue(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: 0
+
+                // 轮胎漏气状态
+                lfAirLeak = tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: 0
+                rfAirLeak = tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: 0
+                lrAirLeak = tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: 0
+                rrAirLeak = tyreDevice?.getTyreAirLeakState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: 0
+
+                // 轮胎压力状态
+                lfPressureState = tyreDevice?.getTyrePressureState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: 0
+                rfPressureState = tyreDevice?.getTyrePressureState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: 0
+                lrPressureState = tyreDevice?.getTyrePressureState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: 0
+                rrPressureState = tyreDevice?.getTyrePressureState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: 0
+
+                // 轮胎信号状态
+                lfSignal = tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_FRONT) ?: 0
+                rfSignal = tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_FRONT) ?: 0
+                lrSignal = tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_LEFT_REAR) ?: 0
+                rrSignal = tyreDevice?.getTyreSignalState(BYDAutoTyreDevice.TYRE_COMMAND_AREA_RIGHT_REAR) ?: 0
+
+                // 系统状态
+                batteryState = tyreDevice?.getTyreBatteryState() ?: 0
+                systemState = tyreDevice?.getTyreSystemState() ?: 0
+                temperatureState = tyreDevice?.getTyreTemperatureState() ?: 0
             } catch (securityEx: SecurityException) {
                 sendCarLog("直接调用失败(SecurityException)，尝试反射调用: ${securityEx.message}")
                 // 使用反射调用（使用数值常量，避免SDK版本差异）
-                lf = BydApiReflectHelper.get(tyreDevice, 3, -1728052956) // TYRE_PRESSURE_VALUE_LEFT_FRONT
-                rf = BydApiReflectHelper.get(tyreDevice, 3, -1728052952) // TYRE_PRESSURE_VALUE_RIGHT_FRONT
-                lr = BydApiReflectHelper.get(tyreDevice, 3, -1728052948) // TYRE_PRESSURE_VALUE_LEFT_REAR
-                rr = BydApiReflectHelper.get(tyreDevice, 3, -1728052944) // TYRE_PRESSURE_VALUE_RIGHT_REAR
+                // 轮胎压力值
+                lfPressure = BydApiReflectHelper.get(tyreDevice, 3, -1728052956) // TYRE_PRESSURE_VALUE_LEFT_FRONT
+                rfPressure = BydApiReflectHelper.get(tyreDevice, 3, -1728052952) // TYRE_PRESSURE_VALUE_RIGHT_FRONT
+                lrPressure = BydApiReflectHelper.get(tyreDevice, 3, -1728052948) // TYRE_PRESSURE_VALUE_LEFT_REAR
+                rrPressure = BydApiReflectHelper.get(tyreDevice, 3, -1728052944) // TYRE_PRESSURE_VALUE_RIGHT_REAR
+
+                // 轮胎漏气状态
+                lfAirLeak = BydApiReflectHelper.get(tyreDevice, 3, -1728052955) // TYRE_AIR_LEAK_STATE_LEFT_FRONT
+                rfAirLeak = BydApiReflectHelper.get(tyreDevice, 3, -1728052951) // TYRE_AIR_LEAK_STATE_RIGHT_FRONT
+                lrAirLeak = BydApiReflectHelper.get(tyreDevice, 3, -1728052947) // TYRE_AIR_LEAK_STATE_LEFT_REAR
+                rrAirLeak = BydApiReflectHelper.get(tyreDevice, 3, -1728052943) // TYRE_AIR_LEAK_STATE_RIGHT_REAR
+
+                // 轮胎压力状态
+                lfPressureState = BydApiReflectHelper.get(tyreDevice, 3, -1728052954) // TYRE_PRESSURE_STATE_LEFT_FRONT
+                rfPressureState = BydApiReflectHelper.get(tyreDevice, 3, -1728052950) // TYRE_PRESSURE_STATE_RIGHT_FRONT
+                lrPressureState = BydApiReflectHelper.get(tyreDevice, 3, -1728052946) // TYRE_PRESSURE_STATE_LEFT_REAR
+                rrPressureState = BydApiReflectHelper.get(tyreDevice, 3, -1728052942) // TYRE_PRESSURE_STATE_RIGHT_REAR
+
+                // 轮胎信号状态
+                lfSignal = BydApiReflectHelper.get(tyreDevice, 3, -1728052953) // TYRE_SIGNAL_STATE_LEFT_FRONT
+                rfSignal = BydApiReflectHelper.get(tyreDevice, 3, -1728052949) // TYRE_SIGNAL_STATE_RIGHT_FRONT
+                lrSignal = BydApiReflectHelper.get(tyreDevice, 3, -1728052945) // TYRE_SIGNAL_STATE_LEFT_REAR
+                rrSignal = BydApiReflectHelper.get(tyreDevice, 3, -1728052941) // TYRE_SIGNAL_STATE_RIGHT_REAR
+
+                // 系统状态
+                batteryState = BydApiReflectHelper.get(tyreDevice, 3, -1728052960) // TYRE_BATTERY_STATE
+                systemState = BydApiReflectHelper.get(tyreDevice, 3, -1728052959) // TYRE_SYSTEM_STATE
+                temperatureState = BydApiReflectHelper.get(tyreDevice, 3, -1728052958) // TYRE_TEMPERATURE_STATE
             } catch (e: Exception) {
                 sendCarLog("直接调用失败，尝试反射调用: ${e.message}")
-                lf = BydApiReflectHelper.get(tyreDevice, 3, -1728052956) // TYRE_PRESSURE_VALUE_LEFT_FRONT
-                rf = BydApiReflectHelper.get(tyreDevice, 3, -1728052952) // TYRE_PRESSURE_VALUE_RIGHT_FRONT
-                lr = BydApiReflectHelper.get(tyreDevice, 3, -1728052948) // TYRE_PRESSURE_VALUE_LEFT_REAR
-                rr = BydApiReflectHelper.get(tyreDevice, 3, -1728052944) // TYRE_PRESSURE_VALUE_RIGHT_REAR
+                // 轮胎压力值
+                lfPressure = BydApiReflectHelper.get(tyreDevice, 3, -1728052956) // TYRE_PRESSURE_VALUE_LEFT_FRONT
+                rfPressure = BydApiReflectHelper.get(tyreDevice, 3, -1728052952) // TYRE_PRESSURE_VALUE_RIGHT_FRONT
+                lrPressure = BydApiReflectHelper.get(tyreDevice, 3, -1728052948) // TYRE_PRESSURE_VALUE_LEFT_REAR
+                rrPressure = BydApiReflectHelper.get(tyreDevice, 3, -1728052944) // TYRE_PRESSURE_VALUE_RIGHT_REAR
+
+                // 轮胎漏气状态
+                lfAirLeak = BydApiReflectHelper.get(tyreDevice, 3, -1728052955) // TYRE_AIR_LEAK_STATE_LEFT_FRONT
+                rfAirLeak = BydApiReflectHelper.get(tyreDevice, 3, -1728052951) // TYRE_AIR_LEAK_STATE_RIGHT_FRONT
+                lrAirLeak = BydApiReflectHelper.get(tyreDevice, 3, -1728052947) // TYRE_AIR_LEAK_STATE_LEFT_REAR
+                rrAirLeak = BydApiReflectHelper.get(tyreDevice, 3, -1728052943) // TYRE_AIR_LEAK_STATE_RIGHT_REAR
+
+                // 轮胎压力状态
+                lfPressureState = BydApiReflectHelper.get(tyreDevice, 3, -1728052954) // TYRE_PRESSURE_STATE_LEFT_FRONT
+                rfPressureState = BydApiReflectHelper.get(tyreDevice, 3, -1728052950) // TYRE_PRESSURE_STATE_RIGHT_FRONT
+                lrPressureState = BydApiReflectHelper.get(tyreDevice, 3, -1728052946) // TYRE_PRESSURE_STATE_LEFT_REAR
+                rrPressureState = BydApiReflectHelper.get(tyreDevice, 3, -1728052942) // TYRE_PRESSURE_STATE_RIGHT_REAR
+
+                // 轮胎信号状态
+                lfSignal = BydApiReflectHelper.get(tyreDevice, 3, -1728052953) // TYRE_SIGNAL_STATE_LEFT_FRONT
+                rfSignal = BydApiReflectHelper.get(tyreDevice, 3, -1728052949) // TYRE_SIGNAL_STATE_RIGHT_FRONT
+                lrSignal = BydApiReflectHelper.get(tyreDevice, 3, -1728052945) // TYRE_SIGNAL_STATE_LEFT_REAR
+                rrSignal = BydApiReflectHelper.get(tyreDevice, 3, -1728052941) // TYRE_SIGNAL_STATE_RIGHT_REAR
+
+                // 系统状态
+                batteryState = BydApiReflectHelper.get(tyreDevice, 3, -1728052960) // TYRE_BATTERY_STATE
+                systemState = BydApiReflectHelper.get(tyreDevice, 3, -1728052959) // TYRE_SYSTEM_STATE
+                temperatureState = BydApiReflectHelper.get(tyreDevice, 3, -1728052958) // TYRE_TEMPERATURE_STATE
             }
 
-            sendCarLog("updateTyreData() - 原始数据: 左前=$lf, 右前=$rf, 左后=$lr, 右后=$rr")
+            sendCarLog("updateTyreData() - 原始数据: 左前压力=$lfPressure, 右前压力=$rfPressure, 左后压力=$lrPressure, 右后压力=$rrPressure, 左前漏气=$lfAirLeak, 右前漏气=$rfAirLeak, 左后漏气=$lrAirLeak, 右后漏气=$rrAirLeak, 左前压力状态=$lfPressureState, 右前压力状态=$rfPressureState, 左后压力状态=$lrPressureState, 右后压力状态=$rrPressureState, 左前信号=$lfSignal, 右前信号=$rfSignal, 左后信号=$lrSignal, 右后信号=$rrSignal, 电池状态=$batteryState, 系统状态=$systemState, 温度状态=$temperatureState")
 
-            if (lf in 0..4094) lastTyrePressureLf = lf
-            if (rf in 0..4094) lastTyrePressureRf = rf
-            if (lr in 0..4094) lastTyrePressureLr = lr
-            if (rr in 0..4094) lastTyrePressureRr = rr
+            // 轮胎压力值 [0,4094]kpa
+            if (lfPressure in 0..4094) lastTyrePressureLf = lfPressure
+            if (rfPressure in 0..4094) lastTyrePressureRf = rfPressure
+            if (lrPressure in 0..4094) lastTyrePressureLr = lrPressure
+            if (rrPressure in 0..4094) lastTyrePressureRr = rrPressure
 
-            sendCarLog("updateTyreData() - 更新后数据: 左前=$lastTyrePressureLf, 右前=$lastTyrePressureRf, 左后=$lastTyrePressureLr, 右后=$lastTyrePressureRr")
+            // 轮胎漏气状态
+            if (lfAirLeak in 0..3) lastTyreAirLeakStateLf = lfAirLeak
+            if (rfAirLeak in 0..3) lastTyreAirLeakStateRf = rfAirLeak
+            if (lrAirLeak in 0..3) lastTyreAirLeakStateLr = lrAirLeak
+            if (rrAirLeak in 0..3) lastTyreAirLeakStateRr = rrAirLeak
+
+            // 轮胎压力状态
+            if (lfPressureState in 0..3) lastTyrePressureStateLf = lfPressureState
+            if (rfPressureState in 0..3) lastTyrePressureStateRf = rfPressureState
+            if (lrPressureState in 0..3) lastTyrePressureStateLr = lrPressureState
+            if (rrPressureState in 0..3) lastTyrePressureStateRr = rrPressureState
+
+            // 轮胎信号状态
+            if (lfSignal in 0..2) lastTyreSignalStateLf = lfSignal
+            if (rfSignal in 0..2) lastTyreSignalStateRf = rfSignal
+            if (lrSignal in 0..2) lastTyreSignalStateLr = lrSignal
+            if (rrSignal in 0..2) lastTyreSignalStateRr = rrSignal
+
+            // 系统状态
+            if (batteryState in 0..1) lastTyreBatteryState = batteryState
+            if (systemState in 0..4) lastTyreSystemState = systemState
+            if (temperatureState in 0..3) lastTyreTemperatureState = temperatureState
+
+            sendCarLog("updateTyreData() - 更新后数据: 左前压力=$lastTyrePressureLf, 右前压力=$lastTyrePressureRf, 左后压力=$lastTyrePressureLr, 右后压力=$lastTyrePressureRr, 左前漏气=$lastTyreAirLeakStateLf, 右前漏气=$lastTyreAirLeakStateRf, 左后漏气=$lastTyreAirLeakStateLr, 右后漏气=$lastTyreAirLeakStateRr, 左前压力状态=$lastTyrePressureStateLf, 右前压力状态=$lastTyrePressureStateRf, 左后压力状态=$lastTyrePressureStateLr, 右后压力状态=$lastTyrePressureStateRr, 左前信号=$lastTyreSignalStateLf, 右前信号=$lastTyreSignalStateRf, 左后信号=$lastTyreSignalStateLr, 右后信号=$lastTyreSignalStateRr, 电池状态=$lastTyreBatteryState, 系统状态=$lastTyreSystemState, 温度状态=$lastTyreTemperatureState")
         } catch (e: Exception) {
             sendCarLog("updateTyreData() 异常: ${e.message}")
             sendCarLog("异常堆栈: ${e.stackTraceToString()}")
@@ -1878,6 +2057,10 @@ class BYDAutoVehicleService(private val context: Context) {
             
             // 获取外接充电量
             lastExternalChargingPower = instrumentDevice?.getExternalChargingPower() ?: lastExternalChargingPower
+           
+            //获取蜂鸣器状态
+            lastAlarmBuzzleState = instrumentDevice?.getAlarmBuzzleState() ?: lastAlarmBuzzleState
+            
             
             sendCarLog("updateInstrumentData() - 单位: 温度=$lastTemperatureUnit, 气压=$lastPressureUnit, 油耗=$lastFuelConsumptionUnit, 功率=$lastPowerUnit")
         } catch (e: Exception) {
@@ -1913,12 +2096,26 @@ class BYDAutoVehicleService(private val context: Context) {
             lastAcAutoAir = settingDevice?.getACAutoAir() ?: lastAcAutoAir
             lastPm25Power = settingDevice?.getPM25Power() ?: lastPm25Power
             lastPm25SwitchCheck = settingDevice?.getPM25SwitchCheck() ?: lastPm25SwitchCheck
+            lastPm25TimeCheck = settingDevice?.getPM25TimeCheck() ?: lastPm25TimeCheck
             lastEnergyFeedback = settingDevice?.getEnergyFeedback() ?: lastEnergyFeedback
             lastSocTarget = settingDevice?.getSOCTarget() ?: lastSocTarget
             lastChargingPort = settingDevice?.getChargingPort() ?: lastChargingPort
             lastLockOff = settingDevice?.getLockOff() ?: lastLockOff
             lastLanguage = settingDevice?.getLanguage() ?: lastLanguage
             lastOverspeedLock = settingDevice?.getOverspeedLock() ?: lastOverspeedLock
+            lastSafeWarnState = settingDevice?.getSafeWarnState() ?: lastSafeWarnState
+            lastMaintainRemindState = settingDevice?.getMaintainRemindState() ?: lastMaintainRemindState
+            lastSteerAssis = settingDevice?.getSteerAssis() ?: lastSteerAssis
+            lastRearViewMirrorFlip = settingDevice?.getRearViewMirrorFlip() ?: lastRearViewMirrorFlip
+            lastRemoteControlUpwindowState = settingDevice?.getRemoteControlUpwindowState() ?: lastRemoteControlUpwindowState
+            lastRemoteControlDownwindowState = settingDevice?.getRemoteControlDownwindowState() ?: lastRemoteControlDownwindowState
+            lastLockCarRiseWindow = settingDevice?.getLockCarRiseWindow() ?: lastLockCarRiseWindow
+            lastMicroSwitchLockWindowState = settingDevice?.getMicroSwitchLockWindowState() ?: lastMicroSwitchLockWindowState
+            lastMicroSwitchUnlockWindowState = settingDevice?.getMicroSwitchUnlockWindowState() ?: lastMicroSwitchUnlockWindowState
+            lastBackHomeLightDelayValue = settingDevice?.getBackHomeLightDelayValue() ?: lastBackHomeLightDelayValue
+            lastLeftHomeLightDelayValue = settingDevice?.getLeftHomeLightDelayValue() ?: lastLeftHomeLightDelayValue
+            lastBackDoorElectricMode = settingDevice?.getBackDoorElectricMode() ?: lastBackDoorElectricMode
+            lastRearAcOnlineState = settingDevice?.getRearAcOnlineState() ?: lastRearAcOnlineState
             
             sendCarLog("updateSettingData() - 更新完成")
         } catch (e: Exception) {
@@ -1926,11 +2123,25 @@ class BYDAutoVehicleService(private val context: Context) {
         }
     }
 
-    private fun updateEngineData() {
+    private fun updateEngineData(field: String? = null) {
         try {
-            sendCarLog("updateEngineData() - engineDevice: ${engineDevice != null}")
+            sendCarLog("updateEngineData() - engineDevice: ${engineDevice != null}, field: $field")
             if (engineDevice == null) return
             
+            // 如果指定了字段，只更新该字段
+            if (field != null) {
+                when (field) {
+                    "engineDisplacement" -> lastEngineDisplacement = engineDevice?.getEngineDisplacement() ?: lastEngineDisplacement
+                    "engineCode" -> lastEngineCode = engineDevice?.getEngineCode() ?: lastEngineCode
+                    "enginePower" -> lastEnginePower = engineDevice?.getEnginePower() ?: lastEnginePower
+                    "engineSpeed" -> lastEngineSpeed = engineDevice?.getEngineSpeed() ?: lastEngineSpeed
+                    "engineCoolantLevel" -> lastEngineCoolantLevel = engineDevice?.getEngineCoolantLevel() ?: lastEngineCoolantLevel
+                    "oilLevel" -> lastOilLevel = engineDevice?.getOilLevel() ?: lastOilLevel
+                }
+                return
+            }
+            
+            // 未指定字段，更新全部
             lastEngineDisplacement = engineDevice?.getEngineDisplacement() ?: lastEngineDisplacement
             lastEngineCode = engineDevice?.getEngineCode() ?: lastEngineCode
             lastEnginePower = engineDevice?.getEnginePower() ?: lastEnginePower
@@ -1969,16 +2180,26 @@ class BYDAutoVehicleService(private val context: Context) {
             if (acDevice == null) return
             
             lastAcCompressorMode = acDevice?.getAcCompressorMode() ?: lastAcCompressorMode
+            lastAcCompressorManualSign = acDevice?.getAcCompressorManualSign() ?: lastAcCompressorManualSign
+            lastAcWindLevelManualSign = acDevice?.getAcWindLevelManualSign() ?: lastAcWindLevelManualSign
+            lastAcWindModeManualSign = acDevice?.getAcWindModeManualSign() ?: lastAcWindModeManualSign
             lastAcStartState = acDevice?.getAcStartState() ?: lastAcStartState
             lastAcControlMode = acDevice?.getAcControlMode() ?: lastAcControlMode
             lastAcCycleMode = acDevice?.getAcCycleMode() ?: lastAcCycleMode
             lastAcWindMode = acDevice?.getAcWindMode() ?: lastAcWindMode
+            lastAcDefrostStateFront = acDevice?.getAcDefrostState(BYDAutoAcDevice.AC_DEFROST_AREA_FRONT) ?: lastAcDefrostStateFront
+            lastAcDefrostStateRear = acDevice?.getAcDefrostState(BYDAutoAcDevice.AC_DEFROST_AREA_REAR) ?: lastAcDefrostStateRear
             lastAcWindLevel = acDevice?.getAcWindLevel() ?: lastAcWindLevel
             lastAcTemperatureMain = acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_MAIN) ?: lastAcTemperatureMain
             lastAcTemperatureDeputy = acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_DEPUTY) ?: lastAcTemperatureDeputy
+            lastAcTemperatureRear = acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_REAR) ?: lastAcTemperatureRear
+            lastAcTemperatureOut = acDevice?.getTemprature(BYDAutoAcDevice.AC_TEMPERATURE_OUT) ?: lastAcTemperatureOut
             lastTemperatureUnit = acDevice?.getTemperatureUnit() ?: lastTemperatureUnit
+            lastAcTemperatureControlMode = acDevice?.getAcTemperatureControlMode() ?: lastAcTemperatureControlMode
+            lastAcVentilationState = acDevice?.getAcVentilationState() ?: lastAcVentilationState
+            lastRearAcStartState = acDevice?.getRearAcStartState() ?: lastRearAcStartState
             
-            sendCarLog("updateAcData() - 压缩机状态=$lastAcCompressorMode, 主温度=$lastAcTemperatureMain, 风速=$lastAcWindLevel")
+            sendCarLog("updateAcData() - 压缩机状态=$lastAcCompressorMode, 主温度=$lastAcTemperatureMain, 风速=$lastAcWindLevel, 前除霜=$lastAcDefrostStateFront, 后除霜=$lastAcDefrostStateRear")
         } catch (e: Exception) {
             sendCarLog("updateAcData() 异常: ${e.message}")
         }
@@ -2083,15 +2304,56 @@ class BYDAutoVehicleService(private val context: Context) {
             sendCarLog("updateChargeData() - chargeDevice: ${chargeDevice != null}")
             if (chargeDevice == null) return
             
+            // 充电器状态
             lastChargerFaultState = chargeDevice?.getChargerFaultState() ?: lastChargerFaultState
             lastChargerWorkState = chargeDevice?.getChargerWorkState() ?: lastChargerWorkState
-            lastChargingCapacity = chargeDevice?.getChargingCapacity() ?: lastChargingCapacity
-            lastChargingType = chargeDevice?.getChargingType() ?: lastChargingType
-            lastChargingPower = chargeDevice?.getChargingPower() ?: lastChargingPower
             lastChargerState = chargeDevice?.getChargerState() ?: lastChargerState
+            
+            // 充电量和功率
+            lastChargingCapacity = chargeDevice?.getChargingCapacity() ?: lastChargingCapacity
+            lastChargingPower = chargeDevice?.getChargingPower() ?: lastChargingPower
+            
+            // 充电模式
+            lastChargingType = chargeDevice?.getChargingType() ?: lastChargingType
+            
+            // 充电枪状态
             lastChargingGunState = chargeDevice?.getChargingGunState() ?: lastChargingGunState
             
-            sendCarLog("updateChargeData() - 充电状态=$lastChargerState, 充电功率=$lastChargingPower")
+            // 充电剩余时间
+            val chargingRestTime = chargeDevice?.getChargingRestTime()
+            if (chargingRestTime != null && chargingRestTime.size >= 2) {
+                lastChargingRestTimeHour = chargingRestTime[0]
+                lastChargingRestTimeMinute = chargingRestTime[1]
+            }
+            
+            // 充电口盖状态
+            lastChargingCapStateAc = chargeDevice?.getChargingCapState(BYDAutoChargingDevice.CHARGING_CAP_AC) ?: lastChargingCapStateAc
+            lastChargingCapStateDc = chargeDevice?.getChargingCapState(BYDAutoChargingDevice.CHARGING_CAP_DC) ?: lastChargingCapStateDc
+            
+            // 充电口电锁执行反馈
+            lastChargingPortLockRebackState = chargeDevice?.getChargingPortLockRebackState() ?: lastChargingPortLockRebackState
+            
+            // 放电请求状态
+            lastDischargeRequestState = chargeDevice?.getDischargeRequestState() ?: lastDischargeRequestState
+            
+            // 电池管理器状态
+            lastBatteryManagementDeviceState = chargeDevice?.getBatteryManagementDeviceState() ?: lastBatteryManagementDeviceState
+            
+            // 定时充电和预约充电
+            lastChargingScheduleEnableState = chargeDevice?.getChargingScheduleEnableState() ?: lastChargingScheduleEnableState
+            lastChargingScheduleState = chargeDevice?.getChargingScheduleState() ?: lastChargingScheduleState
+            
+            // 充电枪未插提醒
+            lastChargingGunNotInsertedState = chargeDevice?.getChargingGunNotInsertedState() ?: lastChargingGunNotInsertedState
+            
+            // 预约充电倒计时
+            val chargingScheduleTime = chargeDevice?.getChargingScheduleTime()
+            if (chargingScheduleTime != null && chargingScheduleTime.size >= 2) {
+                lastChargingScheduleTimeHour = chargingScheduleTime[0]
+                lastChargingScheduleTimeMinute = chargingScheduleTime[1]
+            }
+            
+            sendCarLog("updateChargeData() - 充电状态=$lastChargerState, 充电功率=$lastChargingPower, 充电量=$lastChargingCapacity")
         } catch (e: Exception) {
             sendCarLog("updateChargeData() 异常: ${e.message}")
         }
@@ -2118,16 +2380,43 @@ class BYDAutoVehicleService(private val context: Context) {
             sendCarLog("updateBodyStatusData() - bodyStatusDevice: ${bodyStatusDevice != null}")
             if (bodyStatusDevice == null) return
             
+            // 基础信息
             lastAutoVIN = bodyStatusDevice?.getAutoVIN() ?: lastAutoVIN
             lastAutoModelName = bodyStatusDevice?.getAutoModelName() ?: lastAutoModelName
             lastAutoSystemState = bodyStatusDevice?.getAutoSystemState() ?: lastAutoSystemState
+            lastPowerLevel = bodyStatusDevice?.getPowerLevel() ?: lastPowerLevel
+            
+            // 车门状态
             lastDoorStateLf = bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_FRONT) ?: lastDoorStateLf
             lastDoorStateRf = bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_FRONT) ?: lastDoorStateRf
             lastDoorStateLr = bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_LEFT_REAR) ?: lastDoorStateLr
             lastDoorStateRr = bodyStatusDevice?.getDoorState(BYDAutoBodyworkDevice.BODYWORK_CMD_DOOR_RIGHT_REAR) ?: lastDoorStateRr
-            lastPowerLevel = bodyStatusDevice?.getPowerLevel() ?: lastPowerLevel
             
-            sendCarLog("updateBodyStatusData() - VIN=$lastAutoVIN, 系统状态=$lastAutoSystemState")
+            // 车窗状态
+            lastWindowStateLf = bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_LEFT_FRONT) ?: lastWindowStateLf
+            lastWindowStateRf = bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_RIGHT_FRONT) ?: lastWindowStateRf
+            lastWindowStateLr = bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_LEFT_REAR) ?: lastWindowStateLr
+            lastWindowStateRr = bodyStatusDevice?.getWindowState(BYDAutoBodyworkDevice.BODYWORK_CMD_WINDOW_RIGHT_REAR) ?: lastWindowStateRr
+            
+            // 天窗和遮阳帘百分比
+            lastMoonRoofPercent = bodyStatusDevice?.getWindowOpenPercent(BYDAutoBodyworkDevice.BODYWORK_CMD_MOON_ROOF) ?: lastMoonRoofPercent
+            lastSunshadePercent = bodyStatusDevice?.getWindowOpenPercent(BYDAutoBodyworkDevice.BODYWORK_CMD_SUNSHADE_PANEL) ?: lastSunshadePercent
+            
+            // 蓄电池电压等级
+            lastBatteryVoltageLevel = bodyStatusDevice?.getBatteryVoltageLevel() ?: lastBatteryVoltageLevel
+            
+            // 方向盘
+            lastSteeringWheelAngle = bodyStatusDevice?.getSteeringWheelValue(BYDAutoBodyworkDevice.BODYWORK_CMD_STEERING_WHEEL_ANGEL) ?: lastSteeringWheelAngle
+            lastSteeringWheelSpeed = bodyStatusDevice?.getSteeringWheelValue(BYDAutoBodyworkDevice.BODYWORK_CMD_STEERING_WHEEL_SPEED) ?: lastSteeringWheelSpeed
+            
+            // 油电低提醒和报警器状态
+            lastFuelElecLowPower = bodyStatusDevice?.getFuelElecLowPower() ?: lastFuelElecLowPower
+            lastAlarmState = bodyStatusDevice?.getAlarmState() ?: lastAlarmState
+            
+            // 天窗遮阳帘配置
+            lastMoonRoofConfig = bodyStatusDevice?.getMoonRoofConfig() ?: lastMoonRoofConfig
+            
+            sendCarLog("updateBodyStatusData() - VIN=$lastAutoVIN, 系统状态=$lastAutoSystemState, 天窗=$lastMoonRoofPercent%, 遮阳帘=$lastSunshadePercent%, 电压等级=$lastBatteryVoltageLevel")
         } catch (e: Exception) {
             sendCarLog("updateBodyStatusData() 异常: ${e.message}")
         }
@@ -2361,7 +2650,8 @@ class BYDAutoVehicleService(private val context: Context) {
                 "microSwitchUnlockWindowState" to lastMicroSwitchUnlockWindowState,
                 "backHomeLightDelayValue" to lastBackHomeLightDelayValue,
                 "leftHomeLightDelayValue" to lastLeftHomeLightDelayValue,
-                "backDoorElectricMode" to lastBackDoorElectricMode
+                "backDoorElectricMode" to lastBackDoorElectricMode,
+                "rearAcOnlineState" to lastRearAcOnlineState
             ),
             "engine" to mapOf<String, Any?>(
                 "engineDisplacement" to lastEngineDisplacement,
@@ -2399,7 +2689,8 @@ class BYDAutoVehicleService(private val context: Context) {
                 "temperatureUnit" to lastTemperatureUnit,
                 "acTemperatureControlMode" to lastAcTemperatureControlMode,
                 "acVentilationState" to lastAcVentilationState,
-                "rearAcStartState" to lastRearAcStartState
+                "rearAcStartState" to lastRearAcStartState,
+                "acWindModeShownState" to lastAcWindModeShownState
             ),
             "sensor" to mapOf<String, Any?>(
                 "lightIntensity" to lastLightIntensity
@@ -2436,10 +2727,14 @@ class BYDAutoVehicleService(private val context: Context) {
                 "tyrePressureRf" to lastTyrePressureRf,
                 "tyrePressureLr" to lastTyrePressureLr,
                 "tyrePressureRr" to lastTyrePressureRr,
-                "tyreAirLeakStateLf" to lastTyreAirLeakState,
-                "tyreAirLeakStateRf" to lastTyreAirLeakState,
-                "tyreAirLeakStateLr" to lastTyreAirLeakState,
-                "tyreAirLeakStateRr" to lastTyreAirLeakState,
+                "tyreAirLeakStateLf" to lastTyreAirLeakStateLf,
+                "tyreAirLeakStateRf" to lastTyreAirLeakStateRf,
+                "tyreAirLeakStateLr" to lastTyreAirLeakStateLr,
+                "tyreAirLeakStateRr" to lastTyreAirLeakStateRr,
+                "tyrePressureStateLf" to lastTyrePressureStateLf,
+                "tyrePressureStateRf" to lastTyrePressureStateRf,
+                "tyrePressureStateLr" to lastTyrePressureStateLr,
+                "tyrePressureStateRr" to lastTyrePressureStateRr,
                 "tyreBatteryState" to lastTyreBatteryState,
                 "tyreSystemState" to lastTyreSystemState,
                 "tyreTemperatureState" to lastTyreTemperatureState,
@@ -2721,7 +3016,8 @@ class BYDAutoVehicleService(private val context: Context) {
             "temperatureUnit" to lastTemperatureUnit,
             "acTemperatureControlMode" to lastAcTemperatureControlMode,
             "acVentilationState" to lastAcVentilationState,
-            "rearAcStartState" to lastRearAcStartState
+            "rearAcStartState" to lastRearAcStartState,
+            "acWindModeShownState" to lastAcWindModeShownState
         )
     }
 
@@ -3281,7 +3577,8 @@ class BYDAutoVehicleService(private val context: Context) {
             "microSwitchUnlockWindowState" to lastMicroSwitchUnlockWindowState,
             "backHomeLightDelayValue" to lastBackHomeLightDelayValue,
             "leftHomeLightDelayValue" to lastLeftHomeLightDelayValue,
-            "backDoorElectricMode" to lastBackDoorElectricMode
+            "backDoorElectricMode" to lastBackDoorElectricMode,
+            "rearAcOnlineState" to lastRearAcOnlineState
         )
     }
 
@@ -3354,10 +3651,27 @@ class BYDAutoVehicleService(private val context: Context) {
     // ==================== 发动机类接口 ====================
     private var engineListenerEnabled = false
 
-    fun getEngineData(refreshCache: Boolean = false): Map<String, Any?> {
+    fun getEngineData(refreshCache: Boolean = false, field: String? = null): Any? {
+        // 需要刷新时，调用 updateEngineData（支持单字段或全量）
         if (refreshCache) {
-            updateEngineData()
+            updateEngineData(field)
         }
+        
+        // 如果指定了字段，返回单个字段值
+        if (field != null) {
+            sendCarLog("getEngineData field: $field")
+            return when (field) {
+                "engineDisplacement" -> lastEngineDisplacement
+                "engineCode" -> lastEngineCode
+                "enginePower" -> lastEnginePower
+                "engineSpeed" -> lastEngineSpeed
+                "engineCoolantLevel" -> lastEngineCoolantLevel
+                "oilLevel" -> lastOilLevel
+                else -> null
+            }
+        }
+        
+        // 否则返回完整数据
         return mapOf<String, Any?>(
             "engineDisplacement" to lastEngineDisplacement,
             "engineCode" to lastEngineCode,
@@ -3383,9 +3697,11 @@ class BYDAutoVehicleService(private val context: Context) {
 
     private fun sendEngineData() {
         try {
-            val data = getEngineData(false)
-            val jsonString = JSONObject(data).toString()
-            methodChannel?.invokeMethod("onEngineDataChanged", jsonString)
+            val data = getEngineData(false) as? Map<String, Any?>
+            if (data != null) {
+                val jsonString = JSONObject(data).toString()
+                methodChannel?.invokeMethod("onEngineDataChanged", jsonString)
+            }
         } catch (e: Exception) {
             sendCarLog("发送发动机数据失败: ${e.message}")
         }
@@ -3608,10 +3924,6 @@ class BYDAutoVehicleService(private val context: Context) {
     private var lastTyrePressureRfNew: Int = 0
     private var lastTyrePressureLrNew: Int = 0
     private var lastTyrePressureRrNew: Int = 0
-    private var lastTyreAirLeakStateLf: Int = 0
-    private var lastTyreAirLeakStateRf: Int = 0
-    private var lastTyreAirLeakStateLr: Int = 0
-    private var lastTyreAirLeakStateRr: Int = 0
 
     fun getTyreData(refreshCache: Boolean = false): Map<String, Any?> {
         if (refreshCache) {
@@ -3626,6 +3938,10 @@ class BYDAutoVehicleService(private val context: Context) {
             "tyreAirLeakStateRf" to lastTyreAirLeakStateRf,
             "tyreAirLeakStateLr" to lastTyreAirLeakStateLr,
             "tyreAirLeakStateRr" to lastTyreAirLeakStateRr,
+            "tyrePressureStateLf" to lastTyrePressureStateLf,
+            "tyrePressureStateRf" to lastTyrePressureStateRf,
+            "tyrePressureStateLr" to lastTyrePressureStateLr,
+            "tyrePressureStateRr" to lastTyrePressureStateRr,
             "tyreBatteryState" to lastTyreBatteryState,
             "tyreSystemState" to lastTyreSystemState,
             "tyreTemperatureState" to lastTyreTemperatureState,

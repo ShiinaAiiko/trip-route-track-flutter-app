@@ -391,6 +391,21 @@ class MainActivity : FlutterActivity() {
                         result.success(mapOf("success" to false))
                     }
                 }
+                // ==================== 车辆数据分类字段获取接口 ====================
+                "getCarGetField" -> {
+                    val category = call.argument<String>("category") ?: ""
+                    val field = call.argument<String>("field")
+                    sendCarLog("getCarGetField category: $category, field: $field")
+                    when (category) {
+                        "engine" -> {
+                            val data = bydVehicleService?.getEngineData(true, field)
+                            result.success(data)
+                        }
+                        else -> {
+                            result.success(null)
+                        }
+                    }
+                }
                 // ==================== 全景摄像头类接口 ====================
                 "getPanoramaData" -> {
                     val data = bydVehicleService?.getPanoramaData(true) ?: emptyMap<String, Any?>()

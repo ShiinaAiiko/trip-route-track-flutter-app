@@ -196,6 +196,7 @@ class AcData {
   final int acTemperatureControlMode;
   final int acVentilationState;
   final int rearAcStartState;
+  final int acWindModeShownState;
 
   AcData({
     required this.acCompressorMode,
@@ -217,6 +218,7 @@ class AcData {
     required this.acTemperatureControlMode,
     required this.acVentilationState,
     required this.rearAcStartState,
+    required this.acWindModeShownState,
   });
 
   Map<String, dynamic> toJson() {
@@ -240,6 +242,7 @@ class AcData {
       'acTemperatureControlMode': acTemperatureControlMode,
       'acVentilationState': acVentilationState,
       'rearAcStartState': rearAcStartState,
+      'acWindModeShownState': acWindModeShownState,
     };
   }
 
@@ -264,6 +267,7 @@ class AcData {
       acTemperatureControlMode: json['acTemperatureControlMode'] ?? 0,
       acVentilationState: json['acVentilationState'] ?? 0,
       rearAcStartState: json['rearAcStartState'] ?? 0,
+      acWindModeShownState: json['acWindModeShownState'] ?? 0,
     );
   }
 
@@ -288,6 +292,7 @@ class AcData {
       acTemperatureControlMode: 0,
       acVentilationState: 0,
       rearAcStartState: 0,
+      acWindModeShownState: 0,
     );
   }
 }
@@ -377,6 +382,7 @@ class VehicleSettingData {
   final int backHomeLightDelayValue;
   final int leftHomeLightDelayValue;
   final int backDoorElectricMode;
+  final int rearAcOnlineState;
 
   VehicleSettingData({
     required this.acBTWind,
@@ -407,6 +413,7 @@ class VehicleSettingData {
     required this.backHomeLightDelayValue,
     required this.leftHomeLightDelayValue,
     required this.backDoorElectricMode,
+    required this.rearAcOnlineState,
   });
 
   Map<String, dynamic> toJson() {
@@ -439,6 +446,7 @@ class VehicleSettingData {
       'backHomeLightDelayValue': backHomeLightDelayValue,
       'leftHomeLightDelayValue': leftHomeLightDelayValue,
       'backDoorElectricMode': backDoorElectricMode,
+      'rearAcOnlineState': rearAcOnlineState,
     };
   }
 
@@ -472,6 +480,7 @@ class VehicleSettingData {
       backHomeLightDelayValue: json['backHomeLightDelayValue'] ?? 0,
       leftHomeLightDelayValue: json['leftHomeLightDelayValue'] ?? 0,
       backDoorElectricMode: json['backDoorElectricMode'] ?? 0,
+      rearAcOnlineState: json['rearAcOnlineState'] ?? 0,
     );
   }
 
@@ -505,6 +514,7 @@ class VehicleSettingData {
       backHomeLightDelayValue: 0,
       leftHomeLightDelayValue: 0,
       backDoorElectricMode: 0,
+      rearAcOnlineState: 0,
     );
   }
 }

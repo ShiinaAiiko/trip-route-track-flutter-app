@@ -572,6 +572,41 @@ class BridgeController {
     }
   }
 
+  /// 处理车辆数据分类字段获取请求
+  Future<void> _handleCarGetField(String category, String? field,
+      {String? bridgeId, String? sessionId}) async {
+    print(
+        '[BridgeController] _handleCarGetField category: $category, field: $field');
+
+    switch (category) {
+      case 'engine':
+        final MethodChannel channel = MethodChannel('byd_vehicle');
+        try {
+          final result = await channel.invokeMethod('getCarGetField', {
+            'category': category,
+            'field': field,
+          });
+          sendMessage('carGetField', {
+            'category': category,
+            'field': field,
+            'value': result,
+          }, bridgeId: bridgeId, sessionId: sessionId);
+        } catch (e) {
+          print('[BridgeController] _handleCarGetField error: $e');
+          sendMessage('carGetField', {
+            'category': category,
+            'field': field,
+            'value': null,
+            'error': e.toString(),
+          }, bridgeId: bridgeId, sessionId: sessionId);
+        }
+        break;
+      default:
+        print(
+            '[BridgeController] _handleCarGetField unknown category: $category');
+    }
+  }
+
   /// 处理车辆数据监听请求
   Future<void> _handleVehicleEnableListener(
       String category, bool enabled) async {
@@ -1422,6 +1457,7 @@ class BridgeController {
       final engine = await EngineManager().getSelectedEngine();
       final engineManager = EngineManager();
       final webViewVersion = await engineManager.getWebViewVersion();
+      final deviceInfoPlugin = DeviceInfoPlugin();
 
       // 根据系统 WebView 版本决定可选内核
       // 版本 >= 85: gecko 和 system 都可选
@@ -1436,6 +1472,103 @@ class BridgeController {
         availableEngines = ['gecko'];
       }
 
+      // 获取设备信息
+      String? deviceModel;
+      String? deviceBrand;
+      String? androidVersion;
+      String? sdkInt;
+      String? hardware;
+      String? board;
+      String? manufacturer;
+      String? cpuAbi;
+      List<String>? supportedAbis;
+      String? display;
+      String? fingerprint;
+      String? bootloader;
+      String? baseOS;
+      String? securityPatch;
+      String? codename;
+      String? gpuRenderer;
+      String? gpuVendor;
+      String? gpuVersion;
+      String? deviceType;
+
+      if (Platform.isAndroid) {
+        final androidInfo = await deviceInfoPlugin.androidInfo;
+        
+        // 尝试获取更详细的设备型号
+        // 红米K80至尊版这类设备需要组合多个字段
+        String model = androidInfo.model ?? '';
+        String product = androidInfo.product ?? '';
+        String device = androidInfo.device ?? '';
+        
+        // 优先使用 model，如果不够详细则尝试组合
+        deviceModel = model.isNotEmpty ? model : 
+                      (product.isNotEmpty ? product : 
+                      (device.isNotEmpty ? device : 'unknown'));
+        
+        // 如果 model 只是简单型号（如 "23127PN5BC"），尝试从 fingerprint 中提取更详细的信息
+        if (model.length <= 12 && androidInfo.fingerprint != null) {
+          final fingerprint = androidInfo.fingerprint!;
+          // fingerprint 格式通常是: brand/product/device:version/build_id:type/timestamp
+          final parts = fingerprint.split('/');
+          if (parts.length >= 3) {
+            String extractedModel = parts[1]; // 通常 product 字段包含更详细的型号
+            // 尝试去除数字后缀，获取更友好的型号名
+            extractedModel = extractedModel.replaceAll(RegExp(r'_\d+$'), '');
+            if (extractedModel.length > 4 && !extractedModel.contains(model)) {
+              deviceModel = '$model ($extractedModel)';
+            }
+          }
+        }
+        
+        deviceBrand = androidInfo.brand;
+        androidVersion = androidInfo.version.release;
+        sdkInt = androidInfo.version.sdkInt.toString();
+        hardware = androidInfo.hardware;
+        board = androidInfo.board;
+        manufacturer = androidInfo.manufacturer;
+        supportedAbis = androidInfo.supportedAbis;
+        cpuAbi = androidInfo.supportedAbis.isNotEmpty ? androidInfo.supportedAbis.first : null;
+        display = androidInfo.display;
+        fingerprint = androidInfo.fingerprint;
+        bootloader = androidInfo.bootloader;
+        baseOS = androidInfo.version.baseOS;
+        securityPatch = androidInfo.version.securityPatch;
+        codename = androidInfo.version.codename;
+        deviceType = androidInfo.systemFeatures.contains('android.hardware.type.watch')
+            ? 'watch'
+            : androidInfo.systemFeatures.contains('android.hardware.type.automotive')
+                ? 'automotive'
+                : androidInfo.systemFeatures.contains('android.hardware.type.television')
+                    ? 'tv'
+                    : 'phone';
+      } else if (Platform.isIOS) {
+        final iosInfo = await deviceInfoPlugin.iosInfo;
+        deviceModel = iosInfo.model;
+        deviceBrand = 'Apple';
+        androidVersion = iosInfo.systemVersion;
+        hardware = iosInfo.utsname.machine;
+        manufacturer = 'Apple';
+        display = '${iosInfo.name} ${iosInfo.systemVersion}';
+        deviceType = iosInfo.model.toLowerCase().contains('ipad') ? 'tablet' : 'phone';
+      }
+
+      // 尝试获取 GPU 信息（通过 OpenGL）
+      try {
+        final glRenderer = await _getGLRenderer();
+        if (glRenderer != null) {
+          final parts = glRenderer.split('|');
+          if (parts.length >= 3) {
+            gpuVendor = parts[0];
+            gpuRenderer = parts[1];
+            gpuVersion = parts[2];
+          }
+        }
+      } catch (e) {
+        print('[NYANYA-WEBVIEW] Failed to get GPU info: $e');
+      }
+
       sendMessage('appConfig', {
         'version': packageInfo.version, // 例如 "1.0.5"
         'buildNumber': packageInfo.buildNumber, // 例如 "11372"
@@ -1447,6 +1580,29 @@ class BridgeController {
         'webViewVersion': webViewVersion,
         'availableEngines': availableEngines,
         'packageName': packageInfo.packageName, // 包名（应用ID）
+        // 设备信息
+        'deviceModel': deviceModel,
+        'deviceBrand': deviceBrand,
+        'manufacturer': manufacturer,
+        'deviceType': deviceType,
+        // Android 系统信息
+        'androidVersion': androidVersion,
+        'sdkInt': sdkInt,
+        'hardware': hardware,
+        'board': board,
+        'display': display,
+        'fingerprint': fingerprint,
+        'bootloader': bootloader,
+        'baseOS': baseOS,
+        'securityPatch': securityPatch,
+        'codename': codename,
+        // CPU 信息
+        'cpuAbi': cpuAbi,
+        'supportedAbis': supportedAbis,
+        // GPU 信息
+        'gpuVendor': gpuVendor,
+        'gpuRenderer': gpuRenderer,
+        'gpuVersion': gpuVersion,
       });
     } catch (e) {
       sendMessage('appConfig', {
@@ -1459,8 +1615,42 @@ class BridgeController {
         'webViewVersion': 0,
         'availableEngines': ['gecko'], // 默认只提供 gecko 作为备选
         'packageName': 'unknown',
+        'deviceModel': 'unknown',
+        'deviceBrand': 'unknown',
+        'manufacturer': 'unknown',
+        'deviceType': 'unknown',
+        'androidVersion': 'unknown',
+        'sdkInt': 'unknown',
+        'hardware': 'unknown',
+        'board': 'unknown',
+        'display': 'unknown',
+        'fingerprint': 'unknown',
+        'bootloader': 'unknown',
+        'baseOS': 'unknown',
+        'securityPatch': 'unknown',
+        'codename': 'unknown',
+        'cpuAbi': 'unknown',
+        'supportedAbis': ['unknown'],
+        'gpuVendor': 'unknown',
+        'gpuRenderer': 'unknown',
+        'gpuVersion': 'unknown',
       });
     }
+  }
+
+  /// 获取 OpenGL 渲染器信息
+  Future<String?> _getGLRenderer() async {
+    try {
+      // 使用 Android 原生方法获取 GPU 信息
+      if (Platform.isAndroid) {
+        const MethodChannel channel = MethodChannel('nyanya_gl_info');
+        final String? result = await channel.invokeMethod('getGLInfo');
+        return result;
+      }
+    } catch (e) {
+      print('[NYANYA-WEBVIEW] Failed to get GL info: $e');
+    }
+    return null;
   }
 
   void _handleSetStatusBar(String type) {
@@ -2217,6 +2407,17 @@ class BridgeController {
           if (getCategory != null) {
             _handleVehicleGet(getCategory,
                 bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        case 'carGetField':
+          final getFieldPayload = message.payload as Map<String, dynamic>?;
+          if (getFieldPayload != null) {
+            final category = getFieldPayload['category'] as String?;
+            final field = getFieldPayload['field'] as String?;
+            if (category != null) {
+              _handleCarGetField(category, field,
+                  bridgeId: bridgeId, sessionId: finalSessionId);
+            }
           }
           break;
         case 'carEnableListener':

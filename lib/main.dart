@@ -266,7 +266,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   static DateTime? _lastRecoveryTimeStatic; // 记录上次恢复的时间
   static bool _kernelHealthyStatic = false; // 标记内核是否健康
   static int _retryCountStatic = 0; // 记录重试次数
-  static const int _maxRetriesStatic = 3; // 最大重试次数
+  static const int _maxRetriesStatic = 1; // 最大重试次数
   static bool _safeAreaTopStatic = true; // 标记顶部是否启用SafeArea
   static bool _safeAreaBottomStatic = true; // 标记底部是否启用SafeArea
   static DateTime? _lastBackPressTimeStatic; // 记录上次按返回键的时间
@@ -482,7 +482,7 @@ class _WebViewContainerState extends State<WebViewContainer>
       // 达到最大重试次数，重启 App
       print('[NYANYA-RETRY] Max retries reached, restarting App');
 
-      Timer(const Duration(seconds: 1), () {
+      Timer(const Duration(milliseconds: 200), () {
         BridgeController().restartApp();
       });
     }
@@ -528,13 +528,13 @@ class _WebViewContainerState extends State<WebViewContainer>
     });
     print('Loading WebView engine: ${engine.name}...');
 
-    // 等待 WebView 初始化，然后验证（整体超时 2 秒）
+    // 等待 WebView 初始化，然后验证（整体超时 1 秒）
     bool webViewReady = false;
     final startTime = DateTime.now();
-    const maxTotalDuration = Duration(seconds: 2);
+    const maxTotalDuration = Duration(seconds: 1);
     
     int webViewCheckAttempts = 0;
-    const maxCheckAttempts = 10; // 最多检查 10 次
+    const maxCheckAttempts = 5; // 最多检查 5 次
     
     while (!webViewReady && webViewCheckAttempts < maxCheckAttempts) {
       // 检查是否已经超时
@@ -550,12 +550,12 @@ class _WebViewContainerState extends State<WebViewContainer>
       
       // 如果还没就绪且还有时间，短暂等待后重试
       if (!webViewReady && DateTime.now().difference(startTime) < maxTotalDuration) {
-        await Future.delayed(const Duration(milliseconds: 100));
+        await Future.delayed(const Duration(milliseconds: 50));
       }
     }
 
     if (!webViewReady) {
-      print('[NYANYA-WEBVIEW] Failed to load WebView after all checks (max 2 seconds)');
+      print('[NYANYA-WEBVIEW] Failed to load WebView after all checks (max 1 seconds)');
       await _handleLoadFailure(loadingFailedKey, LoadingStep.geckoFailed);
       return;
     }
