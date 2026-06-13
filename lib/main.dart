@@ -266,7 +266,7 @@ class _WebViewContainerState extends State<WebViewContainer>
   static DateTime? _lastRecoveryTimeStatic; // 记录上次恢复的时间
   static bool _kernelHealthyStatic = false; // 标记内核是否健康
   static int _retryCountStatic = 0; // 记录重试次数
-  static const int _maxRetriesStatic = 1; // 最大重试次数
+  static const int _maxRetriesStatic = 0; // 最大重试次数
   static bool _safeAreaTopStatic = true; // 标记顶部是否启用SafeArea
   static bool _safeAreaBottomStatic = true; // 标记底部是否启用SafeArea
   static DateTime? _lastBackPressTimeStatic; // 记录上次按返回键的时间
