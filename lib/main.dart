@@ -696,6 +696,16 @@ class _WebViewContainerState extends State<WebViewContainer>
         .setLocalWebResourcesUpdateCompleteCallback((success, error) {
       _closeLocalWebResourcesUpdateDialog();
     });
+
+    BridgeController().setCloseLocalServerCallback(() {
+      print('[NYANYA-MAIN] Closing local server via callback');
+      LocalServer.instance.stop();
+    });
+
+    BridgeController().setStartAppUpdateCallback((downloadUrl, version) {
+      print('[NYANYA-MAIN] Starting direct app update via callback with URL: $downloadUrl, version: $version');
+      _startAppUpdate(downloadUrl, version);
+    });
   }
 
   bool _isLocalWebResourcesUpdateDialogOpen = false;
@@ -1328,7 +1338,8 @@ class _WebViewContainerState extends State<WebViewContainer>
         await Future.delayed(const Duration(milliseconds: 300));
 
         print('[NYANYA-RECOVERY] Reloading webview...');
-        await _reloadWebView();
+        // 暂时注解掉，不需要重启
+        // await _reloadWebView();
         print('[NYANYA-RECOVERY] Recovery completed');
       }
 

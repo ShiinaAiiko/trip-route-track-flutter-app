@@ -30,6 +30,7 @@ class MainActivity : FlutterActivity() {
     private val WEBVIEW_CHANNEL = "nyanya/webview"
     private val DEEP_LINK_CHANNEL = "deep_link"
     private val QQ_CHANNEL = "qq_login"
+    private val APP_INFO_CHANNEL = "app_info"
     
     private var deepLinkChannel: MethodChannel? = null
     private var initialDeepLink: String? = null
@@ -127,6 +128,10 @@ class MainActivity : FlutterActivity() {
                 }
                 "quitApp" -> {
                     quitApp()
+                    result.success(null)
+                }
+                "closeLocalServer" -> {
+                    sendLog("app", "closeLocalServer 被调用")
                     result.success(null)
                 }
                 "thirdPartyLogin" -> {
@@ -670,6 +675,18 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // App Info Channel - 提供应用版本类型等信息
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_INFO_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getVersionType" -> {
+                    result.success(BuildConfig.VERSION_TYPE)
+                }
+                else -> {
+                    result.notImplemented()
+                }
+            }
+        }
+
         // Deep Link Channel
         deepLinkChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEEP_LINK_CHANNEL)
         deepLinkChannel?.setMethodCallHandler { call, result ->
@@ -1016,8 +1033,9 @@ class MainActivity : FlutterActivity() {
             sendLog("app", "restartApp 失败: intent 为空")
             return
         }
-        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK or android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION)
         startActivity(intent)
+        overridePendingTransition(0, 0)
         sendLog("app", "restartApp 已启动新 Activity，准备退出")
         System.exit(0)
     }

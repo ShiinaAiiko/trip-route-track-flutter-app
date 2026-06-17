@@ -40,6 +40,8 @@ typedef LocalWebResourcesUpdateProgressCallback = void Function(
 typedef LocalWebResourcesUpdateCompleteCallback = void Function(
     bool success, String? error);
 typedef SwitchResourcesCallback = void Function(String host);
+typedef CloseLocalServerCallback = void Function();
+typedef StartAppUpdateCallback = void Function(String downloadUrl, String version);
 
 class BridgeController {
   static final BridgeController _instance = BridgeController._internal();
@@ -73,6 +75,8 @@ class BridgeController {
   LocalWebResourcesUpdateCompleteCallback?
       _localWebResourcesUpdateCompleteCallback;
   SwitchResourcesCallback? _switchResourcesCallback;
+  CloseLocalServerCallback? _closeLocalServerCallback;
+  StartAppUpdateCallback? _startAppUpdateCallback;
 
   bool _enableLocation = false;
   bool _enableBackgroundLocation = false;
@@ -97,6 +101,18 @@ class BridgeController {
   app_update.UpdateService get appUpdateService => _appUpdateService;
   LogService get logService => _logService;
   NotificationService get notificationService => _notificationService;
+
+  /// 获取应用版本类型（standard 或 byd）
+  /// 通过 Android 的 BuildConfig.VERSION_TYPE 获取
+  Future<String?> getVersionType() async {
+    try {
+      const MethodChannel channel = MethodChannel('app_info');
+      return await channel.invokeMethod<String>('getVersionType');
+    } catch (e) {
+      print('[Bridge] Failed to get version type: $e');
+      return null;
+    }
+  }
 
   Future<void> init() async {
     await _checkAndResetResourcesOnUpdate();
@@ -401,6 +417,14 @@ class BridgeController {
 
   void setSwitchResourcesCallback(SwitchResourcesCallback? callback) {
     _switchResourcesCallback = callback;
+  }
+
+  void setCloseLocalServerCallback(CloseLocalServerCallback? callback) {
+    _closeLocalServerCallback = callback;
+  }
+
+  void setStartAppUpdateCallback(StartAppUpdateCallback? callback) {
+    _startAppUpdateCallback = callback;
   }
 
   void _dispatchMessage(BridgeMessage message) {
@@ -1569,11 +1593,15 @@ class BridgeController {
         print('[NYANYA-WEBVIEW] Failed to get GPU info: $e');
       }
 
+      // 获取版本类型（standard 或 byd）
+      final versionType = await getVersionType();
+
       sendMessage('appConfig', {
         'version': packageInfo.version, // 例如 "1.0.5"
         'buildNumber': packageInfo.buildNumber, // 例如 "11372"
         'fullVersion':
             '${packageInfo.version}+${packageInfo.buildNumber}', // 组合版
+        'versionType': versionType ?? 'standard', // 版本类型：standard（普通版）或 byd（比亚迪车机版）
         'system': 'Flutter App',
         'engine': engine.name,
         'sessionId': sessionId,
@@ -1817,6 +1845,12 @@ class BridgeController {
     await _appUpdateService.checkNewVersion(showCheckingNotification: showCheckingNotification);
   }
 
+  void _handleUpdateAppNewVersion(String downloadUrl, String version) {
+    print('[NYANYA-BRIDGE] Starting direct app update with URL: $downloadUrl, version: $version');
+    // 直接调用回调，让 main.dart 处理下载流程
+    _startAppUpdateCallback?.call(downloadUrl, version);
+  }
+
   void startUpdate(String downloadUrl, String version) {
     _appUpdateService.setProgressCallback((progress, receivedBytes, totalBytes) {
       sendMessage('updateProgress', {
@@ -1991,6 +2025,21 @@ class BridgeController {
   Future<void> _handleQuitApp() async {
     const MethodChannel channel = MethodChannel('flutter_bridge');
     await channel.invokeMethod('quitApp');
+  }
+
+  Future<void> closeLocalServer() async {
+    await _handleCloseLocalServer();
+  }
+
+  Future<void> _handleCloseLocalServer() async {
+    print('[NYANYA-BRIDGE] Closing local server...');
+    try {
+      // 调用注册的回调来关闭本地服务器
+      _closeLocalServerCallback?.call();
+      print('[NYANYA-BRIDGE] Close local server callback called');
+    } catch (e) {
+      print('[NYANYA-BRIDGE] Failed to close local server: $e');
+    }
   }
 
   Future<void> _handleOpenAppSettings() async {
@@ -2508,6 +2557,16 @@ class BridgeController {
               showCheckingNotification: showCheckingNotification,
               sessionId: finalSessionId);
           break;
+        case 'updateAppNewVersion':
+          final payload = message.payload is Map ? message.payload as Map : null;
+          if (payload != null) {
+            final downloadUrl = payload['downloadUrl'] as String?;
+            final version = payload['version'] as String? ?? '';
+            if (downloadUrl != null && downloadUrl.isNotEmpty) {
+              _handleUpdateAppNewVersion(downloadUrl, version);
+            }
+          }
+          break;
         case 'switchResources':
           final host = message.payload as String?;
           if (host != null) {
@@ -2527,6 +2586,9 @@ class BridgeController {
           break;
         case 'quitApp':
           _handleQuitApp();
+          break;
+        case 'closeLocalServer':
+          _handleCloseLocalServer();
           break;
         case 'sendNotification':
           if (message.payload is Map) {

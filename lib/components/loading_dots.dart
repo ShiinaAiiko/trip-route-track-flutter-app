@@ -56,7 +56,7 @@ class _LoadingDotsState extends State<LoadingDots>
         SizedBox(width: 16),
         _BounceDot(
           color: Color(0xFF09d1fe),
-          delay: Duration(milliseconds: 300),
+          delay: Duration(milliseconds: 200),
         ),
         SizedBox(width: 16),
         _BounceDot(

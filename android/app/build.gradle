@@ -84,6 +84,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
+        
+        // 通过环境变量注入版本类型（standard 或 byd）
+        def versionType = System.getenv("VERSION_TYPE") ?: "standard"
+        buildConfigField "String", "VERSION_TYPE", "\"$versionType\""
     }
 
     flavorDimensions "environment"
