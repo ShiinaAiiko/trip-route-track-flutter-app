@@ -193,11 +193,11 @@ build() {
 	# _build "prod" "byd"
 }
 
-build:all(){
+build:all() {
 	build
 	build:byd
 
-	release
+	# release
 }
 
 build:byd() {
@@ -205,6 +205,29 @@ build:byd() {
 	loadEnv
 	setGoogleClientId "prod"
 	_build "prod" "byd"
+
+	# 移动当前版本的 BYD APK 到专用目录
+	local BYD_PACKAGES_DIR="$DIR/out/byd_packages"
+	mkdir -p "$BYD_PACKAGES_DIR"
+
+	# 查找并移动所有当前版本的 byd apk 文件
+	local packages_dir="$DIR/out/packages"
+	if [ -d "$packages_dir" ]; then
+		# 查找所有包含当前版本号的 byd apk
+		local byd_apks=$(ls "$packages_dir"/*-byd-$version-*.apk 2>/dev/null)
+		if [ -n "$byd_apks" ]; then
+			for byd_apk in $byd_apks; do
+				if [ -f "$byd_apk" ]; then
+					mv "$byd_apk" "$BYD_PACKAGES_DIR/"
+					echo "✅ 已移动: $(basename $byd_apk)"
+				fi
+			done
+			echo "✅ 所有 BYD APK 已移动至: $BYD_PACKAGES_DIR"
+			ls -la "$BYD_PACKAGES_DIR"
+		else
+			echo "⚠️ 未找到当前版本 BYD APK 文件"
+		fi
+	fi
 }
 
 build:new() {
@@ -377,11 +400,13 @@ _build() {
 
 	# 在 WSL2 终端输入
 	# 加上 -Force 确保覆盖
-	# 只有生产包才上传到服务器
-	if [ "$flavor" == "prod" ]; then
-		# 上传到服务器（只有标准版本上传）
+	# 只有生产包且不是BYD版本才上传到服务器
+	if [ "$flavor" == "prod" ] && [ "$versionType" != "byd" ]; then
+		# 上传到服务器（只有标准版本上传，BYD版本禁止上传）
 		echo "-> 开始上传到服务器..."
 		"$DIR/ssh.sh" run
+	elif [ "$versionType" == "byd" ]; then
+		echo "⚠️ 比亚迪车机版本禁止上传到服务器"
 	fi
 
 }
@@ -401,127 +426,156 @@ install() {
 
 # 解析命令行参数（设置全局版本号）
 parseVersionArgs() {
-  local args=("$@")
-  for ((i=0; i<${#args[@]}; i++)); do
-    case "${args[$i]}" in
-      -v|--version)
-        if [ $((i+1)) -lt ${#args[@]} ]; then
-          export CMD_VERSION="${args[$((i+1))]}"
-          i=$((i+1))
-        fi
-        ;;
-    esac
-  done
+	local args=("$@")
+	for ((i = 0; i < ${#args[@]}; i++)); do
+		case "${args[$i]}" in
+		-v | --version)
+			if [ $((i + 1)) -lt ${#args[@]} ]; then
+				export CMD_VERSION="${args[$((i + 1))]}"
+				i=$((i + 1))
+			fi
+			;;
+		esac
+	done
 }
 
 # ./release.sh deleteRelease v1.0.25
 deleteRelease() {
-  local version="$1"
-  echo "-> 删除 GitHub Release: $version"
-  if ! gh release delete "$version" -y; then
-    echo "❌ 删除 GitHub Release 失败"
-    return 1
-  fi
+	local version="$1"
+	echo "-> 删除 GitHub Release: $version"
+	if ! gh release delete "$version" -y; then
+		echo "❌ 删除 GitHub Release 失败"
+		return 1
+	fi
 }
 
 # 发布到 GitHub Release
 release() {
-  # 解析版本号参数
-  parseVersionArgs "$@"
-  
-  # 如果指定了版本号，使用指定的版本；否则使用脚本中定义的版本号
-  if [ -n "$CMD_VERSION" ]; then
-    RELEASE_VERSION="$CMD_VERSION"
-    echo "📌 使用命令行指定版本: $RELEASE_VERSION"
-  else
-    RELEASE_VERSION="$version"
-    echo "📌 使用脚本中定义的版本号: $RELEASE_VERSION"
-  fi
-  
-  # 检查 packages 目录是否存在
-  PACKAGES_DIR="$DIR/out/packages"
-  if [ ! -d "$PACKAGES_DIR" ]; then
-    echo "❌ 错误：$PACKAGES_DIR 目录不存在"
-    echo "请先运行 ./release.sh build:all 或 ./release.sh build 生成产物"
-    return 1
-  fi
-  
-  # 查找指定版本的 APK 文件
-  APK_FILES=("$PACKAGES_DIR"/*"$RELEASE_VERSION"*.apk)
-  
-  # 检查是否找到 APK 文件
-  if [ ! -f "${APK_FILES[0]}" ]; then
-    echo "❌ 错误：未找到版本 $RELEASE_VERSION 的 APK 文件"
-    echo "请确保已使用版本 $RELEASE_VERSION 打包"
-    return 1
-  fi
-  
-  # 列出将要上传的文件
-  echo "📦 将要上传的 APK 文件:"
-  for apk in "${APK_FILES[@]}"; do
-    if [ -f "$apk" ]; then
-      echo "   $(basename "$apk")"
-    fi
-  done
-  
-  # 检查 GitHub Release 是否已存在
-  if gh release view "$RELEASE_VERSION" &>/dev/null; then
-    echo -n "❓ GitHub Release $RELEASE_VERSION 已存在，是否覆盖? [y/N]: "
-    read confirm
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-      echo "✓ 取消发布"
-      return 0
-    fi
-    # 删除旧 Release
-    echo "-> 删除旧 Release: $RELEASE_VERSION"
-    if ! gh release delete "$RELEASE_VERSION" -y; then
-      echo "❌ 删除旧 Release 失败"
-      return 1
-    fi
-  fi
-  
-  # 创建 GitHub Release
-  echo "-> 创建 GitHub Release: $RELEASE_VERSION"
-  
-  # 使用数组存储要上传的文件（正确处理路径中的空格）
-  local -a upload_files=()
-  for apk in "${APK_FILES[@]}"; do
-    if [ -f "$apk" ]; then
-      upload_files+=("$apk")
-    fi
-  done
-  
-  # 获取更新说明（使用最新的 git commit 信息）
-  local latest_commit=$(git log -1 --oneline)
-  local commit_date=$(git log -1 --format=%ad --date=short)
-  local commit_author=$(git log -1 --format=%an)
-  
-  local notes="## 更新内容
+	# 解析版本号参数
+	parseVersionArgs "$@"
+
+	# 如果指定了版本号，使用指定的版本；否则使用脚本中定义的版本号
+	if [ -n "$CMD_VERSION" ]; then
+		RELEASE_VERSION="$CMD_VERSION"
+		echo "📌 使用命令行指定版本: $RELEASE_VERSION"
+	else
+		RELEASE_VERSION="$version"
+		echo "📌 使用脚本中定义的版本号: $RELEASE_VERSION"
+	fi
+
+	# 检查 packages 目录是否存在
+	PACKAGES_DIR="$DIR/out/packages"
+	if [ ! -d "$PACKAGES_DIR" ]; then
+		echo "❌ 错误：$PACKAGES_DIR 目录不存在"
+		echo "请先运行 ./release.sh build:all 或 ./release.sh build 生成产物"
+		return 1
+	fi
+
+	# 查找指定版本的 APK 文件
+	APK_FILES=("$PACKAGES_DIR"/*"$RELEASE_VERSION"*.apk)
+
+	# 检查是否找到 APK 文件
+	if [ ! -f "${APK_FILES[0]}" ]; then
+		echo "❌ 错误：未找到版本 $RELEASE_VERSION 的 APK 文件"
+		echo "请确保已使用版本 $RELEASE_VERSION 打包"
+		return 1
+	fi
+
+	# 列出将要上传的文件
+	echo "📦 将要上传的 APK 文件:"
+	for apk in "${APK_FILES[@]}"; do
+		if [ -f "$apk" ]; then
+			echo "   $(basename "$apk")"
+		fi
+	done
+
+	# 检查 GitHub Release 是否已存在
+	if gh release view "$RELEASE_VERSION" &>/dev/null; then
+		echo -n "❓ GitHub Release $RELEASE_VERSION 已存在，是否覆盖? [y/N]: "
+		read confirm
+		if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+			echo "✓ 取消发布"
+			return 0
+		fi
+		# 删除旧 Release
+		echo "-> 删除旧 Release: $RELEASE_VERSION"
+		if ! gh release delete "$RELEASE_VERSION" -y; then
+			echo "❌ 删除旧 Release 失败"
+			return 1
+		fi
+	fi
+
+	# 创建 GitHub Release
+	echo "-> 创建 GitHub Release: $RELEASE_VERSION"
+
+	# 使用数组存储要上传的文件（正确处理路径中的空格）
+	local -a upload_files=()
+	for apk in "${APK_FILES[@]}"; do
+		if [ -f "$apk" ]; then
+			upload_files+=("$apk")
+		fi
+	done
+
+	# 获取更新说明（使用最新的 git commit 信息）
+	local latest_commit_short=$(git log -1 --oneline)
+	local latest_commit_msg=$(git log -1 --format=%B | head -n 1)  # 获取第一行完整提交信息
+	local commit_date=$(git log -1 --format=%ad --date=short)
+	local commit_author=$(git log -1 --format=%an)
+	
+	# 获取最近5个commit的简短信息
+	local recent_commits=""
+	local commit_count=0
+	while IFS= read -r line && [ $commit_count -lt 5 ]; do
+		if [ -n "$line" ]; then
+			recent_commits="${recent_commits}- ${line}\n"
+			commit_count=$((commit_count + 1))
+		fi
+	done < <(git log --oneline -5)
+
+# **最近更新:**
+# ${recent_commits}
+	local notes="## 更新内容
 
 ### 版本 $RELEASE_VERSION
 
 **最新提交:**
-- $latest_commit
-- 作者: $commit_author
-- 日期: $commit_date
+- ${latest_commit_short}
+- ${latest_commit_msg}
+- 作者: ${commit_author}
+- 日期: ${commit_date}
 
 **包含架构:**
 - armeabi-v7a
 - arm64-v8a  
 - x86_64"
-  
-  # 创建 Release（使用数组展开）
-  if ! gh release create "$RELEASE_VERSION" \
-    --title "Version $RELEASE_VERSION" \
-    --notes "$notes" \
-    "${upload_files[@]}"; then
-    echo "❌ 创建 GitHub Release 失败"
-    return 1
-  fi
-  
-  echo ""
-  echo "✅ Release $RELEASE_VERSION 发布成功!"
-  echo "🔗 Release 地址: https://github.com/your-repo/releases/tag/$RELEASE_VERSION"
+
+	# 创建 Release（先创建空的Release）
+	echo "-> 创建 GitHub Release..."
+	if ! gh release create "$RELEASE_VERSION" \
+		--title "Version $RELEASE_VERSION" \
+		--notes "$notes"; then
+		echo "❌ 创建 GitHub Release 失败"
+		return 1
+	fi
+	
+	# 上传文件，显示每个文件的上传进度
+	echo "-> 上传 APK 文件到 Release..."
+	for apk in "${upload_files[@]}"; do
+		if [ -f "$apk" ]; then
+			local filename=$(basename "$apk")
+			local filesize=$(du -h "$apk" | cut -f1)
+			echo "  📤 正在上传: $filename ($filesize)"
+			if ! gh release upload "$RELEASE_VERSION" "$apk" --clobber; then
+				echo "❌ 上传 $filename 失败"
+				return 1
+			fi
+			echo "  ✅ 上传完成: $filename"
+		fi
+	done
+
+	echo ""
+	echo "✅ Release $RELEASE_VERSION 发布成功!"
+	echo "🔗 Release 地址: https://github.com/your-repo/releases/tag/$RELEASE_VERSION"
 }
 
 main() {
