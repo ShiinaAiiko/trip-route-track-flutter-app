@@ -14,6 +14,13 @@ class LogService {
 
   static const MethodChannel _channel = MethodChannel('log_service');
 
+  // 日志开关状态，默认都开启
+  bool _carLogEnabled = true;
+  bool _appLogEnabled = true;
+
+  bool get carLogEnabled => _carLogEnabled;
+  bool get appLogEnabled => _appLogEnabled;
+
   Future<void> init() async {
     _channel.setMethodCallHandler(_handleMethodCall);
   }
@@ -48,6 +55,14 @@ class LogService {
   }
 
   void _sendLog(LogType type, String message) {
+    // 根据开关状态决定是否发送日志
+    if (type == LogType.carLog && !_carLogEnabled) {
+      return;
+    }
+    if (type == LogType.appLog && !_appLogEnabled) {
+      return;
+    }
+
     try {
       final payload = {
         'type': type == LogType.carLog ? 'carLog' : 'appLog',
@@ -56,6 +71,18 @@ class LogService {
       BridgeController().sendMessage('log', payload);
     } catch (e) {
       print('[LogService] Failed to send log via BridgeController: $e');
+    }
+  }
+
+  /// 设置日志开关
+  /// [type] - 日志类型，'carLog' 或 'appLog'
+  /// [enabled] - 是否开启该类型日志
+  void setLogEnabled(String type, bool enabled) {
+    print('[LogService] setLogEnabled: type=$type, enabled=$enabled');
+    if (type == 'carLog') {
+      _carLogEnabled = enabled;
+    } else if (type == 'appLog') {
+      _appLogEnabled = enabled;
     }
   }
 

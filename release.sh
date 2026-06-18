@@ -3,11 +3,11 @@ name="trip-route-track"
 runName="$name-flutter-app"
 port=23204
 branch="main"
-version="v1.0.25"
+version="v1.0.24"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 DIR=$(cd $(dirname $0) && pwd)
-allowMethods=("build:all addVersion build:new build:old build:byd install adb dev run stop protos start build buildDev setVersion profile profileDev release")
+allowMethods=("deleteRelease build:all addVersion build:new build:old build:byd install adb dev run stop protos start build buildDev setVersion profile profileDev release")
 
 # 加载环境变量
 loadEnv() {
@@ -412,6 +412,16 @@ parseVersionArgs() {
         ;;
     esac
   done
+}
+
+# ./release.sh deleteRelease v1.0.25
+deleteRelease() {
+  local version="$1"
+  echo "-> 删除 GitHub Release: $version"
+  if ! gh release delete "$version" -y; then
+    echo "❌ 删除 GitHub Release 失败"
+    return 1
+  fi
 }
 
 # 发布到 GitHub Release

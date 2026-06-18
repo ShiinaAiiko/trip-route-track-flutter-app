@@ -118,6 +118,7 @@ class UpdateDialogManager {
     required VoidCallback onInstallNow,
     required VoidCallback onLater,
     bool resetState = true,
+    bool checkingFile = false,
   }) {
     if (_isUpdateProgressDialogOpen) return;
     _isUpdateProgressDialogOpen = true;
@@ -135,121 +136,138 @@ class UpdateDialogManager {
         return PopScope(
           canPop: false,
           child: AlertDialog(
-            title: ValueListenableBuilder<bool>(
-              valueListenable: isDownloadComplete,
-              builder: (context, complete, child) {
-                return Text(complete 
-                    ? i18n.t('update_download_complete_notification_title')
-                    : i18n.t('update_downloading'));
-              },
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ValueListenableBuilder<int>(
-                    valueListenable: updateProgress,
-                    builder: (context, progress, child) {
-                      return LinearProgressIndicator(value: progress / 100);
+            title: checkingFile
+                ? Text(i18n.t('update_checking_title'))
+                : ValueListenableBuilder<bool>(
+                    valueListenable: isDownloadComplete,
+                    builder: (context, complete, child) {
+                      return Text(complete 
+                          ? i18n.t('update_download_complete_notification_title')
+                          : i18n.t('update_downloading'));
                     },
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            content: checkingFile
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        flex: 1,
-                        child: ValueListenableBuilder<int>(
+                      const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(i18n.t('update_checking_file')),
+                    ],
+                  )
+                : SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ValueListenableBuilder<int>(
                           valueListenable: updateProgress,
                           builder: (context, progress, child) {
-                            return Text(
-                              '$progress%',
-                              style: Theme.of(context).textTheme.titleMedium,
-                              overflow: TextOverflow.ellipsis,
-                            );
+                            return LinearProgressIndicator(value: progress / 100);
                           },
                         ),
-                      ),
-                      Expanded(
-                        flex: 2,
-                        child: ValueListenableBuilder<int>(
-                          valueListenable: updateReceivedBytes,
-                          builder: (context, received, child) {
-                            return ValueListenableBuilder<int>(
-                              valueListenable: updateTotalBytes,
-                              builder: (context, total, child) {
-                                if (total <= 0) {
-                                  return const SizedBox.shrink();
-                                }
-                                return Text(
-                                  '${_formatBytes(received)} / ${_formatBytes(total)}',
-                                  textAlign: TextAlign.right,
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                  overflow: TextOverflow.ellipsis,
-                                );
-                              },
-                            );
-                          },
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              flex: 1,
+                              child: ValueListenableBuilder<int>(
+                                valueListenable: updateProgress,
+                                builder: (context, progress, child) {
+                                  return Text(
+                                    '$progress%',
+                                    style: Theme.of(context).textTheme.titleMedium,
+                                    overflow: TextOverflow.ellipsis,
+                                  );
+                                },
+                              ),
+                            ),
+                            Expanded(
+                              flex: 2,
+                              child: ValueListenableBuilder<int>(
+                                valueListenable: updateReceivedBytes,
+                                builder: (context, received, child) {
+                                  return ValueListenableBuilder<int>(
+                                    valueListenable: updateTotalBytes,
+                                    builder: (context, total, child) {
+                                      if (total <= 0) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return Text(
+                                        '${_formatBytes(received)} / ${_formatBytes(total)}',
+                                        textAlign: TextAlign.right,
+                                        style: Theme.of(context).textTheme.bodyMedium,
+                                        overflow: TextOverflow.ellipsis,
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
-            actions: [
-              ValueListenableBuilder<bool>(
-                valueListenable: isDownloadComplete,
-                builder: (context, complete, child) {
-                  if (complete) {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            _isUpdateProgressDialogOpen = false;
-                            onLater();
-                          },
-                          child: Text(i18n.t('update_later')),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: () {
-                            onInstallNow();
-                          },
-                          child: Text(i18n.t('update_install_now')),
-                        ),
-                      ],
-                    );
-                  } else {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            _isUpdateProgressDialogOpen = false;
-                            onBackgroundDownload();
-                          },
-                          child: Text(i18n.t('update_background_download')),
-                        ),
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            _isUpdateProgressDialogOpen = false;
-                            onStopUpdate();
-                          },
-                          child: Text(i18n.t('update_stop')),
-                        ),
-                      ],
-                    );
-                  }
-                },
-              ),
-            ],
+            actions: checkingFile
+                ? []
+                : [
+                    ValueListenableBuilder<bool>(
+                      valueListenable: isDownloadComplete,
+                      builder: (context, complete, child) {
+                        if (complete) {
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  _isUpdateProgressDialogOpen = false;
+                                  onLater();
+                                },
+                                child: Text(i18n.t('update_later')),
+                              ),
+                              const SizedBox(width: 8),
+                              FilledButton(
+                                onPressed: () {
+                                  onInstallNow();
+                                },
+                                child: Text(i18n.t('update_install_now')),
+                              ),
+                            ],
+                          );
+                        } else {
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  _isUpdateProgressDialogOpen = false;
+                                  onBackgroundDownload();
+                                },
+                                child: Text(i18n.t('update_background_download')),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                  _isUpdateProgressDialogOpen = false;
+                                  onStopUpdate();
+                                },
+                                child: Text(i18n.t('update_stop')),
+                              ),
+                            ],
+                          );
+                        }
+                      },
+                    ),
+                  ],
           ),
         );
       },

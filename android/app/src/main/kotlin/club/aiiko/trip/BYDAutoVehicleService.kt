@@ -246,6 +246,62 @@ class BYDAutoVehicleService(private val context: Context) {
         }
     }
 
+    /**
+     * 检测车机SDK是否可用
+     * 通过尝试初始化仪表设备并获取单位信息来判断SDK是否可用
+     * 这是一个轻量级检测，不会启动完整的车机服务
+     * @return true表示SDK可用，false表示不可用
+     */
+    fun checkCarSDKAvailable(): Boolean {
+        sendCarLog("开始检测车机SDK可用性...")
+
+        // 1. 检查是否有任何权限
+        if (!hasAnyPermission()) {
+            sendCarLog("❌ 检测失败：没有任何比亚迪车机权限")
+            return false
+        }
+        sendCarLog("✓ 权限检查通过")
+
+        // 2. 尝试初始化仪表设备（轻量级检测）
+        val testInstrumentDevice: BYDAutoInstrumentDevice?
+        try {
+            sendCarLog("尝试初始化仪表设备...")
+            testInstrumentDevice = BYDAutoInstrumentDevice.getInstance(context)
+            if (testInstrumentDevice == null) {
+                sendCarLog("❌ 检测失败：无法获取仪表设备实例")
+                return false
+            }
+            sendCarLog("✓ 仪表设备实例获取成功")
+        } catch (e: Exception) {
+            sendCarLog("❌ 检测失败：初始化仪表设备异常 - ${e.message}")
+            return false
+        }
+
+        // 3. 检查是否为Stub实现（Stub表示权限不足）
+        if (testInstrumentDevice.javaClass.simpleName?.contains("Stub") == true) {
+            sendCarLog("❌ 检测失败：仪表设备是Stub实现（权限不足）")
+            return false
+        }
+        sendCarLog("✓ 仪表设备不是Stub实现")
+
+        // 4. 尝试获取单位信息
+        try {
+            sendCarLog("尝试获取仪表单位信息...")
+            val unit = testInstrumentDevice.getUnit(BYDAutoInstrumentDevice.TEMPERATURE_UNIT)
+            if (unit == null) {
+                sendCarLog("❌ 检测失败：无法获取有效的单位信息 (unit=$unit)")
+                return false
+            }
+            sendCarLog("✓ 成功获取单位信息: $unit")
+        } catch (e: Exception) {
+            sendCarLog("❌ 检测失败：获取单位信息异常 - ${e.message}")
+            return false
+        }
+
+        sendCarLog("✅ 车机SDK检测完成，SDK可用")
+        return true
+    }
+
     fun getRequiredPermissions(): Array<String> {
         sendCarLog("获取需要申请的所有比亚迪车机权限列表")
         return arrayOf(

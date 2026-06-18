@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.25+746
+version: 1.0.24+758
 
 tencent_kit:
   app_id: 1904094302
@@ -60,20 +60,20 @@ flutter:
     - .env
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/02ReFV0jev4xGh1JSMFnG/
+    - assets/out/_next/Pu0PomhK-w-hxsIQzPDcb/
     - assets/out/_next/data/
-    - assets/out/_next/data/02ReFV0jev4xGh1JSMFnG/
-    - assets/out/_next/data/02ReFV0jev4xGh1JSMFnG/en-US/
-    - assets/out/_next/data/02ReFV0jev4xGh1JSMFnG/en-US/journeyMemories/
-    - assets/out/_next/data/02ReFV0jev4xGh1JSMFnG/en-US/trip/
-    - assets/out/_next/data/02ReFV0jev4xGh1JSMFnG/zh-CN/
-    - assets/out/_next/data/02ReFV0jev4xGh1JSMFnG/zh-CN/journeyMemories/
-    - assets/out/_next/data/02ReFV0jev4xGh1JSMFnG/zh-CN/trip/
-    - assets/out/_next/data/02ReFV0jev4xGh1JSMFnG/zh-TW/
-    - assets/out/_next/data/02ReFV0jev4xGh1JSMFnG/zh-TW/journeyMemories/
-    - assets/out/_next/data/02ReFV0jev4xGh1JSMFnG/zh-TW/trip/
+    - assets/out/_next/data/Pu0PomhK-w-hxsIQzPDcb/
+    - assets/out/_next/data/Pu0PomhK-w-hxsIQzPDcb/en-US/
+    - assets/out/_next/data/Pu0PomhK-w-hxsIQzPDcb/en-US/journeyMemories/
+    - assets/out/_next/data/Pu0PomhK-w-hxsIQzPDcb/en-US/trip/
+    - assets/out/_next/data/Pu0PomhK-w-hxsIQzPDcb/zh-CN/
+    - assets/out/_next/data/Pu0PomhK-w-hxsIQzPDcb/zh-CN/journeyMemories/
+    - assets/out/_next/data/Pu0PomhK-w-hxsIQzPDcb/zh-CN/trip/
+    - assets/out/_next/data/Pu0PomhK-w-hxsIQzPDcb/zh-TW/
+    - assets/out/_next/data/Pu0PomhK-w-hxsIQzPDcb/zh-TW/journeyMemories/
+    - assets/out/_next/data/Pu0PomhK-w-hxsIQzPDcb/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/02ReFV0jev4xGh1JSMFnG/
+    - assets/out/_next/static/Pu0PomhK-w-hxsIQzPDcb/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/

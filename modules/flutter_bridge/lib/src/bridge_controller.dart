@@ -28,6 +28,7 @@ import 'services/vehicle_service.dart';
 import 'services/log_service.dart';
 import 'services/engine_manager.dart';
 import 'services/deep_link_service.dart';
+import 'services/file_service.dart';
 
 typedef MessageHandler = void Function(BridgeMessage message);
 typedef FlutterMethodCallHandler = void Function(MethodCall call);
@@ -56,6 +57,7 @@ class BridgeController {
   final app_update.UpdateService _appUpdateService = app_update.UpdateService();
   final LogService _logService = LogService();
   final NotificationService _notificationService = NotificationService();
+  final FileService _fileService = FileService();
 
   String? _pendingUpdateVersion;
 
@@ -2247,89 +2249,7 @@ class BridgeController {
     }
   }
 
-  Future<void> _handleSaveFile(Map<String, dynamic> payload,
-      {String? bridgeId, String? sessionId}) async {
-    try {
-      final base64Data = payload['base64Data'] as String?;
-      final fileName = payload['fileName'] as String?;
-      final filePath = payload['filePath'] as String?;
-
-      if (base64Data == null || base64Data.isEmpty) {
-        sendMessage('saveFile', {'success': false, 'error': 'Base64 data is required'},
-            bridgeId: bridgeId, sessionId: sessionId);
-        return;
-      }
-
-      if (fileName == null || fileName.isEmpty) {
-        sendMessage('saveFile', {'success': false, 'error': 'File name is required'},
-            bridgeId: bridgeId, sessionId: sessionId);
-        return;
-      }
-
-      final hasPermission = await _checkAndRequestStoragePermission();
-      if (!hasPermission) {
-        sendMessage('saveFile', {'success': false, 'error': 'Storage permission denied'},
-            bridgeId: bridgeId, sessionId: sessionId);
-        return;
-      }
-
-      final bytes = base64Decode(base64Data);
-
-      String fullPath;
-
-      if (filePath != null && filePath.isNotEmpty) {
-        fullPath = filePath;
-      } else {
-        const publicDownloadDir = '/storage/emulated/0/Download';
-        final targetDir = Directory('$publicDownloadDir/trip-route-track');
-        await targetDir.create(recursive: true);
-        fullPath = '${targetDir.path}/$fileName';
-      }
-
-      final file = File(fullPath);
-      await file.writeAsBytes(bytes);
-
-      sendMessage('saveFile', {'success': true, 'path': fullPath},
-          bridgeId: bridgeId, sessionId: sessionId);
-    } catch (e) {
-      sendMessage('saveFile', {'success': false, 'error': e.toString()},
-          bridgeId: bridgeId, sessionId: sessionId);
-    }
-  }
-
-  Future<void> _handleReadFile(String filePath,
-      {String? bridgeId, String? sessionId}) async {
-    try {
-      if (filePath.isEmpty) {
-        sendMessage('readFile', {'success': false, 'error': 'File path is required'},
-            bridgeId: bridgeId, sessionId: sessionId);
-        return;
-      }
-
-      final hasPermission = await _checkAndRequestStoragePermission();
-      if (!hasPermission) {
-        sendMessage('readFile', {'success': false, 'error': 'Storage permission denied'},
-            bridgeId: bridgeId, sessionId: sessionId);
-        return;
-      }
-
-      final file = File(filePath);
-      if (!await file.exists()) {
-        sendMessage('readFile', {'success': false, 'error': 'File not found'},
-            bridgeId: bridgeId, sessionId: sessionId);
-        return;
-      }
-
-      final bytes = await file.readAsBytes();
-      final base64Data = base64Encode(bytes);
-
-      sendMessage('readFile', {'success': true, 'base64Data': base64Data},
-          bridgeId: bridgeId, sessionId: sessionId);
-    } catch (e) {
-      sendMessage('readFile', {'success': false, 'error': e.toString()},
-          bridgeId: bridgeId, sessionId: sessionId);
-    }
-  }
+  // ==================== 权限检查 ====================
 
   Future<bool> _checkAndRequestStoragePermission() async {
     try {
@@ -2535,6 +2455,19 @@ class BridgeController {
           final delayMs = message.payload as int;
           await _vehicleService.setCarDataListenerDebounceDelay(delayMs);
           break;
+        case 'checkCarSDKAvailable':
+          final available = await _vehicleService.checkCarSDKAvailable();
+          sendMessage('checkCarSDKAvailable', {'available': available},
+              bridgeId: bridgeId, sessionId: finalSessionId);
+          break;
+        case 'setLogEnabled':
+          final payload = message.payload as Map<String, dynamic>?;
+          final type = payload?['type'] as String?;
+          final enabled = payload?['enabled'] as bool? ?? false;
+          if (type != null) {
+            _logService.setLogEnabled(type, enabled);
+          }
+          break;
         case 'setStatusBar':
           final statusType = message.payload as String?;
           if (statusType != null) {
@@ -2653,14 +2586,53 @@ class BridgeController {
           break;
         case 'saveFile':
           if (message.payload is Map) {
-            _handleSaveFile(message.payload as Map<String, dynamic>,
+            _fileService.saveFile(message.payload as Map<String, dynamic>,
                 bridgeId: bridgeId, sessionId: finalSessionId);
           }
           break;
         case 'readFile':
           final filePath = message.payload as String?;
           if (filePath != null) {
-            _handleReadFile(filePath,
+            _fileService.readFile(filePath,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        // 流式文件保存
+        case 'saveFileStreamStart':
+          if (message.payload is Map) {
+            _fileService.saveFileStreamStart(message.payload as Map<String, dynamic>,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        case 'saveFileStreamChunk':
+          if (message.payload is Map) {
+            _fileService.saveFileStreamChunk(message.payload as Map<String, dynamic>,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        case 'saveFileStreamEnd':
+          if (message.payload is Map) {
+            _fileService.saveFileStreamEnd(message.payload as Map<String, dynamic>,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        // 流式文件读取
+        case 'readFileStreamStart':
+          final filePath = message.payload as String?;
+          if (filePath != null) {
+            _fileService.readFileStreamStart(filePath,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        case 'readFileStreamChunk':
+          if (message.payload is Map) {
+            _fileService.readFileStreamChunk(message.payload as Map<String, dynamic>,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        case 'readFileStreamEnd':
+          if (message.payload is Map) {
+            _fileService.readFileStreamEnd(message.payload as Map<String, dynamic>,
                 bridgeId: bridgeId, sessionId: finalSessionId);
           }
           break;

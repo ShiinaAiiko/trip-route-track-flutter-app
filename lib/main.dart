@@ -839,8 +839,8 @@ class _WebViewContainerState extends State<WebViewContainer>
   VoidCallback? _cachedNotificationTappedCallback; // 缓存通知点击回调
   VoidCallback? _cachedInstallNotificationTappedCallback; // 缓存安装通知点击回调
 
-  // 检查是否有完整APK的辅助函数
-  Future<File?> _checkExistingApkForVersion(String version) async {
+  // 检查是否有完整APK的辅助函数（通过服务器文件大小验证完整性）
+  Future<File?> _checkExistingApkForVersion(String version, String downloadUrl) async {
     try {
       Directory? dir;
       try {
@@ -853,7 +853,21 @@ class _WebViewContainerState extends State<WebViewContainer>
       final apkPath = '${dir.path}/trip-route-track_$version.apk';
       final file = File(apkPath);
       if (await file.exists()) {
-        return file;
+        final localFileSize = await file.length();
+        print('[AppUpdate] Found existing APK: $apkPath (local size: $localFileSize bytes)');
+
+        // 使用 UpdateService 的公共方法获取服务器文件大小
+        final appUpdateService = BridgeController().appUpdateService;
+        final serverFileSize = await appUpdateService.getServerFileSize(downloadUrl);
+
+        if (serverFileSize != null && localFileSize >= serverFileSize) {
+          print('[AppUpdate] APK size matches server, using existing file');
+          return file;
+        } else {
+          print('[AppUpdate] APK size ($localFileSize) is less than server size ($serverFileSize), deleting incomplete file');
+          await file.delete();
+          return null;
+        }
       }
       return null;
     } catch (e) {
@@ -872,13 +886,27 @@ class _WebViewContainerState extends State<WebViewContainer>
     _staticCurrentDownloadUrl = downloadUrl;
     _staticCurrentDownloadVersion = version;
 
-    // 先检查是否有完整APK
-    final existingApk = await _checkExistingApkForVersion(version);
+    // 先显示"正在检测文件完整性"弹框
+    app_update.UpdateDialogManager.showUpdateProgressDialog(
+      context: context,
+      i18n: i18n,
+      onBackgroundDownload: () {},
+      onStopUpdate: () async {},
+      onInstallNow: () async {},
+      onLater: () {},
+      checkingFile: true, // 显示检测状态
+    );
+
+    // 检查是否有完整APK（通过服务器文件大小验证完整性）
+    final existingApk = await _checkExistingApkForVersion(version, downloadUrl);
     final hasExistingApk = existingApk != null;
     _currentDownloadHasExistingApk = hasExistingApk;
     _staticCurrentDownloadHasExistingApk = hasExistingApk;
     // 保存 APK 长度
     int? existingApkLength = hasExistingApk ? existingApk!.lengthSync() : null;
+
+    // 关闭检测弹框
+    app_update.UpdateDialogManager.closeUpdateProgressDialog(context);
 
     // 设置下载进度通知点击回调 - 打开进度弹窗
     _cachedNotificationTappedCallback = () {
@@ -928,10 +956,11 @@ class _WebViewContainerState extends State<WebViewContainer>
       if (!app_update.UpdateDialogManager.isUpdateProgressDialogOpen) {
         // 优先使用静态变量，然后使用成员变量
         final versionToCheck = _staticCurrentDownloadVersion ?? _currentDownloadVersion;
+        final urlToCheck = _staticCurrentDownloadUrl ?? _currentDownloadUrl;
         
         // 重新检查是否有完整APK（避免状态过期）
-        final freshExistingApk = versionToCheck != null
-            ? await _checkExistingApkForVersion(versionToCheck!)
+        final freshExistingApk = (versionToCheck != null && urlToCheck != null)
+            ? await _checkExistingApkForVersion(versionToCheck!, urlToCheck!)
             : null;
         final freshHasExistingApk = freshExistingApk != null;
         final freshApkLength = freshHasExistingApk ? freshExistingApk!.lengthSync() : null;
@@ -1024,7 +1053,7 @@ class _WebViewContainerState extends State<WebViewContainer>
 
     // 先根据是否有完整APK决定怎么显示对话框
     if (hasExistingApk) {
-      // 有完整APK，直接显示下载完成状态
+      // 有完整APK，直接显示下载完成状态，不调用 startDownload
       final fileSize = existingApk!.lengthSync();
       app_update.UpdateDialogManager.setDownloadComplete(fileSize);
       app_update.UpdateDialogManager.showUpdateProgressDialog(
@@ -1045,6 +1074,7 @@ class _WebViewContainerState extends State<WebViewContainer>
         },
         resetState: false,
       );
+      print('[AppUpdate] Found complete APK, skipping download');
     } else {
       // 没有完整APK，显示正常下载对话框并开始下载
       app_update.UpdateDialogManager.showUpdateProgressDialog(
@@ -1066,15 +1096,15 @@ class _WebViewContainerState extends State<WebViewContainer>
           appUpdateService.clearCompleteCallback();
         },
       );
-    }
 
-    // 开始下载
-    appUpdateService.startDownload(
-      downloadUrl: downloadUrl,
-      version: version,
-      i18nService: i18n,
-      autoInstall: false,
-    );
+      // 开始下载
+      appUpdateService.startDownload(
+        downloadUrl: downloadUrl,
+        version: version,
+        i18nService: i18n,
+        autoInstall: false,
+      );
+    }
   }
 
   void _statusBarHandlerListener() {

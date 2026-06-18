@@ -138,8 +138,42 @@ class UpdateService {
     }
   }
 
+  /// 通过HEAD请求获取服务器文件大小（公共方法，供外部调用）
+  Future<int?> getServerFileSize(String downloadUrl) async {
+    try {
+      final client = http.Client();
+      try {
+        final request = http.Request('HEAD', Uri.parse(downloadUrl));
+        final response = await client.send(request).timeout(
+          const Duration(milliseconds: 2000),
+          onTimeout: () {
+            print('[UpdateService] HEAD request timeout after 2000ms');
+            throw TimeoutException('Request timeout');
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final serverFileSize = response.contentLength;
+          print('[UpdateService] Server file size: $serverFileSize bytes');
+          return serverFileSize;
+        } else {
+          print('[UpdateService] HEAD request failed with status: ${response.statusCode}');
+          return null;
+        }
+      } finally {
+        client.close();
+      }
+    } on TimeoutException catch (e) {
+      print('[UpdateService] Failed to get server file size: $e');
+      return null;
+    } catch (e) {
+      print('[UpdateService] Failed to get server file size: $e');
+      return null;
+    }
+  }
+
   /// 检查是否存在已下载的 APK
-  Future<File?> _checkExistingApk(String version) async {
+  Future<File?> _checkExistingApk(String version, String downloadUrl) async {
     try {
       Directory? dir;
       try {
@@ -154,9 +188,20 @@ class UpdateService {
       final file = File(apkPath);
 
       if (await file.exists()) {
-        final fileSize = await file.length();
-        print('[UpdateService] Found existing APK: $apkPath (size: $fileSize bytes)');
-        return file;
+        final localFileSize = await file.length();
+        print('[UpdateService] Found existing APK: $apkPath (local size: $localFileSize bytes)');
+
+        // 使用公共方法获取服务器文件大小
+        final serverFileSize = await getServerFileSize(downloadUrl);
+
+        if (serverFileSize != null && localFileSize >= serverFileSize) {
+          print('[UpdateService] APK size matches server, using existing file');
+          return file;
+        } else {
+          print('[UpdateService] APK size ($localFileSize) is less than server size ($serverFileSize), deleting incomplete file');
+          await file.delete();
+          return null;
+        }
       }
       return null;
     } catch (e) {
@@ -343,7 +388,7 @@ class UpdateService {
     }
 
     // 先检查是否已经有完整的APK文件
-    final existingApk = await _checkExistingApk(version);
+    final existingApk = await _checkExistingApk(version, downloadUrl);
     if (existingApk != null) {
       // 有完整APK，直接进入安装流程
       print('[UpdateService] Found complete APK, skipping download');

@@ -321,6 +321,21 @@ class VehicleService {
     print('[VehicleService] setCarDataListenerDebounceDelay() completed');
   }
 
+  /// 检测车机SDK是否可用
+  /// 通过尝试初始化仪表设备并获取单位信息来判断SDK是否可用
+  /// 这是一个轻量级检测，不会启动完整的车机服务
+  Future<bool> checkCarSDKAvailable() async {
+    try {
+      print('[VehicleService] checkCarSDKAvailable() calling native method');
+      final result = await _channel.invokeMethod<bool>('checkCarSDKAvailable');
+      print('[VehicleService] checkCarSDKAvailable() result: $result');
+      return result ?? false;
+    } catch (e) {
+      print('[VehicleService] checkCarSDKAvailable() failed: $e');
+      return false;
+    }
+  }
+
   Future<bool> hasBydPermissions() async {
     try {
       print('[VehicleService] hasBydPermissions() calling native method');

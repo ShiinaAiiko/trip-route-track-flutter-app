@@ -647,6 +647,10 @@ class MainActivity : FlutterActivity() {
                     testBYDAutoVehicleService?.setCarDataListenerDebounceDelay(delayMs)
                     result.success(true)
                 }
+                "checkCarSDKAvailable" -> {
+                    val available = bydVehicleService?.checkCarSDKAvailable() ?: false
+                    result.success(available)
+                }
                 else -> {
                     sendCarLog("未实现的方法调用: ${call.method}")
                     result.notImplemented()

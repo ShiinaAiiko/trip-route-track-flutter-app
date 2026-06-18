@@ -60,6 +60,7 @@ class AppTranslations {
       // 自动更新
       'update_checking': '正在检查更新...',
       'update_checking_title': '检查更新',
+      'update_checking_file': '正在检测文件完整性...',
       'update_available': '发现新版本 {version}',
       'update_available_content': '您的应用需要更新以获取最新功能和优化',
       'update_now': '立即更新',
@@ -155,6 +156,7 @@ class AppTranslations {
       // Auto update
       'update_checking': 'Checking for updates...',
       'update_checking_title': 'Check Update',
+      'update_checking_file': 'Checking file integrity...',
       'update_available': 'New version {version} available',
       'update_available_content': 'Your app needs an update to get the latest features and improvements',
       'update_now': 'Update now',
@@ -250,6 +252,7 @@ class AppTranslations {
       // 自動更新
       'update_checking': '正在檢查更新...',
       'update_checking_title': '檢查更新',
+      'update_checking_file': '正在檢測文件完整性...',
       'update_available': '發現新版本 {version}',
       'update_available_content': '您的應用需要更新以獲取最新功能和優化',
       'update_now': '立即更新',
