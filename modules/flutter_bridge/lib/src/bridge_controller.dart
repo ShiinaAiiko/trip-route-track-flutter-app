@@ -99,9 +99,9 @@ class BridgeController {
   Timer? _backgroundNotificationTimer;
   int _notificationIdCounter = 1;
 
-  // GPS心跳检测定时器（20秒超时）
+  // GPS心跳检测定时器（10秒超时）
   Timer? _locationHeartbeatTimer;
-  static const int _locationHeartbeatTimeoutSeconds = 20;
+  static const int _locationHeartbeatTimeoutSeconds = 10;
 
   bool get enableLocation => _enableLocation;
   bool get enableBackgroundLocation => _enableBackgroundLocation;
@@ -1248,7 +1248,7 @@ class BridgeController {
     }
   }
 
-  void _startLocationUpdatesInternal({String? sessionId}) {
+  Future<void> _startLocationUpdatesInternal({String? sessionId}) async {
     // 取消之前的GPS心跳定时器
     _locationHeartbeatTimer?.cancel();
 
@@ -1261,17 +1261,29 @@ class BridgeController {
     if (_enableBackgroundLocation) {
       androidSettings = AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 0,
-        forceLocationManager: true,
+        distanceFilter: 1,
+        forceLocationManager: false,
         intervalDuration: const Duration(seconds: 1),
       );
     } else {
       androidSettings = AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 0,
-        forceLocationManager: true,
-        intervalDuration: Duration(seconds: 1),
+        distanceFilter: 1,
+        forceLocationManager: false,
+        intervalDuration: const Duration(seconds: 1),
       );
+    }
+
+    // 关键：在订阅定位流之前就启动心跳检测
+    // 确保即使定位流阻塞，也能被检测到并重启
+    _resetLocationHeartbeatTimer(sessionId: sessionId);
+
+    // 预检查：尝试获取一次位置
+    // 如果预检查失败（超时或错误），走重启流程，不启动定位流
+    bool preCheckSuccess = await _attemptQuickPositionCheck(sessionId: sessionId);
+    if (!preCheckSuccess) {
+      print('[Location] Pre-check failed, scheduling restart...');
+      return; // 不启动定位流，让心跳超时后重启
     }
 
     _positionSubscription = Geolocator.getPositionStream(
@@ -1312,11 +1324,18 @@ class BridgeController {
             {
               'title': _i18nService.t('gps_error'),
               'message': 'Location failed: $error',
-              'type': 'error',
+              'type': 'warning',
               'notification': true,
               'module': 'location',
             },
             sessionId: sessionId);
+        
+        _resetLocationHeartbeatTimer(sessionId: sessionId, timeoutSeconds: 3);
+      },
+      onDone: () {
+        if (_enableLocation) {
+          _resetLocationHeartbeatTimer(sessionId: sessionId, timeoutSeconds: 3);
+        }
       },
     );
   }
@@ -1329,20 +1348,66 @@ class BridgeController {
   }
 
   /// 重置GPS心跳定时器
-  /// 只要20秒内拿到一次GPS定位，就自动续期
-  void _resetLocationHeartbeatTimer({String? sessionId}) {
+  /// 只要指定时间内拿到一次GPS定位，就自动续期
+  /// [timeoutSeconds] 超时时间，默认为 _locationHeartbeatTimeoutSeconds (20秒)
+  void _resetLocationHeartbeatTimer({String? sessionId, int? timeoutSeconds}) {
     _locationHeartbeatTimer?.cancel();
+    final timeout = timeoutSeconds ?? _locationHeartbeatTimeoutSeconds;
     _locationHeartbeatTimer = Timer(
-      const Duration(seconds: _locationHeartbeatTimeoutSeconds),
-      () => _onLocationHeartbeatTimeout(sessionId: sessionId),
+      Duration(seconds: timeout),
+      () {
+        print('[LocationHeartbeat] GPS定位超时，${timeout}秒内无有效定位，重建定位连接...');
+        if (_enableLocation) {
+          _startLocationUpdatesInternal(sessionId: sessionId);
+        }
+      },
     );
   }
 
-  /// GPS心跳超时处理
-  /// 20秒内没有收到GPS定位，重建定位连接
-  void _onLocationHeartbeatTimeout({String? sessionId}) {
-    print('[LocationHeartbeat] GPS定位超时，20秒内无有效定位，重建定位连接...');
-    _startLocationUpdatesInternal(sessionId: sessionId);
+  /// 预检查：尝试获取一次高精度位置
+  /// 用于在启动持续定位流之前进行健康检查
+  /// 返回 true 表示检查成功，false 表示失败（超时或错误）
+  Future<bool> _attemptQuickPositionCheck({String? sessionId}) async {
+    try {
+      print('[LocationPreCheck] Starting position pre-check...');
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      ).timeout(const Duration(seconds: 5));
+      print('[LocationPreCheck] Pre-check succeeded: ${position.latitude}, ${position.longitude}');
+      
+      // 预检查成功，立即发送一次位置
+      sendMessage(
+          'location',
+          {
+            'coords': {
+              'latitude': position.latitude,
+              'longitude': position.longitude,
+              'altitude': position.altitude,
+              'altitudeAccuracy': position.altitudeAccuracy,
+              'accuracy': position.accuracy,
+              'heading': position.heading,
+              'speed': position.speed,
+            },
+            'timestamp': position.timestamp.millisecondsSinceEpoch,
+            'isCached': false,
+          },
+          sessionId: sessionId);
+      return true;
+    } catch (e) {
+      // 预检查失败，记录日志并发送错误消息
+      print('[LocationPreCheck] Pre-check failed: $e');
+      sendMessage(
+          'gpsError',
+          {
+            'title': _i18nService.t('gps_error'),
+            'message': 'GPS signal unavailable, retrying...',
+            'type': 'warning',
+            'notification': true,
+            'module': 'location',
+          },
+          sessionId: sessionId);
+      return false;
+    }
   }
 
   void _handleKeepScreenOn(bool enable) {

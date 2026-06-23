@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.29+829
+version: 1.0.29+836
 
 tencent_kit:
   app_id: 1904094302
@@ -61,17 +61,17 @@ flutter:
     - assets/out/
     - assets/out/_next/
     - assets/out/_next/data/
-    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/
-    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/en-US/
-    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/en-US/journeyMemories/
-    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/en-US/trip/
-    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-CN/
-    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-CN/journeyMemories/
-    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-CN/trip/
-    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-TW/
-    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-TW/journeyMemories/
-    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-TW/trip/
-    - assets/out/_next/iOV5mDqu0OPDOSUUT34r2/
+    - assets/out/_next/data/pwOUMtRn5qFP_ZZnSL44n/
+    - assets/out/_next/data/pwOUMtRn5qFP_ZZnSL44n/en-US/
+    - assets/out/_next/data/pwOUMtRn5qFP_ZZnSL44n/en-US/journeyMemories/
+    - assets/out/_next/data/pwOUMtRn5qFP_ZZnSL44n/en-US/trip/
+    - assets/out/_next/data/pwOUMtRn5qFP_ZZnSL44n/zh-CN/
+    - assets/out/_next/data/pwOUMtRn5qFP_ZZnSL44n/zh-CN/journeyMemories/
+    - assets/out/_next/data/pwOUMtRn5qFP_ZZnSL44n/zh-CN/trip/
+    - assets/out/_next/data/pwOUMtRn5qFP_ZZnSL44n/zh-TW/
+    - assets/out/_next/data/pwOUMtRn5qFP_ZZnSL44n/zh-TW/journeyMemories/
+    - assets/out/_next/data/pwOUMtRn5qFP_ZZnSL44n/zh-TW/trip/
+    - assets/out/_next/pwOUMtRn5qFP_ZZnSL44n/
     - assets/out/_next/static/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
@@ -81,7 +81,7 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
-    - assets/out/_next/static/iOV5mDqu0OPDOSUUT34r2/
+    - assets/out/_next/static/pwOUMtRn5qFP_ZZnSL44n/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/
