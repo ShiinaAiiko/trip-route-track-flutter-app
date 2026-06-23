@@ -19,6 +19,8 @@ import 'package:nyanya_webview/nyanya_webview.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:tencent_kit/tencent_kit.dart';
 import 'package:app_update/app_update.dart' as app_update;
+import 'package:just_audio/just_audio.dart';
+import 'package:audio_session/audio_session.dart';
 import 'bridge_message.dart';
 import 'services/keep_awake_service.dart';
 import 'services/background_service.dart';
@@ -58,6 +60,11 @@ class BridgeController {
   final LogService _logService = LogService();
   final NotificationService _notificationService = NotificationService();
   final FileService _fileService = FileService();
+  
+  // 音频播放器
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  String? _currentAudioBridgeId;
+  String? _currentAudioSessionId;
 
   String? _pendingUpdateVersion;
 
@@ -92,6 +99,10 @@ class BridgeController {
   Timer? _backgroundNotificationTimer;
   int _notificationIdCounter = 1;
 
+  // GPS心跳检测定时器（20秒超时）
+  Timer? _locationHeartbeatTimer;
+  static const int _locationHeartbeatTimeoutSeconds = 20;
+
   bool get enableLocation => _enableLocation;
   bool get enableBackgroundLocation => _enableBackgroundLocation;
   bool get keepScreenOn => _keepAwakeService.isKeepAwake;
@@ -104,7 +115,7 @@ class BridgeController {
   LogService get logService => _logService;
   NotificationService get notificationService => _notificationService;
 
-  /// 获取应用版本类型（standard 或 byd）
+  /// 获取应用版本类型（android 或 byd）
   /// 通过 Android 的 BuildConfig.VERSION_TYPE 获取
   Future<String?> getVersionType() async {
     try {
@@ -934,7 +945,7 @@ class BridgeController {
       try {
         final position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
-        ).timeout(Duration(seconds: 10));
+        ).timeout(Duration(seconds: 8));
 
         sendMessage(
             'getCurrentLocation',
@@ -1161,7 +1172,7 @@ class BridgeController {
 
       final List<String> standardPermissions = [];
       final List<String> bydPermissions = [];
-
+ 
       for (final type in permissionTypes) {
         if (_isBydPermissionType(type)) {
           bydPermissions.add(type);
@@ -1238,6 +1249,9 @@ class BridgeController {
   }
 
   void _startLocationUpdatesInternal({String? sessionId}) {
+    // 取消之前的GPS心跳定时器
+    _locationHeartbeatTimer?.cancel();
+
     if (_positionSubscription != null) {
       _positionSubscription!.cancel();
     }
@@ -1273,6 +1287,9 @@ class BridgeController {
           _backgroundLocationCount++;
         }
 
+        // 重置GPS心跳定时器（20秒内收到GPS定位则续期）
+        _resetLocationHeartbeatTimer(sessionId: sessionId);
+
         sendMessage(
             'location',
             {
@@ -1307,6 +1324,25 @@ class BridgeController {
   void _stopLocationUpdates() {
     _positionSubscription?.cancel();
     _positionSubscription = null;
+    _locationHeartbeatTimer?.cancel();
+    _locationHeartbeatTimer = null;
+  }
+
+  /// 重置GPS心跳定时器
+  /// 只要20秒内拿到一次GPS定位，就自动续期
+  void _resetLocationHeartbeatTimer({String? sessionId}) {
+    _locationHeartbeatTimer?.cancel();
+    _locationHeartbeatTimer = Timer(
+      const Duration(seconds: _locationHeartbeatTimeoutSeconds),
+      () => _onLocationHeartbeatTimeout(sessionId: sessionId),
+    );
+  }
+
+  /// GPS心跳超时处理
+  /// 20秒内没有收到GPS定位，重建定位连接
+  void _onLocationHeartbeatTimeout({String? sessionId}) {
+    print('[LocationHeartbeat] GPS定位超时，20秒内无有效定位，重建定位连接...');
+    _startLocationUpdatesInternal(sessionId: sessionId);
   }
 
   void _handleKeepScreenOn(bool enable) {
@@ -1595,7 +1631,7 @@ class BridgeController {
         print('[NYANYA-WEBVIEW] Failed to get GPU info: $e');
       }
 
-      // 获取版本类型（standard 或 byd）
+      // 获取版本类型（android 或 byd）
       final versionType = await getVersionType();
 
       sendMessage('appConfig', {
@@ -1603,7 +1639,7 @@ class BridgeController {
         'buildNumber': packageInfo.buildNumber, // 例如 "11372"
         'fullVersion':
             '${packageInfo.version}+${packageInfo.buildNumber}', // 组合版
-        'versionType': versionType ?? 'standard', // 版本类型：standard（普通版）或 byd（比亚迪车机版）
+        'versionType': versionType ?? 'android', // 版本类型：android（普通版）或 byd（比亚迪车机版）
         'system': 'Flutter App',
         'engine': engine.name,
         'sessionId': sessionId,
@@ -2636,6 +2672,17 @@ class BridgeController {
                 bridgeId: bridgeId, sessionId: finalSessionId);
           }
           break;
+        // 音频播放接口
+        case 'playAudio':
+          if (message.payload is Map) {
+            _handlePlayAudio(message.payload as Map<String, dynamic>,
+                bridgeId: bridgeId, sessionId: finalSessionId);
+          }
+          break;
+        // 停止音频播放接口
+        case 'stopAudio':
+          _handleStopAudio(bridgeId: bridgeId, sessionId: finalSessionId);
+          break;
         // default 不需要特殊处理，shouldDispatch 保持 true
       }
 
@@ -3189,11 +3236,292 @@ class BridgeController {
     }
   }
 
+  /// 处理音频播放请求
+  Future<void> _handlePlayAudio(Map<String, dynamic> payload,
+      {String? bridgeId, String? sessionId}) async {
+    print('[Bridge] _handlePlayAudio called');
+    
+    final type = payload['type'] as String? ?? 'base64';
+    final base64Data = payload['base64Data'] as String?;
+    final text = payload['text'] as String?;
+    final edgeTTS = payload['edgeTTS'] as Map<String, dynamic>?;
+    final exclusive = payload['exclusive'] as bool? ?? false;
+    
+    // 处理音量参数，支持 int 和 double 类型
+    final volumeValue = payload['volume'];
+    double volume = 1.0;
+    if (volumeValue is int) {
+      volume = volumeValue.toDouble();
+    } else if (volumeValue is double) {
+      volume = volumeValue;
+    }
+    
+    // 处理播放速度参数，支持 int 和 double 类型
+    final speedValue = payload['speed'];
+    double speed = 1.0;
+    if (speedValue is int) {
+      speed = speedValue.toDouble();
+    } else if (speedValue is double) {
+      speed = speedValue;
+    }
+    
+    Uint8List? audioBytes;
+    
+    try {
+      if (type == 'text') {
+        // Text模式：调用 Edge TTS API 获取音频
+        if (text == null || text.isEmpty) {
+          print('[Bridge] playAudio error: text is required for text mode');
+          sendMessage(
+              'playAudioError',
+              {
+                'error': 'text is required for text mode',
+              },
+              bridgeId: bridgeId,
+              sessionId: sessionId);
+          return;
+        }
+        
+        if (edgeTTS == null || 
+            edgeTTS['url'] == null || 
+            edgeTTS['apiKey'] == null) {
+          print('[Bridge] playAudio error: edgeTTS config is required for text mode');
+          sendMessage(
+              'playAudioError',
+              {
+                'error': 'edgeTTS config (url and apiKey) is required for text mode',
+              },
+              bridgeId: bridgeId,
+              sessionId: sessionId);
+          return;
+        }
+        
+        print('[Bridge] playAudio: calling Edge TTS API...');
+        
+        // 调用 Edge TTS API
+        final ttsUrl = edgeTTS['url'] as String;
+        final apiKey = edgeTTS['apiKey'] as String;
+        
+        final response = await http.post(
+          Uri.parse('$ttsUrl/v1/audio/speech'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $apiKey',
+          },
+          body: jsonEncode({
+            'model': 'tts-1',
+            'input': text,
+            'voice': 'zh-CN-XiaoxiaoNeural',
+            'response_format': 'mp3',
+            'speed': speed,
+          }),
+        );
+        
+        if (response.statusCode != 200) {
+          throw Exception('TTS API request failed with status ${response.statusCode}');
+        }
+        
+        audioBytes = response.bodyBytes;
+        print('[Bridge] playAudio: TTS API response received');
+        
+      } else {
+        // Base64模式：解码音频数据
+        if (base64Data == null || base64Data.isEmpty) {
+          print('[Bridge] playAudio error: base64Data is required for base64 mode');
+          sendMessage(
+              'playAudioError',
+              {
+                'error': 'base64Data is required for base64 mode',
+              },
+              bridgeId: bridgeId,
+              sessionId: sessionId);
+          return;
+        }
+        
+        audioBytes = base64Decode(base64Data);
+      }
+      
+      // 保存当前播放的会话信息
+      _currentAudioBridgeId = bridgeId;
+      _currentAudioSessionId = sessionId;
+      
+      // 配置音频焦点模式（实现混音的关键）
+      final audioSession = await AudioSession.instance;
+      
+      if (exclusive) {
+        // 独占模式：请求独占音频焦点，暂停其他应用
+        await audioSession.configure(const AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playback,
+          avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.mixWithOthers,
+          avAudioSessionMode: AVAudioSessionMode.defaultMode,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.speech,
+            usage: AndroidAudioUsage.assistanceNavigationGuidance,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+          androidWillPauseWhenDucked: true,
+        ));
+        // 激活独占焦点
+        await audioSession.setActive(true);
+      } else {
+        // 共存模式：使用 duck 模式，与其他音频混合播放
+        await audioSession.configure(const AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playback,
+          avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.duckOthers,
+          avAudioSessionMode: AVAudioSessionMode.defaultMode,
+          androidAudioAttributes: AndroidAudioAttributes(
+            contentType: AndroidAudioContentType.speech,
+            usage: AndroidAudioUsage.assistanceNavigationGuidance,
+          ),
+          androidAudioFocusGainType: AndroidAudioFocusGainType.gainTransientMayDuck,
+          androidWillPauseWhenDucked: false,
+        ));
+        // 激活共存焦点
+        await audioSession.setActive(true);
+      }
+      
+      // 设置音量（用户指定或默认值）
+      await _audioPlayer.setVolume(volume);
+      
+      // 设置播放速度
+      await _audioPlayer.setSpeed(speed);
+      
+      // 将音频数据写入临时文件，然后播放
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/temp_audio_${DateTime.now().millisecondsSinceEpoch}.mp3');
+      await tempFile.writeAsBytes(audioBytes!);
+      
+      // 使用 just_audio 播放临时文件
+      await _audioPlayer.setAudioSource(AudioSource.file(tempFile.path));
+      
+      // 发送开始播放回调
+      sendMessage(
+          'playAudioStarted',
+          {
+            'message': 'Starting audio playback',
+          },
+          bridgeId: bridgeId,
+          sessionId: sessionId);
+      
+      // 开始播放
+      await _audioPlayer.play();
+      
+      // 监听播放状态变化（使用 firstWhere 等待播放完成）
+      final completer = Completer<void>();
+      var isPlayingReported = false;
+      
+      final subscription = _audioPlayer.playerStateStream.listen((PlayerState state) {
+        final processingState = state.processingState;
+        final playing = state.playing;
+        
+        // 播放中事件（只发送一次）
+        if (playing && !isPlayingReported) {
+          isPlayingReported = true;
+          sendMessage(
+              'playAudioPlaying',
+              {
+                'message': 'Audio is playing',
+              },
+              bridgeId: _currentAudioBridgeId,
+              sessionId: _currentAudioSessionId);
+        }
+        
+        // 播放完成或停止
+        if (processingState == ProcessingState.completed || 
+            processingState == ProcessingState.idle) {
+          completer.complete();
+        }
+      });
+      
+      // 等待播放完成
+      await completer.future;
+      
+      // 发送播放完成回调
+      sendMessage(
+          'playAudioCompleted',
+          {
+            'message': 'Audio playback completed',
+          },
+          bridgeId: _currentAudioBridgeId,
+          sessionId: _currentAudioSessionId);
+      
+      // 取消监听器
+      subscription.cancel();
+      
+      // 播放完成后释放音频焦点，恢复系统音乐音量
+      if (!exclusive) {
+        await audioSession.setActive(false);
+      }
+      
+      // 删除临时文件
+      tempFile.delete().catchError((_) => {});
+      
+      // 重置当前播放会话
+      _currentAudioBridgeId = null;
+      _currentAudioSessionId = null;
+      
+    } catch (e) {
+      print('[Bridge] playAudio error: $e');
+      sendMessage(
+          'playAudioError',
+          {
+            'error': e.toString(),
+          },
+          bridgeId: bridgeId,
+          sessionId: sessionId);
+      // 重置当前播放会话
+      _currentAudioBridgeId = null;
+      _currentAudioSessionId = null;
+    }
+  }
+
+  /// 处理停止音频播放请求
+  Future<void> _handleStopAudio({String? bridgeId, String? sessionId}) async {
+    print('[Bridge] _handleStopAudio called');
+    
+    try {
+      // 停止播放
+      await _audioPlayer.stop();
+      
+      // 释放音频焦点
+      final audioSession = await AudioSession.instance;
+      await audioSession.setActive(false);
+      
+      // 重置当前播放会话
+      _currentAudioBridgeId = null;
+      _currentAudioSessionId = null;
+      
+      // 发送停止完成回调
+      sendMessage(
+          'stopAudioCompleted',
+          {
+            'message': 'Audio playback stopped',
+          },
+          bridgeId: bridgeId,
+          sessionId: sessionId);
+      
+      print('[Bridge] _handleStopAudio completed');
+    } catch (e) {
+      print('[Bridge] stopAudio error: $e');
+      sendMessage(
+          'stopAudioError',
+          {
+            'error': e.toString(),
+          },
+          bridgeId: bridgeId,
+          sessionId: sessionId);
+      // 重置当前播放会话
+      _currentAudioBridgeId = null;
+      _currentAudioSessionId = null;
+    }
+  }
+
   void dispose() {
     _positionSubscription?.cancel();
     _carDataSubscription?.cancel();
     _disposeVehicleDataListeners();
     _vehicleService.dispose();
     _messageHandlers.clear();
+    _audioPlayer.dispose();
   }
 }

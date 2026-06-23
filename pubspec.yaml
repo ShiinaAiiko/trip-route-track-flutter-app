@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.0.24+760
+version: 1.0.29+829
 
 tencent_kit:
   app_id: 1904094302
@@ -61,17 +61,17 @@ flutter:
     - assets/out/
     - assets/out/_next/
     - assets/out/_next/data/
-    - assets/out/_next/data/k5fJtT5u2xQHh-MFRFFXB/
-    - assets/out/_next/data/k5fJtT5u2xQHh-MFRFFXB/en-US/
-    - assets/out/_next/data/k5fJtT5u2xQHh-MFRFFXB/en-US/journeyMemories/
-    - assets/out/_next/data/k5fJtT5u2xQHh-MFRFFXB/en-US/trip/
-    - assets/out/_next/data/k5fJtT5u2xQHh-MFRFFXB/zh-CN/
-    - assets/out/_next/data/k5fJtT5u2xQHh-MFRFFXB/zh-CN/journeyMemories/
-    - assets/out/_next/data/k5fJtT5u2xQHh-MFRFFXB/zh-CN/trip/
-    - assets/out/_next/data/k5fJtT5u2xQHh-MFRFFXB/zh-TW/
-    - assets/out/_next/data/k5fJtT5u2xQHh-MFRFFXB/zh-TW/journeyMemories/
-    - assets/out/_next/data/k5fJtT5u2xQHh-MFRFFXB/zh-TW/trip/
-    - assets/out/_next/k5fJtT5u2xQHh-MFRFFXB/
+    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/
+    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/en-US/
+    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/en-US/journeyMemories/
+    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/en-US/trip/
+    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-CN/
+    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-CN/journeyMemories/
+    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-CN/trip/
+    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-TW/
+    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-TW/journeyMemories/
+    - assets/out/_next/data/iOV5mDqu0OPDOSUUT34r2/zh-TW/trip/
+    - assets/out/_next/iOV5mDqu0OPDOSUUT34r2/
     - assets/out/_next/static/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
@@ -81,7 +81,7 @@ flutter:
     - assets/out/_next/static/chunks/pages/journeyMemories/
     - assets/out/_next/static/chunks/pages/trip/
     - assets/out/_next/static/css/
-    - assets/out/_next/static/k5fJtT5u2xQHh-MFRFFXB/
+    - assets/out/_next/static/iOV5mDqu0OPDOSUUT34r2/
     - assets/out/css/
     - assets/out/en-US/
     - assets/out/en-US/journeyMemories/
@@ -96,6 +96,7 @@ flutter:
     - assets/out/saki-ui/
     - assets/out/saki-ui/assets/
     - assets/out/saki-ui/css/
+    - assets/out/test/
     - assets/out/trip/
     - assets/out/zh-CN/
     - assets/out/zh-CN/journeyMemories/

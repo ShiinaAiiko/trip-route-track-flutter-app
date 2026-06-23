@@ -85,8 +85,8 @@ android {
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
         
-        // 通过环境变量注入版本类型（standard 或 byd）
-        def versionType = System.getenv("VERSION_TYPE") ?: "standard"
+        // 通过环境变量注入版本类型（android 或 byd）
+        def versionType = System.getenv("VERSION_TYPE") ?: "android"
         buildConfigField "String", "VERSION_TYPE", "\"$versionType\""
     }
 
@@ -109,6 +109,16 @@ android {
             buildConfigField "String", "QQ_APP_ID", "\"${getEnvValue("QQ_APP_ID", "YOUR_QQ_APP_ID")}\""
             buildConfigField "String", "QQ_APP_KEY", "\"${getEnvValue("QQ_APP_KEY", "YOUR_QQ_APP_KEY")}\""
             manifestPlaceholders = [oauthScheme: "tripapp", qqAppId: getEnvValue("QQ_APP_ID", "YOUR_QQ_APP_ID")]
+        }
+        beta {
+            dimension "environment"
+            applicationIdSuffix ".test"
+            versionNameSuffix "-test"
+            buildConfigField "String", "GOOGLE_CLIENT_ID", "\"${getEnvValue("GOOGLE_CLIENT_ID_DEV", "YOUR_DEV_GOOGLE_CLIENT_ID")}\""
+            buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", "\"${getEnvValue("GOOGLE_WEB_CLIENT_ID", "YOUR_WEB_CLIENT_ID")}\""
+            buildConfigField "String", "QQ_APP_ID", "\"${getEnvValue("QQ_APP_ID", "YOUR_QQ_APP_ID")}\""
+            buildConfigField "String", "QQ_APP_KEY", "\"${getEnvValue("QQ_APP_KEY", "YOUR_QQ_APP_KEY")}\""
+            manifestPlaceholders = [oauthScheme: "tripappdev", qqAppId: getEnvValue("QQ_APP_ID", "YOUR_QQ_APP_ID")]
         }
     }
 

@@ -3,11 +3,19 @@ name="trip-route-track"
 runName="$name-flutter-app"
 port=23204
 branch="main"
-version="v1.0.24"
+# // 注意，每次更新了一次app，
+# 那么当前app的web版本就为支持app的最终web版本了
+# // 新的app支持新的web了，新的web老版本不允许支持了
+version="v1.0.29"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
+currentTime=$(date +"%Y%m%d%H%M%S")
 DIR=$(cd $(dirname $0) && pwd)
-allowMethods=("deleteRelease build:all addVersion build:new build:old build:byd install adb dev run stop protos start build buildDev setVersion profile profileDev release")
+allowMethods=("up deleteRelease build:all addVersion build:new build:old build:byd build:test install install:test adb dev run stop protos start build buildDev setVersion profile profileDev release")
+
+# 1. 基础配置（根据你的实际公开主库地址修改）
+TARGET_REPO="ShiinaAiiko/nyanya-trip-route-track"
+PREFIX="app-v"
 
 # 加载环境变量
 loadEnv() {
@@ -47,6 +55,8 @@ dev() {
 	loadEnv
 	setGoogleClientId "dev"
 	setVersion
+
+	export VERSION_TYPE="dev"
 
 	echo "-> 更新 pubspec.yaml 的 assets 配置..."
 	"$DIR/update_flutter_assets.sh"
@@ -184,9 +194,11 @@ setVersion() {
 
 build() {
 	echo "-> 开始打包生产环境 Android APK（普通版本 + 比亚迪版本）"
+	setVersion
+
 	loadEnv
 	setGoogleClientId "prod"
-	_build "prod" "standard"
+	_build "prod" "android"
 
 	# 打包比亚迪版本
 	# echo "-> 开始打包比亚迪车机版本 Android APK"
@@ -194,14 +206,19 @@ build() {
 }
 
 build:all() {
-	build
 	build:byd
+	build
 
+	up
+
+	install "android"
 	# release
 }
 
 build:byd() {
 	echo "-> 开始单独打包比亚迪车机版本 Android APK"
+	setVersion
+
 	loadEnv
 	setGoogleClientId "prod"
 	_build "prod" "byd"
@@ -214,7 +231,7 @@ build:byd() {
 	local packages_dir="$DIR/out/packages"
 	if [ -d "$packages_dir" ]; then
 		# 查找所有包含当前版本号的 byd apk
-		local byd_apks=$(ls "$packages_dir"/*-byd-$version-*.apk 2>/dev/null)
+		local byd_apks=$(ls "$packages_dir"/*-byd-$version*.apk 2>/dev/null)
 		if [ -n "$byd_apks" ]; then
 			for byd_apk in $byd_apks; do
 				if [ -f "$byd_apk" ]; then
@@ -250,6 +267,15 @@ buildDev() {
 	loadEnv
 	setGoogleClientId "dev"
 	_build "dev"
+}
+
+build:test() {
+	echo "-> 开始打包测试环境 Android APK"
+	setVersion
+
+	loadEnv
+	setGoogleClientId "dev"
+	_build "beta" "test"
 }
 
 profile() {
@@ -292,7 +318,7 @@ _runProfile() {
 
 _build() {
 	flavor="$1"
-	versionType="${2:-standard}" # 默认值为 standard
+	versionType="${2:-android}" # 默认值为 android
 	cd $DIR
 
 	# 更新 assets 目录配置
@@ -312,7 +338,7 @@ _build() {
 	echo "-> 设置版本类型: $versionType"
 
 	# addVersion (只在第一次构建时执行)
-	if [ "$versionType" = "standard" ]; then
+	if [ "$versionType" = "android" ]; then
 		setVersion
 	fi
 
@@ -326,6 +352,18 @@ _build() {
 
 	# 只有 build 成功才会执行到这里
 	echo "✅ flutter build 成功，继续执行..."
+
+	echo "-> 清理旧版本文件"
+	# 重命名并复制
+	if [ "$flavor" == "dev" ]; then
+		rm -f "$PACKAGES_DIR/"*${version}*.apk
+	elif [ "$flavor" == "beta" ]; then
+		rm -f "$PACKAGES_DIR/"*-test-${version}*.apk
+	elif [ "$versionType" == "byd" ]; then
+		rm -f "$PACKAGES_DIR/"*-byd-*${version}*.apk
+	else
+		rm -f "$PACKAGES_DIR/"*${version}*.apk
+	fi
 
 	# 复制并重命名新 APK 到 out 和 packages
 	echo "-> 整理新 APK 文件..."
@@ -346,14 +384,17 @@ _build() {
 
 			# 重命名并复制
 			if [ "$flavor" == "dev" ]; then
-				new_name="$name-dev-$version-$arch.apk"
+				new_name="$name-dev-$version.${currentTime}-$arch.apk"
+			elif [ "$flavor" == "beta" ]; then
+				new_name="$name-test-$version.${currentTime}-$arch.apk"
 			elif [ "$versionType" == "byd" ]; then
-				new_name="$name-byd-$version-$arch.apk"
+				new_name="$name-byd-$version.${currentTime}-$arch.apk"
+				cp "$apk" "$PACKAGES_DIR/$new_name"
 			else
-				new_name="$name-$version-$arch.apk"
+				new_name="$name-$version.${currentTime}-$arch.apk"
+				cp "$apk" "$PACKAGES_DIR/$new_name"
 			fi
 			cp "$apk" "$OUT_DIR/$new_name"
-			cp "$apk" "$PACKAGES_DIR/$new_name"
 			echo "   $new_name"
 		fi
 	done
@@ -398,30 +439,109 @@ _build() {
 	# 显示安装命令（不实际执行安装）
 	install "$versionType"
 
+}
+
+up() {
 	# 在 WSL2 终端输入
 	# 加上 -Force 确保覆盖
 	# 只有生产包且不是BYD版本才上传到服务器
-	if [ "$flavor" == "prod" ] && [ "$versionType" != "byd" ]; then
-		# 上传到服务器（只有标准版本上传，BYD版本禁止上传）
-		echo "-> 开始上传到服务器..."
-		"$DIR/ssh.sh" run
-	elif [ "$versionType" == "byd" ]; then
-		echo "⚠️ 比亚迪车机版本禁止上传到服务器"
+	# if [ "$flavor" == "prod" ] && [ "$versionType" != "byd" ]; then
+	# 	# 上传到服务器（只有标准版本上传，BYD版本禁止上传）
+	echo "-> 开始上传到服务器..."
+	"$DIR/ssh.sh" run
+	# elif [ "$versionType" == "byd" ]; then
+	# 	echo "⚠️ 比亚迪车机版本禁止上传到服务器"
+	# fi
+
+	SEARCH_VERSION=$version
+	PACKAGES_DIR="./out/packages"
+	ARCH="arm64-v8a"
+	BASE_URL="https://cdn-dl.aiiko.club/trip/"
+
+	echo "========================================="
+	echo "CDN 缓存预热任务"
+	echo "搜索版本: $SEARCH_VERSION"
+	echo "搜索目录: $PACKAGES_DIR"
+	echo "开始时间: $(date '+%Y-%m-%d %H:%M:%S')"
+	echo "========================================="
+
+	# 检查目录
+	if [ ! -d "$PACKAGES_DIR" ]; then
+		echo "❌ 错误: 目录不存在"
+		exit 1
 	fi
 
+	# 搜索文件
+	file_list=$(find "$PACKAGES_DIR" -type f -name "*${SEARCH_VERSION}*${ARCH}*" 2>/dev/null)
+
+	if [ -z "$file_list" ]; then
+		echo "❌ 未找到包含版本 ${SEARCH_VERSION} 的文件"
+		exit 1
+	fi
+
+	file_count=$(echo "$file_list" | wc -l)
+	echo "✅ 找到 ${file_count} 个文件"
+	echo "-----------------------------------------"
+
+	# 先打印所有文件列表
+	echo "📋 文件列表:"
+	echo "-----------------------------------------"
+	echo "$file_list" | while read -r file_path; do
+		echo "  $(basename "$file_path")"
+	done
+	echo "-----------------------------------------"
+	echo ""
+
+	success=0
+	fail=0
+
+	while IFS= read -r file_path; do
+		filename=$(basename "$file_path")
+		download_url="${BASE_URL}${filename}"
+
+		echo "📄 $filename"
+		echo "🔗 $download_url"
+		echo -n "⏳ 发送缓存请求... "
+
+		echo "-> 开始缓存预热: $download_url"
+
+		if curl -s -o /dev/null -w "%{http_code}" -I "$download_url" | grep -q "200\|206\|302"; then
+			echo "✅ 缓存成功"
+			((success++))
+		else
+			echo "❌ 失败"
+			((fail++))
+		fi
+
+	done <<<"$file_list"
+
+	echo ""
+	echo "========================================="
+	echo "完成时间: $(date '+%Y-%m-%d %H:%M:%S')"
+	echo "成功: $success  失败: $fail  总计: $file_count"
+	echo "========================================="
 }
 
 install() {
-	local versionType="${1:-standard}"
+	local versionType="${1:-android}"
 	OUT_DIR="$DIR/out/packages"
 
 	if [ "$versionType" = "byd" ]; then
 		echo "📱 比亚迪车机版本安装命令:"
-		echo "adb install $OUT_DIR/$name-byd-$version-arm64-v8a.apk"
+		echo "adb install $OUT_DIR/$name-byd-$version.${currentTime}-arm64-v8a.apk"
+	elif [ "$versionType" = "test" ]; then
+		echo "📱 测试版本安装命令:"
+		echo "adb install $DIR/out/$name-test-$version.${currentTime}-arm64-v8a.apk"
 	else
 		echo "📱 普通安卓版本安装命令:"
-		echo "adb install $OUT_DIR/$name-$version-arm64-v8a.apk"
+		echo "adb install $OUT_DIR/$name-$version.${currentTime}-arm64-v8a.apk"
 	fi
+}
+
+install:test() {
+	OUT_DIR="$DIR/out/packages"
+	echo "📱 测试版本安装命令:"
+	echo "adb install $OUT_DIR/$name-test-$version.${currentTime}-arm64-v8a.apk"
 }
 
 # 解析命令行参数（设置全局版本号）
@@ -440,28 +560,59 @@ parseVersionArgs() {
 }
 
 # ./release.sh deleteRelease v1.0.25
+# 删除远端公开库的 Release
+# 支持：
+# 1. 指定版本：./release.sh deleteRelease 1.0.24
+# 2. 留空（自动读取脚本全局 version 变量）：./release.sh deleteRelease
 deleteRelease() {
-	local version="$1"
-	echo "-> 删除 GitHub Release: $version"
-	if ! gh release delete "$version" -y; then
-		echo "❌ 删除 GitHub Release 失败"
+	# 优先拿命令行传入的 $1，如果为空则对接自带的 $version 变量
+	local input_version="${1:-$version}"
+
+	if [ -z "$input_version" ]; then
+		echo "❌ 错误：未检测到任何版本号。"
+		echo "请在脚本头部定义 version 变量，或在命令行中指定，例如：./release.sh deleteRelease 1.0.24"
 		return 1
 	fi
+
+	local RELEASE_TAG="$input_version"
+
+	# 🎯 智能判断：如果版本号不包含前缀，默认补上当前脚本的 PREFIX ("app-v")
+	if [[ ! "$input_version" =~ ^(web-v|app-v) ]]; then
+		local clean_ver="${input_version#v}"
+		RELEASE_TAG="${PREFIX}${clean_ver}"
+	fi
+
+	echo "-> 正在从公开库 [$TARGET_REPO] 删除 Release 及 Tag: $RELEASE_TAG"
+
+	# 连带远端 Tag 一起彻底干净抹除
+	if ! gh release delete "$RELEASE_TAG" -R "$TARGET_REPO" --cleanup-tag -y; then
+		echo "❌ 删除 GitHub Release 失败，请检查该 Release 是否存在"
+		return 1
+	fi
+
+	echo "✅ Release $RELEASE_TAG 及其远程 Tag 已成功斩杀!"
 }
 
 # 发布到 GitHub Release
+# ./release.sh release -v v1.0.25
 release() {
 	# 解析版本号参数
 	parseVersionArgs "$@"
 
 	# 如果指定了版本号，使用指定的版本；否则使用脚本中定义的版本号
 	if [ -n "$CMD_VERSION" ]; then
-		RELEASE_VERSION="$CMD_VERSION"
-		echo "📌 使用命令行指定版本: $RELEASE_VERSION"
+		CLEAN_VERSION="$CMD_VERSION"
+		echo "📌 使用命令行指定版本: $CLEAN_VERSION"
 	else
-		RELEASE_VERSION="$version"
-		echo "📌 使用脚本中定义的版本号: $RELEASE_VERSION"
+		CLEAN_VERSION="$version"
+		echo "📌 使用脚本中定义的版本号: $CLEAN_VERSION"
 	fi
+
+	# 规整版本号，去掉可能多输入的 'v'
+	CLEAN_VERSION="${CLEAN_VERSION#v}"
+
+	# 🎯 拼装 App 轨道的专属 Tag (如 app-v1.0.24)
+	RELEASE_TAG="${PREFIX}${CLEAN_VERSION}"
 
 	# 检查 packages 目录是否存在
 	PACKAGES_DIR="$DIR/out/packages"
@@ -471,13 +622,13 @@ release() {
 		return 1
 	fi
 
-	# 查找指定版本的 APK 文件
-	APK_FILES=("$PACKAGES_DIR"/*"$RELEASE_VERSION"*.apk)
+	# 🎯 查找指定版本的 APK 文件 (用规整后的 CLEAN_VERSION 匹配文件名)
+	APK_FILES=("$PACKAGES_DIR"/*"$CLEAN_VERSION"*"arm64-v8a"*.apk)
 
 	# 检查是否找到 APK 文件
 	if [ ! -f "${APK_FILES[0]}" ]; then
-		echo "❌ 错误：未找到版本 $RELEASE_VERSION 的 APK 文件"
-		echo "请确保已使用版本 $RELEASE_VERSION 打包"
+		echo "❌ 错误：未找到版本 $CLEAN_VERSION 的 APK 文件"
+		echo "请确保已使用版本 $CLEAN_VERSION 打包"
 		return 1
 	fi
 
@@ -489,17 +640,17 @@ release() {
 		fi
 	done
 
-	# 检查 GitHub Release 是否已存在
-	if gh release view "$RELEASE_VERSION" &>/dev/null; then
-		echo -n "❓ GitHub Release $RELEASE_VERSION 已存在，是否覆盖? [y/N]: "
+	# 🎯 跨仓库检查 GitHub Release 是否已存在
+	if gh release view "$RELEASE_TAG" -R "$TARGET_REPO" &>/dev/null; then
+		echo -n "❓ 跨仓库 Release $RELEASE_TAG 已存在，是否覆盖? [y/N]: "
 		read confirm
 		if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
 			echo "✓ 取消发布"
 			return 0
 		fi
 		# 删除旧 Release
-		echo "-> 删除旧 Release: $RELEASE_VERSION"
-		if ! gh release delete "$RELEASE_VERSION" -y; then
+		echo "-> 正在从公开库删除旧 Release: $RELEASE_TAG"
+		if ! gh release delete "$RELEASE_TAG" -R "$TARGET_REPO" -y; then
 			echo "❌ 删除旧 Release 失败"
 			return 1
 		fi
@@ -518,10 +669,10 @@ release() {
 
 	# 获取更新说明（使用最新的 git commit 信息）
 	local latest_commit_short=$(git log -1 --oneline)
-	local latest_commit_msg=$(git log -1 --format=%B | head -n 1)  # 获取第一行完整提交信息
+	local latest_commit_msg=$(git log -1 --format=%B | head -n 1) # 获取第一行完整提交信息
 	local commit_date=$(git log -1 --format=%ad --date=short)
 	local commit_author=$(git log -1 --format=%an)
-	
+
 	# 获取最近5个commit的简短信息
 	local recent_commits=""
 	local commit_count=0
@@ -532,40 +683,45 @@ release() {
 		fi
 	done < <(git log --oneline -5)
 
-# **最近更新:**
-# ${recent_commits}
-	local notes="## 更新内容
+	# 🎯 规范体面的 App 专属发布日志，干掉私有 commit 暴露隐患
+	local commit_date=$(date +"%Y-%m-%d")
+	local notes="## 📱 App Release | 自驾路书客户端发布
 
-### 版本 $RELEASE_VERSION
+### 🏷️ 客户端版本: v$CLEAN_VERSION
+**📅 发布日期:** $commit_date
 
-**最新提交:**
-- ${latest_commit_short}
-- ${latest_commit_msg}
-- 作者: ${commit_author}
-- 日期: ${commit_date}
+### ⚙️ 包含架构与平台适配
+- **支持架构:** arm64-v8a
+- **优化重点:** 优化车机本地 WebView 渲染性能与 Navigator Agent 语音通信底座
 
-**包含架构:**
-- armeabi-v7a
-- arm64-v8a  
-- x86_64"
+---
+*💡 本仓库为官方 Release 资产分发专区。源码已通过独立私有库安全隔离。*"
 
-	# 创建 Release（先创建空的Release）
-	echo "-> 创建 GitHub Release..."
-	if ! gh release create "$RELEASE_VERSION" \
-		--title "Version $RELEASE_VERSION" \
+	# 🎯 一键创建并流式上传到公开主库
+	echo "-> 正在向公开库 [$TARGET_REPO] 创建并发布 Release: $RELEASE_TAG"
+
+	# 🎯 1. 先创建空的 Release 壳子
+	echo "-> 正在创建 GitHub Release: $RELEASE_TAG ..."
+	if ! gh release create "$RELEASE_TAG" \
+		-R "$TARGET_REPO" \
+		--title "App Release v$CLEAN_VERSION" \
 		--notes "$notes"; then
 		echo "❌ 创建 GitHub Release 失败"
 		return 1
 	fi
-	
-	# 上传文件，显示每个文件的上传进度
-	echo "-> 上传 APK 文件到 Release..."
+
+	# 🎯 2. 逐个文件流式上传，并强制 gh 吐出原始进度条
+	echo "-> 正在流式上传 APK 文件..."
 	for apk in "${upload_files[@]}"; do
 		if [ -f "$apk" ]; then
 			local filename=$(basename "$apk")
 			local filesize=$(du -h "$apk" | cut -f1)
+
 			echo "  📤 正在上传: $filename ($filesize)"
-			if ! gh release upload "$RELEASE_VERSION" "$apk" --clobber; then
+
+			# 💡 诀窍：gh release upload 如果直接运行，在某些终端会隐藏进度。
+			# 加上 --clobber（覆盖）并确保标准错误（进度条所在的流）不被拦截
+			if ! gh release upload "$RELEASE_TAG" "$apk" -R "$TARGET_REPO" --clobber; then
 				echo "❌ 上传 $filename 失败"
 				return 1
 			fi
@@ -574,8 +730,8 @@ release() {
 	done
 
 	echo ""
-	echo "✅ Release $RELEASE_VERSION 发布成功!"
-	echo "🔗 Release 地址: https://github.com/your-repo/releases/tag/$RELEASE_VERSION"
+	echo "✅ Release $RELEASE_TAG 发布成功!"
+	echo "🔗 公开下载地址: https://github.com/$TARGET_REPO/releases/tag/$RELEASE_TAG"
 }
 
 main() {

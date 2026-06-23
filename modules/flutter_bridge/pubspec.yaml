@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_dotenv: ^5.1.0
   geolocator: ^12.0.0
   shared_preferences: ^2.2.0
   i18n:
@@ -25,6 +26,8 @@ dependencies:
   tencent_kit: ^6.2.0
   app_update:
     path: ../app_update
+  just_audio: ^0.9.40
+  audio_session: ^0.1.21
 dev_dependencies:
   flutter_test:
     sdk: flutter
