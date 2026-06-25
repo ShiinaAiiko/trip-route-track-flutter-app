@@ -696,8 +696,8 @@ class MainActivity : FlutterActivity() {
         deepLinkChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getInitialLink" -> {
+                    // 不要在这里清除 initialDeepLink，让它可以重复获取
                     result.success(initialDeepLink)
-                    initialDeepLink = null
                 }
                 else -> {
                     result.notImplemented()
@@ -708,7 +708,7 @@ class MainActivity : FlutterActivity() {
         // 如果有初始 deep link，发送给 Flutter
         initialDeepLink?.let {
             deepLinkChannel?.invokeMethod("onDeepLink", it)
-            initialDeepLink = null
+            // 不要清除 initialDeepLink，允许重复发送
         }
     }
 
@@ -1014,11 +1014,14 @@ class MainActivity : FlutterActivity() {
             val url = uri.toString()
             sendLog("app", "Deep link received: $url")
             
-            if (deepLinkChannel == null) {
-                initialDeepLink = url
-                sendLog("app", "Deep link saved for later: $url")
-            } else {
+            // 无论 deepLinkChannel 是否存在，都保存并尝试发送
+            initialDeepLink = url
+            
+            if (deepLinkChannel != null) {
                 deepLinkChannel?.invokeMethod("onDeepLink", url)
+                sendLog("app", "Deep link sent to Flutter: $url")
+            } else {
+                sendLog("app", "Deep link saved for later: $url")
             }
         }
     }
@@ -1028,6 +1031,16 @@ class MainActivity : FlutterActivity() {
         // 隐藏输入法，防止 App 启动或从后台返回时无故唤起输入法
         val imm = getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
         imm?.hideSoftInputFromWindow(window.decorView.windowToken, 0)
+        
+        // 检查是否有待处理的 deep link
+        // 当 App 从后台恢复时，onNewIntent 可能不被调用，所以在这里检查
+        if (intent?.data != null) {
+            handleDeepLink(intent)
+        } else if (initialDeepLink != null && deepLinkChannel != null) {
+            // 如果有待处理的 deep link 且 channel 已初始化，发送它
+            deepLinkChannel?.invokeMethod("onDeepLink", initialDeepLink)
+            sendLog("app", "Resume: sent pending deep link: $initialDeepLink")
+        }
     }
 
     private fun restartApp() {

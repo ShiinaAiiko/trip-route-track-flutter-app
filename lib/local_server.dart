@@ -29,10 +29,31 @@ class LocalServer {
   static const int _devPort = 13218;
   static const int _prodPort = 13219;
   static const int _prodTmapPort = 13220;
+  static const int _testPort = 13221;
   Completer<void>? _startCompleter;
   static void Function(String url, String title)? onUrlChange;
 
-  LocalServer() : _port = kDebugMode ? _devPort : _prodPort;
+  LocalServer() : _port = _getPort();
+
+  static int _getPort() {
+    // 通过 --dart-define=APP_FLAVOR=beta/dev/prod 传递 flavor
+    const appFlavor = String.fromEnvironment('APP_FLAVOR', defaultValue: '');
+    
+    if (appFlavor == 'beta') {
+      return _testPort; // beta flavor 对应 test 端口
+    }
+    
+    if (appFlavor == 'dev') {
+      return _devPort;
+    }
+    
+    if (appFlavor == 'prod') {
+      return _prodPort;
+    }
+    
+    // 默认情况
+    return kDebugMode ? _devPort : _prodPort;
+  }
 
   static LocalServer get instance {
     _instance ??= LocalServer();

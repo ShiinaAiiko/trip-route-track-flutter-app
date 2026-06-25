@@ -6,7 +6,7 @@ branch="main"
 # // 注意，每次更新了一次app，
 # 那么当前app的web版本就为支持app的最终web版本了
 # // 新的app支持新的web了，新的web老版本不允许支持了
-version="v1.0.29"
+version="v1.1.1"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 currentTime=$(date +"%Y%m%d%H%M%S")
@@ -208,10 +208,13 @@ build() {
 build:all() {
 	build:byd
 	build
+	build:test
 
 	up
 
+	install "byd"
 	install "android"
+	install "test"
 	# release
 }
 
@@ -226,6 +229,9 @@ build:byd() {
 	# 移动当前版本的 BYD APK 到专用目录
 	local BYD_PACKAGES_DIR="$DIR/out/byd_packages"
 	mkdir -p "$BYD_PACKAGES_DIR"
+
+	echo "-> 清理旧版本文件"
+	rm -f "$BYD_PACKAGES_DIR/"*-byd-*${version}*.apk
 
 	# 查找并移动所有当前版本的 byd apk 文件
 	local packages_dir="$DIR/out/packages"
@@ -276,6 +282,31 @@ build:test() {
 	loadEnv
 	setGoogleClientId "dev"
 	_build "beta" "test"
+
+	local TEST_PACKAGES_DIR="$DIR/out/test_packages"
+	mkdir -p "$TEST_PACKAGES_DIR"
+
+	echo "-> 清理旧版本文件"
+	rm -f "$TEST_PACKAGES_DIR/"*-test-*${version}*.apk
+
+	# 查找并移动所有当前版本的 byd apk 文件
+	local packages_dir="$DIR/out"
+	if [ -d "$packages_dir" ]; then
+		# 查找所有包含当前版本号的 byd apk
+		local test_apks=$(ls "$packages_dir"/*-test-$version*.apk 2>/dev/null)
+		if [ -n "$test_apks" ]; then
+			for test_apk in $test_apks; do
+				if [ -f "$test_apk" ]; then
+					mv "$test_apk" "$TEST_PACKAGES_DIR/"
+					echo "✅ 已移动: $(basename $test_apk)"
+				fi
+			done
+			echo "✅ 所有 BYD APK 已移动至: $TEST_PACKAGES_DIR"
+			ls -la "$TEST_PACKAGES_DIR"
+		else
+			echo "⚠️ 未找到当前版本 BYD APK 文件"
+		fi
+	fi
 }
 
 profile() {
@@ -342,9 +373,18 @@ _build() {
 		setVersion
 	fi
 
-	flutter build apk --release --flavor "$flavor" --split-per-abi --no-shrink
+	# 根据 flavor 添加 dart-define 参数
+	local dartDefine="--dart-define=APP_FLAVOR=$flavor"
+	if [ "$flavor" = "beta" ]; then
+		echo "-> 使用 test 环境端口: 13221"
+	elif [ "$flavor" = "dev" ]; then
+		echo "-> 使用 dev 环境端口: 13218"
+	elif [ "$flavor" = "prod" ]; then
+		echo "-> 使用 prod 环境端口: 13219"
+	fi
 
-	# 检查构建是否成功
+	flutter build apk --release --flavor "$flavor" --split-per-abi --no-shrink $dartDefine || true
+
 	if [ $? -ne 0 ]; then
 		echo "❌ flutter build 失败，停止执行"
 		exit 1
@@ -352,6 +392,17 @@ _build() {
 
 	# 只有 build 成功才会执行到这里
 	echo "✅ flutter build 成功，继续执行..."
+
+	# 检查 APK 是否生成
+	APK_DIR="$DIR/build/app/outputs/flutter-apk"
+	apk_count=$(ls "$APK_DIR"/app-*-"$flavor"-release.apk 2>/dev/null | wc -l)
+	if [ "$apk_count" -eq 0 ]; then
+		echo "❌ 没有找到生成的 APK！"
+		exit 1
+	fi
+
+	# APK 已生成，继续！
+	echo "✅ 找到 APK，继续执行..."
 
 	echo "-> 清理旧版本文件"
 	# 重命名并复制
@@ -528,10 +579,10 @@ install() {
 
 	if [ "$versionType" = "byd" ]; then
 		echo "📱 比亚迪车机版本安装命令:"
-		echo "adb install $OUT_DIR/$name-byd-$version.${currentTime}-arm64-v8a.apk"
+		echo "adb install $DIR/out/byd_packages/$name-byd-$version.${currentTime}-arm64-v8a.apk"
 	elif [ "$versionType" = "test" ]; then
 		echo "📱 测试版本安装命令:"
-		echo "adb install $DIR/out/$name-test-$version.${currentTime}-arm64-v8a.apk"
+		echo "adb install $DIR/out/test_packages/$name-test-$version.${currentTime}-arm64-v8a.apk"
 	else
 		echo "📱 普通安卓版本安装命令:"
 		echo "adb install $OUT_DIR/$name-$version.${currentTime}-arm64-v8a.apk"

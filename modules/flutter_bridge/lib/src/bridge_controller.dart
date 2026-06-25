@@ -73,6 +73,7 @@ class BridgeController {
   IWebViewCommunication? _communication;
   final Map<String, IWebViewCommunication> _communications = {};
   StreamSubscription<Position>? _positionSubscription;
+  bool _isStartingLocation = false;
   final Map<String, List<MessageHandler>> _messageHandlers = {};
   FlutterMethodCallHandler? _externalHandler;
   StatusBarChangeHandler? _statusBarChangeHandler;
@@ -1249,11 +1250,19 @@ class BridgeController {
   }
 
   Future<void> _startLocationUpdatesInternal({String? sessionId}) async {
+    // 防止并发调用：如果正在启动定位，直接返回
+    if (_isStartingLocation) {
+      print('[Location] Already starting location updates, skipping...');
+      return;
+    }
+    _isStartingLocation = true;
+
     // 取消之前的GPS心跳定时器
     _locationHeartbeatTimer?.cancel();
 
     if (_positionSubscription != null) {
       _positionSubscription!.cancel();
+      _positionSubscription = null;
     }
 
     AndroidSettings androidSettings;
@@ -1283,8 +1292,13 @@ class BridgeController {
     bool preCheckSuccess = await _attemptQuickPositionCheck(sessionId: sessionId);
     if (!preCheckSuccess) {
       print('[Location] Pre-check failed, scheduling restart...');
+      _isStartingLocation = false; // 重置标志，允许心跳超时后重启
       return; // 不启动定位流，让心跳超时后重启
     }
+
+    // ⚠️ 关键修复：在调用可能阻塞的 getPositionStream 之前，先重置标志
+    // 如果 getPositionStream 阻塞，心跳超时后仍能重启
+    _isStartingLocation = false;
 
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: androidSettings,
@@ -1356,6 +1370,8 @@ class BridgeController {
     _locationHeartbeatTimer = Timer(
       Duration(seconds: timeout),
       () {
+  _isStartingLocation = false;
+  
         print('[LocationHeartbeat] GPS定位超时，${timeout}秒内无有效定位，重建定位连接...');
         if (_enableLocation) {
           _startLocationUpdatesInternal(sessionId: sessionId);

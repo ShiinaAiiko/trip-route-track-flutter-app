@@ -84,10 +84,19 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
-        
+
         // 通过环境变量注入版本类型（android 或 byd）
         def versionType = System.getenv("VERSION_TYPE") ?: "android"
         buildConfigField "String", "VERSION_TYPE", "\"$versionType\""
+    }
+    
+    splits {
+        abi {
+            enable true
+            reset()
+            include 'arm64-v8a' // 只包含 arm64-v8a
+            universalApk false // 不生成通用 APK
+        }
     }
 
     flavorDimensions "environment"
