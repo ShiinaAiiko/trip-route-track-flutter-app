@@ -337,7 +337,7 @@ class _WebViewContainerState extends State<WebViewContainer>
       _initEngineAndStartLoading();
 
       // 超时时间延长到15秒，确保有足够时间完成所有加载步骤
-      _loadTimeoutTimer = Timer(const Duration(seconds: 15), () {
+      _loadTimeoutTimer = Timer(const Duration(seconds: 10), () {
         if (mounted && _isLoading) {
           print('Loading timeout after 15 seconds');
           _addLoadingLog(LoadingLogType.web,

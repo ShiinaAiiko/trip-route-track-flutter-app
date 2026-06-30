@@ -2,7 +2,7 @@ name: flutter_app
 description: 'A new Flutter project.'
 publish_to: 'none'
 
-version: 1.1.1+937
+version: 1.1.1+984
 
 tencent_kit:
   app_id: 1904094302
@@ -60,20 +60,20 @@ flutter:
     - .env
     - assets/out/
     - assets/out/_next/
-    - assets/out/_next/bXgN6_Wp6rMp5v5fuBVld/
+    - assets/out/_next/JXQ8pm7m0SKqMgQNzYYCz/
     - assets/out/_next/data/
-    - assets/out/_next/data/bXgN6_Wp6rMp5v5fuBVld/
-    - assets/out/_next/data/bXgN6_Wp6rMp5v5fuBVld/en-US/
-    - assets/out/_next/data/bXgN6_Wp6rMp5v5fuBVld/en-US/journeyMemories/
-    - assets/out/_next/data/bXgN6_Wp6rMp5v5fuBVld/en-US/trip/
-    - assets/out/_next/data/bXgN6_Wp6rMp5v5fuBVld/zh-CN/
-    - assets/out/_next/data/bXgN6_Wp6rMp5v5fuBVld/zh-CN/journeyMemories/
-    - assets/out/_next/data/bXgN6_Wp6rMp5v5fuBVld/zh-CN/trip/
-    - assets/out/_next/data/bXgN6_Wp6rMp5v5fuBVld/zh-TW/
-    - assets/out/_next/data/bXgN6_Wp6rMp5v5fuBVld/zh-TW/journeyMemories/
-    - assets/out/_next/data/bXgN6_Wp6rMp5v5fuBVld/zh-TW/trip/
+    - assets/out/_next/data/JXQ8pm7m0SKqMgQNzYYCz/
+    - assets/out/_next/data/JXQ8pm7m0SKqMgQNzYYCz/en-US/
+    - assets/out/_next/data/JXQ8pm7m0SKqMgQNzYYCz/en-US/journeyMemories/
+    - assets/out/_next/data/JXQ8pm7m0SKqMgQNzYYCz/en-US/trip/
+    - assets/out/_next/data/JXQ8pm7m0SKqMgQNzYYCz/zh-CN/
+    - assets/out/_next/data/JXQ8pm7m0SKqMgQNzYYCz/zh-CN/journeyMemories/
+    - assets/out/_next/data/JXQ8pm7m0SKqMgQNzYYCz/zh-CN/trip/
+    - assets/out/_next/data/JXQ8pm7m0SKqMgQNzYYCz/zh-TW/
+    - assets/out/_next/data/JXQ8pm7m0SKqMgQNzYYCz/zh-TW/journeyMemories/
+    - assets/out/_next/data/JXQ8pm7m0SKqMgQNzYYCz/zh-TW/trip/
     - assets/out/_next/static/
-    - assets/out/_next/static/bXgN6_Wp6rMp5v5fuBVld/
+    - assets/out/_next/static/JXQ8pm7m0SKqMgQNzYYCz/
     - assets/out/_next/static/chunks/
     - assets/out/_next/static/chunks/pages/
     - assets/out/_next/static/chunks/pages/[lang]/

@@ -6,7 +6,7 @@ branch="main"
 # // 注意，每次更新了一次app，
 # 那么当前app的web版本就为支持app的最终web版本了
 # // 新的app支持新的web了，新的web老版本不允许支持了
-version="v1.1.1"
+version="v1.1.2"
 # configFilePath="config.dev.json"
 configFilePath="config.pro.json"
 currentTime=$(date +"%Y%m%d%H%M%S")
@@ -383,7 +383,7 @@ _build() {
 		echo "-> 使用 prod 环境端口: 13219"
 	fi
 
-	flutter build apk --release --flavor "$flavor" --split-per-abi --no-shrink $dartDefine || true
+	flutter build apk --release --flavor "$flavor" --split-per-abi --no-shrink $dartDefine
 
 	if [ $? -ne 0 ]; then
 		echo "❌ flutter build 失败，停止执行"
@@ -407,13 +407,15 @@ _build() {
 	echo "-> 清理旧版本文件"
 	# 重命名并复制
 	if [ "$flavor" == "dev" ]; then
-		rm -f "$PACKAGES_DIR/"*${version}*.apk
+		rm -f "$PACKAGES_DIR/"${name}-v${version}*.apk
 	elif [ "$flavor" == "beta" ]; then
 		rm -f "$PACKAGES_DIR/"*-test-${version}*.apk
 	elif [ "$versionType" == "byd" ]; then
 		rm -f "$PACKAGES_DIR/"*-byd-*${version}*.apk
 	else
-		rm -f "$PACKAGES_DIR/"*${version}*.apk
+		rm -f "$PACKAGES_DIR/"${name}-v${version}*.apk
+		rm -f "$PACKAGES_DIR/"*-x86_64.apk
+		rm -f "$PACKAGES_DIR/"*-armeabi-v7a.apk
 	fi
 
 	# 复制并重命名新 APK 到 out 和 packages

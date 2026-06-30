@@ -90,14 +90,8 @@ android {
         buildConfigField "String", "VERSION_TYPE", "\"$versionType\""
     }
     
-    splits {
-        abi {
-            enable true
-            reset()
-            include 'arm64-v8a' // 只包含 arm64-v8a
-            universalApk false // 不生成通用 APK
-        }
-    }
+    // ABI 拆分完全由 Flutter 的 --split-per-abi 参数控制（见 release.sh）
+    // 这里不再配置 Gradle 的 splits.abi，防止与 flutter run 冲突导致找不到 APK
 
     flavorDimensions "environment"
     productFlavors {
